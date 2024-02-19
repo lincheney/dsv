@@ -1,0 +1,1338 @@
+#!/usr/bin/env -S sh -c '$(which pypy3 || which python3) -SEs "$@"' -
+
+import argparse
+import sys
+import re
+import os
+import json
+import shlex
+import itertools
+from collections import deque
+import subprocess
+import shutil
+import threading
+from queue import Queue
+
+RESET_COLOUR = b'\x1b[0m'
+PRETTY_OUTPUT = object()
+PRETTY_OUTPUT_DELIM = b'  '
+STDOUT_IS_TTY = os.isatty(1)
+STDIN_IS_TTY = os.isatty(0)
+SPACE = br'\s+'
+PPRINT = br'\s\s+'
+
+def regex_arg_type(regex):
+    def wrapped(value):
+        if match := re.fullmatch(regex, value):
+            return match
+        raise argparse.ArgumentTypeError(f'{value} does not match: {regex}')
+    return wrapped
+
+def encode_arg_type(x):
+    return x.encode('utf8')
+
+def interpret_c_escapes(x: str):
+    return x.encode('utf8').decode('unicode_escape').encode('utf8')
+
+def resolve_auto_colour(x: str):
+    return x == 'always' or (x == 'auto' and STDOUT_IS_TTY)
+
+def get_rgb(hue, sat, val):
+    red = 1 + sat * (1 - abs((hue + 180) % 360 - 180) / 60)
+    green = 1 + sat * (1 - abs((hue + 60) % 360 - 180) / 60)
+    blue = 1 + sat * (1 - abs((hue + 300) % 360 - 180) / 60)
+    red = val * max(1-sat, min(red, 1))
+    green = val * max(1-sat, min(green, 1))
+    blue = val * max(1-sat, min(blue, 1))
+    return int(red), int(green), int(blue)
+
+handlers = []
+def register_command(cls):
+    handlers.append(cls)
+    return cls
+
+class Handler:
+    name = None
+    parser = None
+    header = None
+    row_count = 0
+    outfile = None
+    outfile_proc = None
+    out_header = None
+
+    def __init__(self, opts):
+        self.opts = opts
+
+        if not self.outfile:
+            if not STDOUT_IS_TTY:
+                self.outfile = sys.stdout.buffer
+            elif self.opts.page:
+                cmd = ['less', '-RX']
+                if not opts.no_header:
+                    cmd.append('--header=1')
+                self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+                self.outfile = self.outfile_proc.stdin
+            else:
+                self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
+                self.outfile = self.outfile_proc.stdin
+
+        self.numcols = None
+        self.rgb_map = []
+        if self.opts.extras:
+            self.opts.parser.error('unrecognized arguments: ' + " ".join(self.opts.extras))
+        self.gathered_rows = []
+
+    @classmethod
+    def get_name(cls):
+        return (cls.name or cls.__name__).replace('_', '-')
+
+    @staticmethod
+    def guess_delimiter(line, default):
+        good_delims = (b',', b'\t')
+        other_delims = (b'  ', b' ', b'|', b';')
+
+        delims = {k: line.count(k) for k in good_delims}
+        if not any(delims.values()):
+            delims = {k: line.count(k) for k in other_delims}
+        if not any(delims.values()):
+            # no idea
+            return default, True
+
+        best_delim = max(delims, key=delims.get)
+
+        if best_delim == b' ':
+            if re.search(rb'\S \S', line):
+                return SPACE, False
+            else:
+                return PPRINT, False
+        elif best_delim == b'  ':
+            return PPRINT, False
+        else:
+            return best_delim, True
+
+    def determine_delimiters(self, line):
+        opts = self.opts
+        if opts.ifs:
+            plain_ifs = re.escape(opts.ifs) == opts.ifs
+        else:
+            # guess delimiter if not specified
+            opts.ifs, plain_ifs = self.guess_delimiter(line, b'\t')
+            if opts.ifs == SPACE or opts.ifs == PPRINT:
+                opts.combine_trailing_columns = True
+                opts.no_quoting = True
+
+        if not opts.ofs:
+            if opts.ifs == SPACE or opts.ifs == PPRINT or opts.ifs.isspace() and opts.colour:
+                opts.ofs = PRETTY_OUTPUT
+            elif plain_ifs:
+                opts.ofs = opts.ifs
+            else:
+                opts.ofs = b'\t'
+
+        if plain_ifs:
+            def next_ifs(line, start, ifs=opts.ifs):
+                i = line.find(ifs, start)
+                if i == -1:
+                    return None, None
+                return i, i + len(ifs)
+        else:
+            def next_ifs(line, start, ifs=re.compile(opts.ifs)):
+                if match := ifs.search(line, start):
+                    return match.span()
+                return None, None
+        self.next_ifs = next_ifs
+
+    def iter_lines(self, file, sep, chunk=8192):
+        rest = b''
+        while buf := file.read1(chunk):
+            rest += buf
+            *lines, rest = rest.split(sep)
+            yield from lines
+        if rest:
+            yield rest
+
+    def process_file(self, file, do_yield=False):
+        row = []
+        first = True
+        if self.opts.irs == b'\n':
+            lines = file
+        else:
+            lines = self.iter_lines(file, self.opts.irs)
+
+        for line in file:
+            line = line.removesuffix(self.opts.irs)
+
+            if first:
+                first = False
+                self.determine_delimiters(line)
+
+            row, incomplete = self.parse_line(line, row)
+            if not incomplete:
+                is_header = self.header is None and not self.opts.no_header
+                if is_header:
+                    self.header = row
+                    if self.on_header(self.header):
+                        break
+
+                elif self.on_row(row):
+                    break
+
+                if do_yield:
+                    yield (row, is_header)
+
+                row = []
+
+        self.on_eof()
+
+    def extract_column(self, line: bytes, start: int, line_len: int, quote=ord(b'"')):
+        # quoted; find closing quote, skip over repeating ones
+        i = line.find(b'"', start)
+        value = line[start : None if i == -1 else i]
+
+        # next char is another quote
+        while i != -1 and i+1 < line_len and line[i+1] == quote:
+            j = line.find(b'"', i+2)
+            value += line[i+1 : None if j == -1 else j]
+            i = j
+
+        return value, i
+
+    def parse_line(self, line: bytes, row: list, quote=ord(b'"')):
+        allow_quoted = not self.opts.no_quoting
+
+        if not allow_quoted or b'"' not in line:
+            if row:
+                # complete the previously incomplete row
+                row[-1] += line
+                return row, True
+            elif isinstance(self.opts.ifs, bytes):
+                return line.split(self.opts.ifs), False
+            else:
+                return self.opts.ifs.split(line), False
+
+        maxcols = len(self.header) if self.opts.combine_trailing_columns and self.header is not None else float('inf')
+        start = 0
+        line_len = len(line)
+
+        if row:
+            # complete the previously incomplete row
+            value, i = self.extract_column(line, 0, line_len)
+            row[-1] += self.opts.irs + value
+            if i == -1:
+                return row, True
+            start = self.next_ifs(line, i+1)[1] or line_len
+
+        while start < line_len:
+
+            if allow_quoted and line[start] == quote:
+
+                value, i = self.extract_column(line, start+1, line_len)
+
+                if len(row) >= maxcols:
+                    row[-1] += value
+                else:
+                    row.append(value)
+
+                if i == -1:
+                    # no quote; append the rest of the line, but this is incomplete
+                    return row, True
+
+                start = self.next_ifs(line, i+1)[1] or line_len
+
+            else:
+                # not quoted
+                s, e = self.next_ifs(line, start)
+                if len(row) >= maxcols:
+                    row[-1] += line[start : e]
+                else:
+                    row.append(line[start : s])
+                if not s:
+                    break
+                start = max(e, s+1)
+
+        return row, False
+
+    def get_rgb(self, i):
+        return b'\x1b[38;2;%i;%i;%im' % get_rgb(180 * i * (0.8 + 1 / self.numcols), 0.3, 255)
+
+    @staticmethod
+    def needs_quoting(value, ofs, ors):
+        # this is faster than using a [character-class]
+        return b'"' in value or ors in value or ofs in value
+
+    def format_columns(self, row, ofs, ors, quote_output):
+        if quote_output and self.needs_quoting(b''.join(row), ofs, ors):
+            row = row.copy()
+            for i, col in enumerate(row):
+                if self.needs_quoting(col, ofs, ors):
+                    row[i] = b'"' + col.replace(b'"', b'""') + b'"'
+        return row
+
+    def format_row(self, row, padding=None):
+        ofs = self.opts.ofs
+        row = self.format_columns(row, ofs, self.opts.ors, self.opts.quote_output)
+
+        if padding:
+            # add padding e.g. for pretty printing
+            for i, (col, p) in enumerate(zip(row, padding)):
+                if p > 0:
+                    row[i] += b' ' * p
+
+        if self.opts.colour and self.opts.rainbow_columns:
+            # colour each column differently
+
+            if len(row) > len(self.rgb_map):
+                for i in range(len(self.rgb_map), len(row)):
+                    self.rgb_map.append(self.get_rgb(i))
+
+            parts = []
+            ofs = b'\x1b[39m' + ofs
+            for rgb, col in zip(self.rgb_map, row):
+                parts.append(rgb)
+                parts.append(col)
+                parts.append(ofs)
+            # drop the last ofs and reset colour instead
+            if parts:
+                parts[-1] = RESET_COLOUR
+            return b''.join(parts)
+
+        return ofs.join(row)
+
+    def print_row(self, row, padding=None):
+        self.outfile.write(self.format_row(row, padding) + self.opts.ors)
+
+    def on_header(self, header, padding=None):
+        if not self.opts.drop_header:
+            self.out_header = header
+            if self.opts.numbered_columns:
+                header = [b'%i %s' % x for x in enumerate(header, 1)]
+            if self.opts.colour and self.opts.ofs is not PRETTY_OUTPUT and header:
+                header = [b''.join((self.opts.header_colour, self.opts.header_bg_colour, h, RESET_COLOUR, self.opts.header_bg_colour)) for h in header]
+                header[-1] += RESET_COLOUR
+            return Handler.on_row(self, header, padding)
+
+    def on_row(self, row, padding=None):
+        if self.numcols is None:
+            self.numcols = len(row)
+            self.rgb_map = [self.get_rgb(i) for i in range(self.numcols)]
+
+        self.row_count += 1
+        if self.opts.ofs is PRETTY_OUTPUT:
+            self.gathered_rows.append(self.format_columns(row, PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
+        else:
+            self.print_row(row, padding)
+
+    def justify(self, rows: list[bytes]):
+        # get width of each column
+        widths = {}
+        maxwidths = {}
+        for i, row in enumerate(rows):
+            for j, col in enumerate(row):
+                if not isinstance(col, bytes):
+                    col = str(col).encode('utf8')
+
+                if b'\x1b[' in col:
+                    # remove colour escapes
+                    col = re.sub(br'\x1b\[[0-9;:]*m', b'', col)
+
+                widths.setdefault(j, {})[i] = len(col)
+                maxwidths[j] = max(maxwidths.get(j, 0), len(col))
+
+        padding = []
+        for i, row in enumerate(rows):
+            # don't pad the last column
+            padding.append([maxwidths[j] - widths[j][i] for j in range(len(row)-1)])
+        return padding
+
+    def on_eof(self):
+        # pretty print
+        header_padding = None
+
+        if self.gathered_rows:
+            padding = self.justify(self.gathered_rows)
+
+            self.opts.ofs = PRETTY_OUTPUT_DELIM
+            # rows are already quoted
+            self.opts.quote_output = False
+            self.opts.numbered_columns = False
+
+            # adjust width of each column and print
+            for i, (p, row) in enumerate(zip(padding, self.gathered_rows)):
+                if i == 0 and self.out_header:
+                    header_padding = p
+                    Handler.on_header(self, row, p)
+                else:
+                    Handler.on_row(self, row, p)
+
+        # show a trailer if too much data
+        if self.out_header and (self.opts.trailer == 'always' or (self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):
+            Handler.on_header(self, self.out_header, header_padding)
+
+class _column_slicer(Handler):
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.header_map = None
+
+        for i, f in enumerate(opts.fields):
+            if f != '-' and (match := re.fullmatch(r'(\d*)-(\d*)', f)):
+                s, e = match.groups()
+                opts.fields[i] = (int(s)-1 if s else 0, int(e)-1 if e else float('inf'))
+            elif f.isdigit():
+                opts.fields[i] = int(f) - 1
+            elif isinstance(f, str):
+                opts.fields[i] = f.encode('utf8')
+
+    def make_header_map(self, header):
+        return {k: i for i, k in enumerate(header)}
+
+    def on_header(self, header):
+        self.header_map = self.make_header_map(self.header)
+        return super().on_header(header)
+
+    def slice(self, row, complement=False):
+        if not self.opts.fields:
+            return row
+
+        newrow = complement and row.copy() or []
+
+        for f in self.opts.fields:
+            if isinstance(f, tuple):
+                # add/remove all fields in the range
+                for i in range(f[0], min(f[1]+1, len(row))):
+                    if complement:
+                        newrow[i] = None
+                    else:
+                        newrow.append(row[i])
+            else:
+                i = f if isinstance(f, int) else (self.header_map and self.header_map.get(f))
+                if i is not None and i < len(row):
+                    if complement:
+                        newrow[i] = None
+                    else:
+                        newrow.append(row[i])
+                elif not complement:
+                    # add blank if column does not exist
+                    newrow.append(b'')
+
+        if complement:
+            newrow = [x for x in newrow if x is not None]
+        return newrow
+
+@register_command
+class cat(Handler):
+    ''' concatenate files by row '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--number', action='store_true')
+    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*')
+
+    def __init__(self, opts):
+        self.original_opts = argparse.Namespace(**vars(opts))
+        self.original_opts.drop_header = True
+
+        super().__init__(opts)
+        if self.opts.number:
+            self.on_row = self.on_row_with_number
+            self.on_header = self.on_header_with_number
+
+    def process_file(self, file):
+        list(super().process_file(file))
+
+        for file in self.opts.files:
+            child = Handler(self.original_opts)
+            child.on_row = self.on_row
+            yield from child.process_file(file)
+
+        super().on_eof()
+
+    def on_header_with_number(self, header):
+        if self.opts.number:
+            header = [b'n'] + header
+        super().on_header(header)
+        self.on_header = lambda h: 0
+
+    def on_row_with_number(self, row):
+        if self.opts.number:
+            row.insert(0, b'%i' % self.row_count)
+        super().on_row(row)
+
+    def on_eof(self):
+        pass
+
+@register_command
+class paste(Handler):
+    ''' concatenate files by column '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*')
+
+    empty_rows = None
+
+    def __init__(self, opts):
+        self.original_opts = argparse.Namespace(**vars(opts))
+        super().__init__(opts)
+
+    def process_file(self, file):
+        generators = []
+        generators.append(super().process_file(file, do_yield=True))
+        for file in self.opts.files:
+            child = Handler(self.original_opts)
+            child.on_header = self.on_header
+            child.on_row = self.on_row
+            child.on_eof = self.on_eof
+            generators.append(child.process_file(file, do_yield=True))
+
+        for values in itertools.zip_longest(*generators, fillvalue=(None, False)):
+            rows, is_header = zip(*values)
+
+            if self.empty_rows is None:
+                rows = [r for r in rows if r is not None]
+                self.empty_rows = [[b''] * len(h) for h in rows]
+
+            if None in rows:
+                rows = list(rows)
+                # pad rows that are missing
+                for i, r in enumerate(rows):
+                    if rows[i] is None:
+                        rows[i] = self.empty_rows[i]
+
+            row = sum(rows, start=[])
+            if is_header[0]:
+                self.header = row
+            super().on_row(row)
+
+        yield
+        super().on_eof()
+
+    def on_header(self, header):
+        pass
+    def on_row(self, row):
+        pass
+    def on_eof(self):
+        pass
+
+@register_command
+class tac(Handler):
+    ''' print the file in reverse '''
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.rows = []
+    def on_row(self, row):
+        self.rows.append(row)
+    def on_eof(self):
+        for row in reversed(self.rows):
+            super().on_row(row)
+        super().on_eof()
+
+@register_command
+class tojson(Handler):
+    ''' convert to json '''
+    def on_header(self, header):
+        pass
+    def on_eof(self):
+        pass
+    def on_row(self, row):
+        values = {}
+        for i, col in enumerate(row):
+            key = i
+            if self.header and i < len(self.header):
+                key = self.header[i].decode('utf8')
+            values[key] = col.decode('utf8')
+        self.outfile.write(json.dumps(values).encode('utf8') + self.opts.ors)
+
+@register_command
+class fromjson(Handler):
+    ''' convert from json '''
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(ofs=PRETTY_OUTPUT)
+
+    def process_file(self, file):
+        for line in file:
+            row = json.loads(line)
+            if isinstance(row, dict):
+                if self.header is None:
+                    self.header = [x.encode('utf8') for x in row.keys()]
+                    if self.on_header(self.header):
+                        break
+                row = [x.encode('utf8') for x in row.values()]
+                if self.on_row(row):
+                    break
+        self.on_eof()
+        return ()
+
+@register_command
+class cut(_column_slicer):
+    ''' select columns '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('fields', nargs='+')
+    parser.add_argument('-x', '--complement', action='store_true')
+
+    header_map = None
+    def on_header(self, header):
+        self.header_map = self.make_header_map(self.header)
+        header = self.slice(header, self.opts.complement)
+        return super().on_header(header)
+    def on_row(self, row):
+        row = self.slice(row, self.opts.complement)
+        return super().on_row(row)
+
+@register_command
+class uniq(_column_slicer):
+    ''' omit repeated lines '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('fields', nargs='*')
+    parser.add_argument('-x', '--complement', action='store_true')
+    parser.add_argument('-c', '--count', action='store_true')
+    parser.add_argument('-C', '--count-column', type=encode_arg_type)
+
+    def __init__(self, opts):
+        super().__init__(opts)
+        opts.count_column = opts.count_column or (opts.count and b'count') or None
+        self.uniq = {}
+        self.counts = {}
+        self.header_map = None
+
+    def on_header(self, header):
+        if self.opts.count_column is not None:
+            header = [self.opts.count_column] + header
+        return super().on_header(header)
+
+    def on_row(self, row, ofs=b'\x00'):
+        key = self.slice(row, self.opts.complement)
+        key = ofs.join(self.format_columns(key, ofs, ofs, True))
+        self.uniq.setdefault(key, row)
+        self.counts[key] = self.counts.get(key, 0) + 1
+
+    def on_eof(self):
+        for k, row in self.uniq.items():
+            if self.opts.count_column:
+                row = [b'%i' % self.counts[k]] + row
+            super().on_row(row)
+        super().on_eof()
+
+@register_command
+class sort(_column_slicer):
+    ''' sort the rows '''
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument('fields', nargs='*')
+    parser.add_argument('--help', action='help')
+    parser.add_argument('-x', '--complement', action='store_true')
+    parser.add_argument('-b', '--ignore-leading-blanks', action='append_const', dest='sort_flags', const='-b')
+    parser.add_argument('--dictionary-order', action='append_const', dest='sort_flags', const='-d')
+    parser.add_argument('-f', '--ignore-case', action='append_const', dest='sort_flags', const='-f')
+    parser.add_argument('-g', '--general-numeric-sort', action='append_const', dest='sort_flags', const='-g')
+    parser.add_argument('-i', '--ignore-nonprinting', action='append_const', dest='sort_flags', const='-i')
+    parser.add_argument('-M', '--month-sort', action='append_const', dest='sort_flags', const='-M')
+    parser.add_argument('-h', '--human-numeric-sort', action='append_const', dest='sort_flags', const='-h')
+    parser.add_argument('-n', '--numeric-sort', action='append_const', dest='sort_flags', const='-n')
+    parser.add_argument('-R', '--random-sort', action='append_const', dest='sort_flags', const='-R')
+    parser.add_argument('-r', '--reverse', action='append_const', dest='sort_flags', const='-r')
+    parser.add_argument('-V', '--version-sort', action='append_const', dest='sort_flags', const='-V')
+
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.rows = []
+        self.header_map = None
+
+    sorter = None
+    def start_sorter(self):
+        if not self.sorter:
+            cmd = ['sort', '-z', '-k2'] + (self.opts.sort_flags or [])
+            cmd = ' '.join(map(shlex.quote, cmd)) + ' | cut -f1 -z | tr \\\\0 \\\\n '
+            self.sorter = subprocess.Popen(['sh', '-c', cmd], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        return self.sorter
+
+    def on_row(self, row, ofs=b'\t', ors=b'\x00'):
+        key = self.slice(row, self.opts.complement)
+        key = ofs.join(self.format_columns(key, ofs, ors, self.opts.quote_output))
+        # add row index as first column
+        key = b'%i\t%s%s' % (len(self.rows), key, ors)
+        self.start_sorter().stdin.write(key)
+        self.rows.append(row)
+
+    def on_eof(self):
+        # get the sorted values
+        proc = self.start_sorter()
+        proc.stdin.close()
+
+        for line in proc.stdout:
+            i = int(line)
+            super().on_row(self.rows[i])
+
+        super().on_eof()
+        proc.wait()
+
+@register_command
+class flip(Handler):
+    ''' prints each column on a separate line '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--lines', type=int)
+
+    def __init__(self, opts):
+        super().__init__(opts)
+
+    def on_header(self, header):
+        pass
+    def on_eof(self):
+        pass
+
+    def on_row(self, row):
+        header_width = 0
+        colour = self.opts.colour
+        if colour and self.header:
+            header_width = max(map(len, self.header))
+
+        parts = []
+        for i, col in enumerate(row):
+
+            if colour:
+                parts.append(self.opts.header_colour)
+            parts.append(b'%i' % (i+1))
+            if colour:
+                parts.append(RESET_COLOUR)
+
+            parts.append(b'\t')
+
+            header = self.header[i] if i < len(self.header) else b''
+
+            if colour:
+                parts.append(self.opts.header_colour)
+            parts.append(header)
+            if colour:
+                parts.append(RESET_COLOUR)
+            parts.append(b' ' * max(0, header_width - len(header)))
+
+            parts.append(b'\t')
+            parts.append(col)
+            parts.append(self.opts.ors)
+
+        self.outfile.write(b''.join(parts))
+        self.outfile.write(b'---')
+        self.outfile.write(self.opts.ors)
+
+        if self.opts.lines and self.row_count >= self.opts.lines:
+            return True
+
+@register_command
+class set_header(Handler):
+    ''' sets the header labels '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('fields', nargs='*', type=encode_arg_type)
+    parser.add_argument('--only', action='store_true')
+    parser.add_argument('-r', '--rename', nargs=2, action='append', type=encode_arg_type)
+
+    set_header = False
+
+    def on_row(self, row):
+        if not self.set_header:
+            self.on_header([])
+        self.on_row = super().on_row
+        self.on_row(row)
+
+    def on_header(self, header):
+        self.set_header = True
+        header = header.copy()
+
+        for old, new in (self.opts.rename or ()):
+            if old.isdigit():
+                i = int(old) - 1
+            else:
+                try:
+                    i = header.index(old)
+                except ValueError:
+                    continue
+
+            header[i] = new
+
+        if self.opts.fields:
+            if self.opts.only:
+                header = self.opts.fields
+            else:
+                header[:len(self.opts.fields)] = self.opts.fields
+
+        super().on_header(header)
+
+@register_command
+class head(Handler):
+    ''' output the first lines '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--lines', type=regex_arg_type(r'-?\d+'), default='10')
+
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.lines = int(self.opts.lines.group(0))
+        self.ring = deque((), -self.lines) if self.opts.lines.group(0).startswith('-') else None
+
+    def on_row(self, row):
+        if self.ring is None:
+            # print first n lines
+            super().on_row(row)
+            if self.row_count >= self.lines:
+                return True
+        else:
+            # print except for last n lines
+            if self.ring and len(self.ring) >= -self.lines:
+                super().on_row(self.ring.popleft())
+            self.ring.append(row)
+
+@register_command
+class tail(Handler):
+    ''' output the last lines '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-n', '--lines', type=regex_arg_type(r'\+?\d+'), default='10')
+
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.lines = int(self.opts.lines.group(0))
+        self.ring = deque((), self.lines) if not self.opts.lines.group(0).startswith('+') else None
+        self.count = 0
+
+    def on_row(self, row):
+        if self.ring is None:
+            self.count += 1
+            # print except for first n-1 lines
+            if self.count >= self.lines:
+                super().on_row(row)
+        else:
+            # print last n lines
+            self.ring.append(row)
+
+    def on_eof(self):
+        if self.ring is not None:
+            for row in self.ring:
+                super().on_row(row)
+        super().on_eof()
+
+@register_command
+class grep(_column_slicer):
+    ''' print lines that match patterns '''
+
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument('-e', '--regexp', dest='patterns', action='append')
+    parent.add_argument('-F', '--fixed-strings', action='store_true')
+    parent.add_argument('-w', '--word-regexp', action='store_true')
+    parent.add_argument('-x', '--field-regexp', action='store_true')
+    parent.add_argument('-v', '--invert-match', action='store_true')
+    parent.add_argument('-s', '--case-sensitive', action='store_true')
+    parent.add_argument('-m', '--max-count', type=int)
+    parent.add_argument('-k', '--fields', nargs='+', default=())
+    parent.add_argument('--complement', action='store_true')
+    parent.set_defaults(
+        replace=None,
+        line_number=False,
+        passthru=False,
+        after_context=0,
+        before_context=0,
+        context=0
+    )
+
+    parser = argparse.ArgumentParser(parents=[parent])
+    parser.add_argument('patterns', nargs='*')
+    parser.add_argument('--replace', type=encode_arg_type)
+    parser.add_argument('-n', '--line-number', action='store_true')
+    parser.add_argument('--passthru', action='store_true')
+    parser.add_argument('-A', '--after-context', type=int, default=None)
+    parser.add_argument('-B', '--before-context', type=int, default=None)
+    parser.add_argument('-C', '--context', type=int, default=None)
+
+    MATCH_COLOUR = b'\x1b[1;31m'
+
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.matched_count = 0
+        # field overrides word
+        opts.word_regexp = opts.word_regexp and not opts.field_regexp
+        # no need to colour if invert and not passthru
+        self.grep_colour = opts.colour and not (opts.invert_match and not opts.passthru)
+
+        self.patterns = opts.patterns = [p.encode('utf8') for p in opts.patterns]
+
+        # case sensitive if pattern is not lowercase
+        opts.case_sensitive = opts.case_sensitive or any(p != p.lower() for p in opts.patterns)
+
+        if not opts.fixed_strings:
+            # validate each pattern
+            for p in self.patterns:
+                re.compile(p)
+
+        if opts.word_regexp:
+            # convert to regex
+            if opts.fixed_strings:
+                self.patterns = [re.escape(p) for p in self.patterns]
+                opts.fixed_strings = False
+            self.patterns = [rb'\b' + p + rb'\b' for p in self.patterns]
+
+        # compile the patterns
+        if not opts.fixed_strings:
+            # but if it is just a fixed string leave as is
+            self.patterns = [p if p == re.escape(p) else re.compile(p, re.I if opts.case_sensitive else 0) for p in self.patterns]
+
+        if self.opts.passthru:
+            self.opts.before_context = 0
+            self.opts.after_context = 0
+        self.before = deque((), (self.opts.context if self.opts.before_context is None else self.opts.before_context) or 0)
+        self.after = (self.opts.context if self.opts.after_context is None else self.opts.after_context)
+        self.last_matched = None
+        self.count = 0
+
+    def on_header(self, header):
+        if self.opts.line_number:
+            header = [b'n'] + header
+        super().on_header(header)
+
+    def do_replace(self, match: re.Match, text: bytes):
+        if match:
+            return match.expand(self.opts.replace)
+        elif b'\\' not in self.opts.replace:
+            return self.opts.replace
+        else:
+            # replacement may have groups, so make a fake match
+            return re.fullmatch(b'.*', text).expand(self.opts.replace)
+
+    def grep(self, row):
+        matched = False
+
+        allowed_fields = None
+        if self.opts.fields:
+            allowed_fields = set(self.slice(list(range(len(row))), self.opts.complement))
+
+        for i, col in enumerate(row):
+            if allowed_fields is not None and i not in allowed_fields:
+                continue
+
+            parts = []
+
+            if not self.opts.case_sensitive:
+                col = col.lower()
+
+            if self.opts.field_regexp:
+                for pat in self.patterns:
+                    # do a direct string comparison
+                    match = None
+                    if pat == col or (isinstance(pat, re.Pattern) and (match := pat.fullmatch(row[i]))):
+
+                        if not self.grep_colour and self.opts.replace is None:
+                            # quit early if we don't need to add colour
+                            return row
+
+                        if self.opts.replace is not None:
+                            row[i] = self.do_replace(match, row[i])
+
+                        if self.grep_colour:
+                            parts.append(self.MATCH_COLOUR)
+                            parts.append(row[i])
+                            parts.append(RESET_COLOUR)
+
+                        # we've matched the whole string, no need to check other patterns
+                        break
+
+            else:
+                start = 0
+                while start < len(col):
+
+                    # find the pattern that matches first
+                    best = None
+                    for pat in self.patterns:
+                        if isinstance(pat, bytes):
+                            match = col.find(pat, start)
+                            if match != -1 and (not best or match < best[0]):
+                                best = [match, match + len(pat), None]
+
+                        elif match := pat.search(row[i], pos=start):
+                            if not best or match.start() < best[0]:
+                                best = [*match.span(), match]
+
+                    if not best:
+                        # no matches
+                        if parts:
+                            parts.append(row[i][start:])
+                        break
+
+                    if not self.grep_colour and self.opts.replace is None:
+                        # quit early if we don't need to add colour
+                        return row
+
+                    # prefix
+                    parts.append(row[i][start : best[0]])
+                    # start colour
+                    if self.grep_colour:
+                        parts.append(self.MATCH_COLOUR)
+                    # matched text / replacement
+                    parts.append(row[i][best[0] : best[1]])
+                    if self.opts.replace is not None:
+                        parts[-1] = self.do_replace(best[2], parts[-1])
+                    # end colour
+                    if self.grep_colour:
+                        parts.append(RESET_COLOUR)
+                    start = best[1]
+
+            if parts:
+                row[i] = b''.join(parts)
+                matched = True
+
+        matched = matched ^ self.opts.invert_match
+        return matched and row
+
+    def on_row(self, row):
+        self.count += 1
+
+        reached_maxcount = self.opts.max_count and self.matched_count >= self.opts.max_count
+        is_after = self.after and self.last_matched is not None and self.last_matched + self.after >= self.count
+        matched = self.grep(row)
+
+        if not matched and not is_after and not self.opts.passthru:
+            # this line might be a before
+            self.before.append(row)
+            return
+
+        if matched and not reached_maxcount:
+            # matched this line
+            self.last_matched = self.count
+            if self.opts.max_count:
+                self.matched_count += 1
+
+            # print the lines before
+            for i, r in enumerate(self.before, self.count - len(self.before)):
+                if self.opts.line_number:
+                    r.insert(0, b'%i' % i)
+                super().on_row(r)
+            self.before.clear()
+
+        if self.opts.line_number:
+            row.insert(0, b'%i' % self.count)
+        super().on_row(row)
+
+        # quit if reached max count
+        if reached_maxcount and not is_after:
+            return True
+
+@register_command
+class replace(grep):
+    ''' replace text '''
+    parser = argparse.ArgumentParser(parents=[grep.parent])
+    parser.add_argument('patterns', action='append')
+    parser.add_argument('replace', type=encode_arg_type)
+    parser.set_defaults(passthru=True)
+
+@register_command
+class join(_column_slicer):
+    ''' join lines of two files on a common field '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('file', type=argparse.FileType('rb'))
+    parser.add_argument('fields', nargs='*')
+    parser.add_argument('-1', dest='left_fields', action='append')
+    parser.add_argument('-2', dest='right_fields', action='append')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('-a', dest='show_all', choices=('1', '2'), action='append')
+    group.add_argument('--join', choices=('inner', 'left', 'right', 'outer'), default='inner')
+
+    def __init__(self, opts):
+        opts.fields.extend(opts.extras)
+        opts.extras = ()
+
+        if opts.fields and (opts.left_fields or opts.right_fields):
+            self.parser.error('Cannot set common fields and use -1 or -2')
+
+        right_opts = argparse.Namespace(**vars(opts))
+        right_opts.fields = right_opts.fields.copy() or right_opts.right_fields
+        opts.fields = opts.fields or opts.left_fields
+
+        if opts.show_all:
+            if '1' in opts.show_all and '2' in opts.show_all:
+                opts.join = 'outer'
+            elif '1' in opts.show_all:
+                opts.join = 'left'
+            elif '2' in opts.show_all:
+                opts.join = 'right'
+
+        super().__init__(opts)
+        self.left = {}
+        self.right = Queue()
+        self.header_lock = threading.Semaphore(1)
+
+        self.collector = _column_slicer(right_opts)
+        self.collector.on_header = self.on_collector_header
+        self.collector.on_row = self.right.put_nowait
+        self.collector.on_eof = lambda: 0 # nop
+
+        self.thread = threading.Thread(target=self.run_collector, daemon=True)
+        self.thread.start()
+
+    def run_collector(self):
+        try:
+            list(self.collector.process_file(self.opts.file))
+        finally:
+            self.right.put_nowait(None)
+
+    def on_header(self, header):
+        self.header_map = self.make_header_map(self.header)
+        self.print_header()
+
+    def on_collector_header(self, header):
+        self.collector.header_map = self.make_header_map(self.collector.header)
+        self.print_header()
+
+    def print_header(self):
+        # the semaphore only has 1, so the second time it is called it will return false and go through
+        if not self.header_lock.acquire(blocking=False):
+            header = self.paste_row(self.header, self.collector.header)
+            super().on_header(header)
+
+    def paste_row(self, left, right):
+        return left + self.collector.slice(right, True)
+
+    def on_row(self, row, ofs=b'\x00'):
+        key = self.slice(row, False)
+        key = ofs.join(self.format_columns(key, ofs, ofs, True))
+        self.left.setdefault(key, []).append(row)
+
+    def on_eof(self, ofs=b'\x00'):
+        matched = set()
+
+        # left has finished, now read off the right
+        while (right := self.right.get()) is not None:
+            key = self.collector.slice(right, False)
+            key = ofs.join(self.format_columns(key, None, None, False))
+            matched.add(key)
+
+            lefts = self.left.get(key, ())
+            for left in lefts:
+                row = self.paste_row(left, right)
+                super().on_row(row)
+
+            if not lefts and self.opts.join in ('right', 'outer'):
+                row = self.paste_row([b''] * self.header, right)
+                super().on_row(row)
+
+        if self.opts.join in ('left', 'outer'):
+            for key in self.left.keys() - matched:
+                for left in self.left[key]:
+                    super().on_row(left)
+
+        super().on_eof()
+        self.thread.join()
+
+class Row(list):
+    def __init__(self, values, header):
+        super().__init__(values)
+        private = self.__dict__['__private'] = {}
+        private['header'] = header
+        private['header_map'] = {k: i for i, k in enumerate(header)}
+
+    def __setattr__(self, key, value):
+        self[key] = value
+    def __getattr__(self, key):
+        return self[key]
+
+    def __getitem__(self, key):
+        if isinstance(key, str):
+            key = key.encode('utf8')
+            key = self.__dict__['__private']['header_map'][key] + 1
+        if key > len(self):
+            return ''
+        return super().__getitem__(key if key < 0 else key-1).decode('utf8')
+
+    def __setitem__(self, key, value):
+        if not isinstance(value, bytes):
+            value = str(value).encode('utf8')
+
+        if isinstance(key, str):
+            key = key.encode('utf8')
+            private = self.__dict__['__private']
+            if key not in private['header_map']:
+                private['header_map'][key] = len(private['header'])
+                private['header'].append(key)
+
+            key = private['header_map'][key]
+            if key >= len(self):
+                for i in range(key - len(self) - 1):
+                    self.append(b'')
+                self.append(value)
+                return
+            key += 1
+
+        return super().__setitem__(key if key < 0 else key-1, value)
+
+    def __delitem__(self, key):
+        if isinstance(key, str):
+            key = self.__header_map.pop(key)
+        return super().__delitem__(key)
+
+@register_command
+class exec_(Handler):
+    ''' run python on each row '''
+    name = 'exec'
+    parser = argparse.ArgumentParser()
+    parser.add_argument('script', nargs='+')
+    parser.add_argument('-q', '--quiet', action='store_true')
+    parser.add_argument('-I', '--ignore-errors', action='store_true')
+    parser.add_argument('-E', '--remove-errors', action='store_true')
+
+    def __init__(self, opts):
+        super().__init__(opts)
+
+        script = '\n'.join(opts.script)
+        self.code = compile(script, '<string>', 'exec')
+        self.printed_header = False
+        self.count = 0
+
+    def on_header(self, header):
+        self.modifiable_header = header.copy()
+
+    def on_row(self, row):
+        self.count = self.count + 1
+        row = Row(row, self.modifiable_header or [])
+        locals = {'row': row, 'N': self.count, 'header': self.header}
+
+        try:
+            exec(self.code, locals=locals)
+        except Exception as e:
+            if not self.opts.quiet:
+                print(f'{type(e).__name__}: {e}', file=sys.stderr)
+            if self.opts.remove_errors:
+                return
+            if not self.opts.ignore_errors and not self.opts.quiet:
+                raise
+
+        if not self.printed_header:
+            super().on_header(self.modifiable_header)
+            self.printed_header = True
+
+        if locals.get('row') is not None:
+            super().on_row(list(locals['row']))
+
+    def on_eof(self):
+        if not self.printed_header:
+            super().on_header(self.modifiable_header)
+            self.printed_header = True
+        super().on_eof()
+
+@register_command
+class exec_filter(exec_):
+    ''' filter rows using python '''
+    name = None
+    parser = argparse.ArgumentParser()
+    parser.add_argument('script')
+    parser.add_argument('-E', '--remove-errors', action='store_true')
+
+    def __init__(self, opts):
+        opts.script = [f'if not ({opts.script}): row = None']
+        super().__init__(opts)
+
+@register_command
+class tomarkdown(Handler):
+    ''' convert to markdown table '''
+
+    def on_header(self, header):
+        self.on_row(header)
+
+    def on_row(self, row):
+        row = [col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') for col in row]
+        self.gathered_rows.append(self.format_columns(row, None, None, quote_output=False) + [b''])
+
+    def on_eof(self):
+        if not self.gathered_rows:
+            return
+        if self.opts.no_header:
+            self.gathered_rows.insert([b''] * len(self.gathered_rows[0]))
+        padding = self.justify(self.gathered_rows)
+
+        self.opts.ofs = b' | '
+        for i, (p, row) in enumerate(zip(padding, self.gathered_rows)):
+            self.outfile.write(b'| ')
+            super().on_row(row, p)
+
+            if i == 0:
+                self.outfile.write(b'| ')
+                row = [b'-'*len(col) for col in row]
+                super().on_row(row)
+
+@register_command
+class totsv(Handler):
+    ''' convert to tsv '''
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(ofs=b'\t')
+
+@register_command
+class tocsv(Handler):
+    ''' convert to csv '''
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(ofs=b',')
+
+@register_command
+class pretty(Handler):
+    ''' pretty prints the file '''
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(ofs=PRETTY_OUTPUT)
+
+@register_command
+class page(pretty):
+    ''' view the file in a pager '''
+    parser = argparse.ArgumentParser()
+    parser.set_defaults(page=True)
+
+def make_parser(**kwargs):
+    parser = argparse.ArgumentParser(allow_abbrev=False, **kwargs)
+    group = parser.add_argument_group('common options')
+    group.add_argument('-N', '--no-header', action='store_true')
+    group.add_argument('--drop-header', action='store_true')
+    group.add_argument('--trailer', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('-d', '--ifs', type=interpret_c_escapes)
+    group.add_argument('-D', '--ofs', type=interpret_c_escapes)
+    group.add_argument('--irs', type=interpret_c_escapes, default=b'\n')
+    group.add_argument('--ors', type=interpret_c_escapes)
+    group.add_argument('--csv', dest='ifs', action='store_const', const=b',')
+    group.add_argument('--tsv', dest='ifs', action='store_const', const=b'\t')
+    group.add_argument('--ssv', dest='ifs', action='store_const', const=br'\s+')
+    group.add_argument('--combine-trailing-columns', action='store_true')
+    group.add_argument('-P', '--pretty', dest='ofs', action='store_const', const=PRETTY_OUTPUT)
+    group.add_argument('--page', action='store_true')
+    group.add_argument('--colour', '--color', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('--header-colour', type=encode_arg_type, default='\x1b[1;4m')
+    group.add_argument('--header-bg-colour', type=encode_arg_type, default='\x1b[48;5;237m')
+    group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('-Q', '--no-quoting', action='store_true')
+    return parser
+
+def main():
+    parent = make_parser(add_help=False, argument_default=argparse.SUPPRESS)
+    parser = make_parser(formatter_class=argparse.RawTextHelpFormatter)
+    parser.set_defaults(handler=None, quote_output=True)
+
+    descr = '\n'.join(sorted(f'{h.get_name().ljust(20)}{h.__doc__ or ""}' for h in handlers))
+    subparsers = parser.add_subparsers(dest='command', help=argparse.SUPPRESS, title='Commands', description=descr)
+
+    for h in sorted(handlers, key=lambda h: h.get_name()):
+        parents = [parent]
+        if h.parser:
+            parents.insert(0, h.parser)
+        sub = subparsers.add_parser(h.get_name(), parents=parents, description=h.__doc__, add_help=False)
+        sub.set_defaults(handler=h)
+
+    if STDIN_IS_TTY:
+        parser.print_help()
+        return
+
+    opts, extras = parser.parse_known_args()
+    opts.extras = extras
+    opts.parser = parser
+    opts.handler = opts.handler or Handler
+    opts.ors = opts.ors or opts.irs
+
+    # opts.colour = os.environ.get('NO_COLOR', '') == '' and (opts.colour == 'always' or (opts.colour == 'auto' and STDOUT_IS_TTY))
+    opts.colour = os.environ.get('NO_COLOR', '') == '' and resolve_auto_colour(opts.colour)
+    opts.numbered_columns = resolve_auto_colour(opts.numbered_columns)
+    opts.rainbow_columns = opts.colour and resolve_auto_colour(opts.rainbow_columns)
+
+    handler = opts.handler(opts)
+    try:
+        list(handler.process_file(sys.stdin.buffer))
+    finally:
+        if handler.outfile_proc:
+            handler.outfile_proc.stdin.close()
+            handler.outfile_proc.wait()
+
+if __name__ == '__main__':
+    try:
+        main()
+    except BrokenPipeError:
+        pass
