@@ -88,7 +88,8 @@ class exec_(_Base):
             self.printed_header = True
 
         if locals.get('row') is not None:
-            super().on_row(list(locals['row']))
+            row = [col if isinstance(col, bytes) else str(col).encode('utf8') for col in locals['row']]
+            super().on_row(row)
 
     def on_eof(self):
         if not self.printed_header:
