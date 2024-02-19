@@ -2,51 +2,53 @@ import sys
 import argparse
 from ._base import _Base
 
-class Row(list):
-    def __init__(self, values, header):
-        super().__init__(values)
-        private = self.__dict__['__private'] = {}
-        private['header'] = header
-        private['header_map'] = {k: i for i, k in enumerate(header)}
+def to_bytes(x):
+    if not isinstance(x, bytes):
+        x = str(x).encode('utf8')
+    return x
 
-    def __setattr__(self, key, value):
-        self[key] = value
-    def __getattr__(self, key):
-        return self[key]
+def make_row_class(header):
+    header_map = {k: i for i, k in enumerate(header)}
 
-    def __getitem__(self, key):
-        if isinstance(key, str):
-            key = key.encode('utf8')
-            key = self.__dict__['__private']['header_map'][key] + 1
-        if key > len(self):
-            return ''
-        return super().__getitem__(key if key < 0 else key-1).decode('utf8')
+    class cls(list):
+        def __setattr__(self, key, value):
+            self[key] = value
+        def __getattr__(self, key):
+            return self[key]
 
-    def __setitem__(self, key, value):
-        if not isinstance(value, bytes):
-            value = str(value).encode('utf8')
+        def __getitem__(self, key):
+            if isinstance(key, str):
+                key = key.encode('utf8')
+                key = header_map[key] + 1
+            if key > len(self):
+                return ''
+            return super().__getitem__(key if key < 0 else key-1).decode('utf8')
 
-        if isinstance(key, str):
-            key = key.encode('utf8')
-            private = self.__dict__['__private']
-            if key not in private['header_map']:
-                private['header_map'][key] = len(private['header'])
-                private['header'].append(key)
+        def __setitem__(self, key, value):
+            value = to_bytes(value)
 
-            key = private['header_map'][key]
-            if key >= len(self):
-                for i in range(key - len(self) - 1):
-                    self.append(b'')
-                self.append(value)
-                return
-            key += 1
+            if isinstance(key, str):
+                key = key.encode('utf8')
+                if key not in header_map:
+                    header_map[key] = len(header)
+                    header.append(key)
 
-        return super().__setitem__(key if key < 0 else key-1, value)
+                key = header_map[key]
+                if key >= len(self):
+                    for i in range(key - len(self) - 1):
+                        self.append(b'')
+                    self.append(value)
+                    return
+                key += 1
 
-    def __delitem__(self, key):
-        if isinstance(key, str):
-            key = self.__header_map.pop(key)
-        return super().__delitem__(key)
+            return super().__setitem__(key if key < 0 else key-1, value)
+
+        def __delitem__(self, key):
+            if isinstance(key, str):
+                key = header_map.pop(key)
+            return super().__delitem__(key)
+
+    return cls
 
 class exec_(_Base):
     ''' run python on each row '''
@@ -64,13 +66,16 @@ class exec_(_Base):
         self.code = compile(script, '<string>', 'exec')
         self.printed_header = False
         self.count = 0
+        self.row_cls = None
 
     def on_header(self, header):
         self.modifiable_header = header.copy()
 
     def on_row(self, row):
+        self.row_cls = self.row_cls or make_row_class(self.modifiable_header or [])
+
         self.count = self.count + 1
-        row = Row(row, self.modifiable_header or [])
+        row = self.row_cls(row)
         locals = {'row': row, 'N': self.count, 'header': self.header}
 
         try:
