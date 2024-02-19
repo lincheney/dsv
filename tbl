@@ -20,8 +20,8 @@ def make_parser(**kwargs):
     group = parser.add_argument_group('common options')
     group.add_argument('-N', '--no-header', action='store_true')
     group.add_argument('--drop-header', action='store_true')
-    group.add_argument('--trailer', choices=('never', 'always', 'auto'), default='auto')
-    group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('--trailer', choices=('never', 'always', 'auto'), default='auto', nargs='?')
+    group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?')
     group.add_argument('-d', '--ifs', type=interpret_c_escapes)
     group.add_argument('-D', '--ofs', type=interpret_c_escapes)
     group.add_argument('--irs', type=interpret_c_escapes, default=b'\n')
@@ -32,10 +32,10 @@ def make_parser(**kwargs):
     group.add_argument('--combine-trailing-columns', action='store_true')
     group.add_argument('-P', '--pretty', dest='ofs', action='store_const', const=_Base.PRETTY_OUTPUT)
     group.add_argument('--page', action='store_true')
-    group.add_argument('--colour', '--color', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('--colour', '--color', choices=('never', 'always', 'auto'), default='auto', nargs='?')
     group.add_argument('--header-colour', type=_utils.utf8_type, default='\x1b[1;4m')
     group.add_argument('--header-bg-colour', type=_utils.utf8_type, default='\x1b[48;5;237m')
-    group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), default='auto')
+    group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?')
     group.add_argument('-Q', '--no-quoting', action='store_true')
     return parser
 
@@ -67,10 +67,10 @@ def main():
     opts.handler = opts.handler or _Base
     opts.ors = opts.ors or opts.irs
 
-    # opts.colour = os.environ.get('NO_COLOR', '') == '' and (opts.colour == 'always' or (opts.colour == 'auto' and STDOUT_IS_TTY))
-    opts.colour = os.environ.get('NO_COLOR', '') == '' and resolve_auto_colour(opts.colour)
-    opts.numbered_columns = resolve_auto_colour(opts.numbered_columns)
-    opts.rainbow_columns = opts.colour and resolve_auto_colour(opts.rainbow_columns)
+    opts.trailer = opts.trailer or 'always'
+    opts.colour = os.environ.get('NO_COLOR', '') == '' and resolve_auto_colour(opts.colour or 'always')
+    opts.numbered_columns = resolve_auto_colour(opts.numbered_columns or 'always')
+    opts.rainbow_columns = opts.colour and resolve_auto_colour(opts.rainbow_columns or 'always')
 
     handler = opts.handler(opts)
     try:
