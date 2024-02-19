@@ -333,5 +333,5 @@ class _Base:
                     _Base.on_row(self, row, p)
 
         # show a trailer if too much data
-        if self.out_header and (self.opts.trailer == 'always' or (self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):
+        if self.out_header and (self.opts.trailer == 'always' or (_utils.stdout_is_tty() and self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):
             _Base.on_header(self, self.out_header, header_padding)
