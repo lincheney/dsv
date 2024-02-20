@@ -27,7 +27,7 @@ class grep(_ColumnSlicer):
     )
 
     parser = argparse.ArgumentParser(parents=[parent])
-    parser.add_argument('patterns', nargs='*')
+    parser.add_argument('patterns', nargs='*', action='extend')
     parser.add_argument('--replace', type=_utils.utf8_type)
     parser.add_argument('-n', '--line-number', action='store_true')
     parser.add_argument('--passthru', action='store_true')
