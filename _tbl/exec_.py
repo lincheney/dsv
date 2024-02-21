@@ -137,6 +137,7 @@ class exec_(_Base):
         script = '\n'.join(opts.script)
         self.code = compile(script, '<string>', mode)
         self.count = 0
+        self.rows = []
 
     def on_header(self, header):
         self.modifiable_header = header.copy()
@@ -146,18 +147,18 @@ class exec_(_Base):
 
     def on_row(self, row):
         if self.opts.slurp:
-            self.gathered_rows.append(row)
+            self.rows.append(row)
+        else:
+            self.exec_per_row(row)
 
     def on_eof(self):
-        rows = self.gathered_rows
+        rows = self.rows
         if self.opts.slurp:
             rows = self.exec_on_all_rows(rows)
             super().on_header(self.modifiable_header)
 
         for row in rows:
             super().on_row(row)
-        self.gathered_rows.clear()
-
         super().on_eof()
 
     @contextmanager
@@ -182,8 +183,6 @@ class exec_(_Base):
             if self.opts.remove_errors:
                 return
             raise
-
-        self.printed_header()
 
         if vars.get('row') is not None:
             row = [to_bytes(col) for col in vars['row']]
