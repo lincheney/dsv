@@ -15,7 +15,7 @@ class grep(_ColumnSlicer):
     parent.add_argument('-v', '--invert-match', action='store_true')
     parent.add_argument('-s', '--case-sensitive', action='store_true')
     parent.add_argument('-m', '--max-count', type=int)
-    parent.add_argument('-k', '--fields', nargs='+', default=())
+    parent.add_argument('-k', '--fields', action='append', default=[])
     parent.add_argument('--complement', action='store_true')
     parent.set_defaults(
         replace=None,
