@@ -171,6 +171,7 @@ class _Base:
 
     def parse_line(self, line: bytes, row: list, quote=ord(b'"')):
         allow_quoted = not self.opts.no_quoting
+        maxcols = len(self.header) if self.opts.combine_trailing_columns and self.header is not None else None
 
         if not allow_quoted or b'"' not in line:
             if row:
@@ -178,11 +179,10 @@ class _Base:
                 row[-1] += line
                 return row, True
             elif isinstance(self.opts.ifs, bytes):
-                return line.split(self.opts.ifs), False
+                return line.split(self.opts.ifs, maxcols or -1), False
             else:
-                return self.opts.ifs.split(line), False
+                return self.opts.ifs.split(line, (maxcols or 1) - 1), False
 
-        maxcols = len(self.header) if self.opts.combine_trailing_columns and self.header is not None else float('inf')
         start = 0
         line_len = len(line)
 
@@ -200,7 +200,7 @@ class _Base:
 
                 value, i = self.extract_column(line, start+1, line_len)
 
-                if len(row) >= maxcols:
+                if maxcols is not None and len(row) >= maxcols:
                     row[-1] += value
                 else:
                     row.append(value)
