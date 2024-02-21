@@ -15,6 +15,8 @@ class flip(_Base):
         pass
 
     def on_row(self, row):
+        self.row_count += 1
+
         header_width = 0
         colour = self.opts.colour
         if colour and self.header:
