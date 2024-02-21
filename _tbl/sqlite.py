@@ -11,6 +11,8 @@ class sqlite(_Base):
     def __init__(self, opts):
         super().__init__(opts)
         self.proc = None
+        if self.opts.no_header:
+            self.opts.parser.error('Cannot use -N/--no-header with sqlite')
 
     def start_proc(self):
         if not self.proc:
