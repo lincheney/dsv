@@ -14,8 +14,8 @@ def get_rgb(hue, sat, val):
     return int(red), int(green), int(blue)
 
 class _Base:
-    SPACE = br'\s+'
-    PPRINT = br'\s\s+'
+    SPACE = re.compile(br'\s+')
+    PPRINT = re.compile(br'\s\s+')
     PRETTY_OUTPUT = object()
     PRETTY_OUTPUT_DELIM = b'  '
     RESET_COLOUR = b'\x1b[0m'
@@ -64,7 +64,7 @@ class _Base:
             delims = {k: line.count(k) for k in other_delims}
         if not any(delims.values()):
             # no idea
-            return default, True
+            return default
 
         best_delim = max(delims, key=delims.get)
         if best_delim == b' ' and 2*delims.get(b'  ', 0) >= delims[b' ']:
@@ -72,21 +72,23 @@ class _Base:
 
         if best_delim == b' ':
             if re.search(rb'\S \S', line):
-                return cls.SPACE, False
+                return cls.SPACE
             else:
-                return cls.PPRINT, False
+                return cls.PPRINT
         elif best_delim == b'  ':
-            return cls.PPRINT, False
+            return cls.PPRINT
         else:
-            return best_delim, True
+            return best_delim
 
     def determine_delimiters(self, line):
         opts = self.opts
         if opts.ifs:
-            plain_ifs = re.escape(opts.ifs) == opts.ifs
+            if re.escape(opts.ifs) != opts.ifs:
+                opts.ifs = re.compile(opts.ifs)
+
         else:
             # guess delimiter if not specified
-            opts.ifs, plain_ifs = self.guess_delimiter(line, b'\t')
+            opts.ifs = self.guess_delimiter(line, b'\t')
             if opts.ifs == self.SPACE or opts.ifs == self.PPRINT:
                 opts.combine_trailing_columns = True
                 opts.no_quoting = True
@@ -94,19 +96,19 @@ class _Base:
         if not opts.ofs:
             if (opts.ifs == self.SPACE or opts.ifs == self.PPRINT or opts.ifs.isspace()) and opts.colour:
                 opts.ofs = self.PRETTY_OUTPUT
-            elif plain_ifs:
+            elif isinstance(opts.ifs, bytes):
                 opts.ofs = opts.ifs
             else:
                 opts.ofs = b'\t'
 
-        if plain_ifs:
+        if isinstance(opts.ifs, bytes):
             def next_ifs(line, start, ifs=opts.ifs):
                 i = line.find(ifs, start)
                 if i == -1:
                     return None, None
                 return i, i + len(ifs)
         else:
-            def next_ifs(line, start, ifs=re.compile(opts.ifs)):
+            def next_ifs(line, start, ifs=opts.ifs):
                 if match := ifs.search(line, start):
                     return match.span()
                 return None, None
