@@ -1,4 +1,4 @@
-#!/usr/bin/env -S sh -c '$(which pypy3 || which python3) -SEs "$@"' -
+#!/usr/bin/env -S sh -c '$(which pypy3 || which python3) "$@"' -
 
 import argparse
 import pkgutil
