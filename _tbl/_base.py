@@ -67,6 +67,8 @@ class _Base:
             return default, True
 
         best_delim = max(delims, key=delims.get)
+        if best_delim == b' ' and 2*delims.get(b'  ', 0) >= delims[b' ']:
+            best_delim = b'  '
 
         if best_delim == b' ':
             if re.search(rb'\S \S', line):
@@ -90,7 +92,7 @@ class _Base:
                 opts.no_quoting = True
 
         if not opts.ofs:
-            if opts.ifs == self.SPACE or opts.ifs == self.PPRINT or opts.ifs.isspace() and opts.colour:
+            if (opts.ifs == self.SPACE or opts.ifs == self.PPRINT or opts.ifs.isspace()) and opts.colour:
                 opts.ofs = self.PRETTY_OUTPUT
             elif plain_ifs:
                 opts.ofs = opts.ifs
