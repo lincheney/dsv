@@ -214,7 +214,7 @@ class _Base:
             else:
                 # not quoted
                 s, e = self.next_ifs(line, start)
-                if len(row) >= maxcols:
+                if maxcols is not None and len(row) >= maxcols:
                     row[-1] += line[start : e]
                 else:
                     row.append(line[start : s])
