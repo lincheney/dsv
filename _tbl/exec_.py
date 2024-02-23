@@ -62,34 +62,23 @@ class Column(mixin):
         self.__header__ = header
         self.__header_map__ = header_map
 
-    @property
-    def __rows__(self):
-        return self.__rows_ref__['rows']
-
     def __getitem__(self, key):
         if isinstance(key, slice):
-            return [r[self.__index__] if self.__index__ < len(r) else b'' for r in self.__rows__[key]]
+            return [r[self.__index__] for r in self.__rows_ref__['rows'][key]]
         else:
-            key = self.__get_column__(key)
-            return self.__rows__[key][self.__index__]
+            return self.__rows_ref__['rows'][key][self.__index__]
 
     def __setitem__(self, key, value):
-        key = self.__get_column__(key, True)
-        if isinstance(key, slice):
-            rows = self.__rows__[key]
-        else:
-            rows = [self.__rows__[key]]
+        rows = self[key]
+        if not isinstance(key, slice):
+            rows = [rows]
 
         if not isinstance(value, (list, tuple)):
             # broadcast
-            value = [value] * len(self.__rows__)
+            value = [value] * len(rows)
 
         for row, val in zip(rows, value):
-            if self.__index__ >= len(row):
-                self += [b''] * (self.__index__ - len(row) - 1)
-                self.append(val)
-            else:
-                row[self.__index__] = val
+            row[self.__index__] = val
 
 class Columns(mixin):
     __slots__ = ('__rows_ref__', '__header__', '__header_map__')
@@ -99,25 +88,19 @@ class Columns(mixin):
         self.__header_map__ = {}
         self.__remake_header_map__()
 
-    @property
-    def __rows__(self):
-        return self.__rows_ref__['rows']
-
     def __getitem__(self, key):
         key = self.__get_column__(key)
         return Column(key, self.__rows_ref__, self.__header__, self.__header_map__)
 
     def __setitem__(self, key, value):
-        key = self.__get_column__(key, True)
-        Column(key, self.__rows_ref__, self.__header__, self.__header_map__)[:] = value
+        self[key][:] = value
 
     def __delitem__(self, key):
         key = self.__get_column__(key)
-        for row in self.__rows__:
+        # remove from header as well
+        for row in self.__rows_ref__['rows'] + [self.__header__]:
             if key < len(row):
                 del row[key]
-        # remove from header as well
-        self.__header__.pop(key)
         self.__remake_header_map__()
 
 class exec_(_Base):
