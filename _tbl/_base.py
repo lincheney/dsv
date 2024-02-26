@@ -83,7 +83,7 @@ class _Base:
     def determine_delimiters(self, line):
         opts = self.opts
         if opts.ifs:
-            if re.escape(opts.ifs) != opts.ifs:
+            if re.escape(opts.ifs) != opts.ifs and not opts.plain_ifs:
                 opts.ifs = re.compile(opts.ifs)
 
         else:

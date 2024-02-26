@@ -23,6 +23,7 @@ def make_parser(**kwargs):
     group.add_argument('--trailer', choices=('never', 'always', 'auto'), default='auto', nargs='?')
     group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?')
     group.add_argument('-d', '--ifs', type=interpret_c_escapes)
+    group.add_argument('--plain-ifs', action='store_true')
     group.add_argument('-D', '--ofs', type=interpret_c_escapes)
     group.add_argument('--irs', type=interpret_c_escapes, default=b'\n')
     group.add_argument('--ors', type=interpret_c_escapes)
