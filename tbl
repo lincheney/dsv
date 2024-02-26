@@ -1,4 +1,5 @@
 #!/usr/bin/env -S sh -c '$(which pypy3 || which python3) "$@"' -
+# vi: ft=python
 
 import argparse
 import pkgutil
