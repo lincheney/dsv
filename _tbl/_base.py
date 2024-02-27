@@ -179,7 +179,7 @@ class _Base:
                 row[-1] += line
                 return row, True
             elif isinstance(self.opts.ifs, bytes):
-                return line.split(self.opts.ifs, maxcols or -1), False
+                return line.split(self.opts.ifs, (maxcols or 0) -1), False
             else:
                 return self.opts.ifs.split(line, (maxcols or 1) - 1), False
 
