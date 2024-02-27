@@ -38,4 +38,5 @@ class set_header(_Base):
             else:
                 header[:len(self.opts.fields)] = self.opts.fields
 
+        self.header = header
         super().on_header(header)
