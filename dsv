@@ -6,9 +6,9 @@ import pkgutil
 import sys
 import os
 
-import _tbl
-from _tbl._base import _Base
-from _tbl import _utils
+import _dsv
+from _dsv._base import _Base
+from _dsv import _utils
 
 def interpret_c_escapes(x: str):
     return x.encode('utf8').decode('unicode_escape').encode('utf8')
@@ -46,8 +46,8 @@ def main():
     parser = make_parser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(handler=None, quote_output=True)
 
-    modules = [sub.name for sub in pkgutil.iter_modules(_tbl.__path__) if not sub.name.startswith('_')]
-    handlers = [getattr(__import__('_tbl.'+name, fromlist=[name]), name) for name in modules]
+    modules = [sub.name for sub in pkgutil.iter_modules(_dsv.__path__) if not sub.name.startswith('_')]
+    handlers = [getattr(__import__('_dsv.'+name, fromlist=[name]), name) for name in modules]
 
     descr = '\n'.join(sorted(f'{h.get_name().ljust(20)}{h.__doc__ or ""}' for h in handlers))
     subparsers = parser.add_subparsers(dest='command', help=argparse.SUPPRESS, title='Commands', description=descr)
