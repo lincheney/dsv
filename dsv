@@ -13,9 +13,6 @@ from _dsv import _utils
 def interpret_c_escapes(x: str):
     return x.encode('utf8').decode('unicode_escape').encode('utf8')
 
-def resolve_auto_colour(x: str):
-    return x == 'always' or (x == 'auto' and _utils.stdout_is_tty())
-
 def make_parser(**kwargs):
     parser = argparse.ArgumentParser(allow_abbrev=False, **kwargs)
     group = parser.add_argument_group('common options')
@@ -74,9 +71,9 @@ def main():
     opts.ors = opts.ors or opts.irs
 
     opts.trailer = opts.trailer or 'always'
-    opts.colour = os.environ.get('NO_COLOR', '') == '' and resolve_auto_colour(opts.colour or 'always')
-    opts.numbered_columns = resolve_auto_colour(opts.numbered_columns or 'always')
-    opts.rainbow_columns = opts.colour and resolve_auto_colour(opts.rainbow_columns or 'always')
+    opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'always')
+    opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'always')
+    opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'always')
 
     handler = opts.handler(opts)
     try:

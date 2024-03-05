@@ -20,3 +20,6 @@ def regex_arg_type(regex):
             return match
         raise argparse.ArgumentTypeError(f'{value} does not match: {regex}')
     return wrapped
+
+def resolve_tty_auto(x: str):
+    return x == 'always' or (x == 'auto' and stdout_is_tty())

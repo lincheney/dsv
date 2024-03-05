@@ -1,54 +1,44 @@
 import argparse
 from ._base import _Base
+from . import _utils
 
 class flip(_Base):
     ''' prints each column on a separate line '''
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--lines', type=int)
+    parser.add_argument('--row-sep', choices=('never', 'always', 'auto'), default='auto')
+    parser.set_defaults(ofs=_Base.PRETTY_OUTPUT)
 
     def __init__(self, opts):
         super().__init__(opts)
+        self.opts.row_sep = _utils.resolve_tty_auto(self.opts.row_sep)
+        self.count = 0
 
     def on_header(self, header):
-        pass
-    def on_eof(self):
-        pass
+        header = [b'row', b'column']
+        if not self.opts.no_header:
+            header.append(b'key')
+        header.append(b'value')
+        super().on_header(header)
 
     def on_row(self, row):
-        self.row_count += 1
+        if self.count == 0:
+            # first row
+            if self.header is None:
+                self.on_header(None)
+                self.header = []
 
-        header_width = 0
-        colour = self.opts.colour
-        if colour and self.header:
-            header_width = max(map(len, self.header))
+        elif self.opts.row_sep:
+            super().on_row([b'---'])
 
-        parts = []
-        for i, col in enumerate(row):
+        self.count += 1
 
-            if colour:
-                parts.append(self.opts.header_colour)
-            parts.append(b'%i' % (i+1))
-            if colour:
-                parts.append(self.RESET_COLOUR)
+        for i, value in enumerate(row, 1):
+            row = [b'%i' % self.count, b'%i' % i]
+            if not self.opts.no_header:
+                row.append(self.header[i-1] if i <= len(self.header) else b'')
+            row.append(value)
+            super().on_row(row)
 
-            parts.append(b'\t')
-
-            header = self.header[i] if i < len(self.header) else b''
-
-            if colour:
-                parts.append(self.opts.header_colour)
-            parts.append(header)
-            if colour:
-                parts.append(self.RESET_COLOUR)
-            parts.append(b' ' * max(0, header_width - len(header)))
-
-            parts.append(b'\t')
-            parts.append(col)
-            parts.append(self.opts.ors)
-
-        self.outfile.write(b''.join(parts))
-        self.outfile.write(b'---')
-        self.outfile.write(self.opts.ors)
-
-        if self.opts.lines and self.row_count >= self.opts.lines:
+        if self.opts.lines and self.count >= self.opts.lines:
             return True
