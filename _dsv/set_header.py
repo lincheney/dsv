@@ -30,6 +30,8 @@ class set_header(_Base):
                 except ValueError:
                     continue
 
+            if i >= len(header):
+                header += [b''] * (i - len(header) + 1)
             header[i] = new
 
         if self.opts.fields:
