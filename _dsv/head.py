@@ -12,12 +12,14 @@ class head(_Base):
         super().__init__(opts)
         self.lines = int(self.opts.lines.group(0))
         self.ring = deque((), -self.lines) if self.opts.lines.group(0).startswith('-') else None
+        self.count = 0
 
     def on_row(self, row):
         if self.ring is None:
             # print first n lines
             super().on_row(row)
-            if self.row_count >= self.lines:
+            self.count += 1
+            if self.count >= self.lines:
                 return True
         else:
             # print except for last n lines
