@@ -51,6 +51,7 @@ def main():
 
     descr = '\n'.join(sorted(f'{h.get_name().ljust(20)}{h.__doc__ or ""}' for h in handlers))
     subparsers = parser.add_subparsers(dest='command', help=argparse.SUPPRESS, title='Commands', description=descr)
+    sub_mapping = {}
 
     for h in sorted(handlers, key=lambda h: h.get_name()):
         parents = [parent]
@@ -58,12 +59,15 @@ def main():
             parents.insert(0, h.parser)
         sub = subparsers.add_parser(h.get_name(), parents=parents, description=h.__doc__, add_help=False)
         sub.set_defaults(handler=h)
-
-    if _utils.stdin_is_tty():
-        parser.print_help()
-        return
+        sub_mapping[h] = sub
 
     opts, extras = parser.parse_known_args()
+
+    # print help if no input file
+    if _utils.stdin_is_tty():
+        sub_mapping.get(opts.handler, parser).print_help()
+        return
+
     opts.extras = extras
     opts.parser = parser
     opts.handler = opts.handler or _Base
