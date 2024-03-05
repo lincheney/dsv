@@ -87,4 +87,4 @@ if __name__ == '__main__':
     try:
         main()
     except BrokenPipeError:
-        pass
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
