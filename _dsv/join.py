@@ -22,8 +22,8 @@ class join(_ColumnSlicer):
             self.parser.error('Cannot set common fields and use -1 or -2')
 
         right_opts = argparse.Namespace(**vars(opts))
-        right_opts.fields = right_opts.fields.copy() or right_opts.right_fields
-        opts.fields = opts.fields or opts.left_fields
+        right_opts.fields = right_opts.fields.copy() or right_opts.right_fields or []
+        opts.fields = opts.fields or opts.left_fields or []
 
         if opts.show_all:
             if '1' in opts.show_all and '2' in opts.show_all:
@@ -54,20 +54,22 @@ class join(_ColumnSlicer):
 
     def on_header(self, header):
         self.header_map = self.make_header_map(self.header)
-        self.print_header()
+        self.got_header()
 
     def on_collector_header(self, header):
         self.collector.header_map = self.make_header_map(self.collector.header)
-        self.print_header()
+        self.got_header()
 
-    def print_header(self):
+    def got_header(self):
         # the semaphore only has 1, so the second time it is called it will return false and go through
         if not self.header_lock.acquire(blocking=False):
+            if not self.opts.fields and not self.collector.opts.fields:
+                self.opts.fields = self.collector.opts.fields = list(set(self.header) & set(self.collector.header))
             header = self.paste_row(self.header, self.collector.header)
             super().on_header(header)
 
     def paste_row(self, left, right):
-        return left + self.collector.slice(right, True)
+        return left + self.collector.slice(right, True, False)
 
     def on_row(self, row, ofs=b'\x00'):
         key = self.slice(row, False, False)
