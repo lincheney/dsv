@@ -157,7 +157,7 @@ class exec_(_Base):
     def exec_per_row(self, row):
         self.count = self.count + 1
         row = Row(row, self.modifiable_header, self.header_map)
-        vars = {'row': row, 'N': self.count, 'header': self.header}
+        vars = {'row': row, 'N': self.count, 'header': self.modifiable_header}
 
         try:
             with self.exec_wrapper():
@@ -174,7 +174,7 @@ class exec_(_Base):
     def exec_on_all_rows(self, rows):
         vars = {
             'N': len(rows),
-            'header': self.header,
+            'header': self.modifiable_header,
         }
         vars['rows'] = [Row(row, self.modifiable_header, self.header_map) for row in rows]
         vars['columns'] = Columns(vars, self.modifiable_header, self.header_map)
