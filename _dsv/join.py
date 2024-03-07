@@ -70,7 +70,7 @@ class join(_ColumnSlicer):
         return left + self.collector.slice(right, True)
 
     def on_row(self, row, ofs=b'\x00'):
-        key = self.slice(row, False)
+        key = self.slice(row, False, False)
         key = ofs.join(self.format_columns(key, ofs, ofs, True))
         self.left.setdefault(key, []).append(row)
 

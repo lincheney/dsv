@@ -23,7 +23,7 @@ class uniq(_ColumnSlicer):
         return super().on_header(header)
 
     def on_row(self, row, ofs=b'\x00'):
-        key = self.slice(row, self.opts.complement)
+        key = self.slice(row, self.opts.complement, False)
         key = ofs.join(self.format_columns(key, ofs, ofs, True))
         self.uniq.setdefault(key, row)
         self.counts[key] = self.counts.get(key, 0) + 1

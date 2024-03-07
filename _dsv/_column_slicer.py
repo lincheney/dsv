@@ -22,7 +22,7 @@ class _ColumnSlicer(_Base):
         self.header_map = self.make_header_map(self.header)
         return super().on_header(header)
 
-    def slice(self, row, complement=False):
+    def slice(self, row, complement=False, allow_empty=True):
         if not self.opts.fields:
             return row
 
@@ -43,7 +43,7 @@ class _ColumnSlicer(_Base):
                         newrow[i] = None
                     else:
                         newrow.append(row[i])
-                elif not complement:
+                elif not complement and allow_empty:
                     # add blank if column does not exist
                     newrow.append(b'')
 

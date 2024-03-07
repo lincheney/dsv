@@ -35,7 +35,7 @@ class sort(_ColumnSlicer):
         return self.sorter
 
     def on_row(self, row, ofs=b'\t', ors=b'\x00'):
-        key = self.slice(row, self.opts.complement)
+        key = self.slice(row, self.opts.complement, False)
         key = ofs.join(self.format_columns(key, ofs, ors, self.opts.quote_output))
         # add row index as first column
         key = b'%i\t%s%s' % (len(self.rows), key, ors)

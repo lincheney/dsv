@@ -94,7 +94,7 @@ class grep(_ColumnSlicer):
 
         allowed_fields = None
         if self.opts.fields:
-            allowed_fields = set(self.slice(list(range(len(row))), self.opts.complement))
+            allowed_fields = set(self.slice(list(range(len(row))), self.opts.complement, False))
 
         for i, col in enumerate(row):
             if allowed_fields is not None and i not in allowed_fields:
