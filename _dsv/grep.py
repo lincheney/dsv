@@ -113,7 +113,7 @@ class grep(_ColumnSlicer):
 
                         if not self.grep_colour and self.opts.replace is None:
                             # quit early if we don't need to add colour
-                            return row
+                            return None if self.opts.invert_match else row
 
                         if self.opts.replace is not None:
                             row[i] = self.do_replace(match, row[i])
@@ -150,7 +150,7 @@ class grep(_ColumnSlicer):
 
                     if not self.grep_colour and self.opts.replace is None:
                         # quit early if we don't need to add colour
-                        return row
+                        return None if self.opts.invert_match else row
 
                     # prefix
                     parts.append(row[i][start : best[0]])
@@ -174,11 +174,11 @@ class grep(_ColumnSlicer):
         return matched and row
 
     def on_row(self, row):
-        self.count += 1
-
+        matched = self.grep(row)
+        if matched:
+            self.count += 1
         reached_maxcount = self.opts.max_count and self.matched_count >= self.opts.max_count
         is_after = self.after and self.last_matched is not None and self.last_matched + self.after >= self.count
-        matched = self.grep(row)
 
         if not matched and not is_after and not self.opts.passthru:
             # this line might be a before
@@ -198,9 +198,10 @@ class grep(_ColumnSlicer):
                 super().on_row(r)
             self.before.clear()
 
-        if self.opts.line_number:
-            row.insert(0, b'%i' % self.count)
-        super().on_row(row)
+        if matched:
+            if self.opts.line_number:
+                row.insert(0, b'%i' % self.count)
+            super().on_row(row)
 
         # quit if reached max count
         if reached_maxcount and not is_after:
