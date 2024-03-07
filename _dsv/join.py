@@ -69,10 +69,10 @@ class join(_ColumnSlicer):
             super().on_header(header)
 
     def paste_row(self, left, right):
-        return left + self.collector.slice(right, True, False)
+        return left + self.collector.slice(right, True)
 
     def on_row(self, row, ofs=b'\x00'):
-        key = self.slice(row, False, False)
+        key = self.slice(row, False)
         key = ofs.join(self.format_columns(key, ofs, ofs, True))
         self.left.setdefault(key, []).append(row)
 

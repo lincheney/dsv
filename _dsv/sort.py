@@ -24,7 +24,6 @@ class sort(_ColumnSlicer):
     def __init__(self, opts):
         super().__init__(opts)
         self.rows = []
-        self.header_map = None
 
     sorter = None
     def start_sorter(self):
@@ -35,7 +34,7 @@ class sort(_ColumnSlicer):
         return self.sorter
 
     def on_row(self, row, ofs=b'\t', ors=b'\x00'):
-        key = self.slice(row, self.opts.complement, False)
+        key = self.slice(row, self.opts.complement)
         key = ofs.join(self.format_columns(key, ofs, ors, self.opts.quote_output))
         # add row index as first column
         key = b'%i\t%s%s' % (len(self.rows), key, ors)
