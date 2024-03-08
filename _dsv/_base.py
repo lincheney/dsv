@@ -123,7 +123,7 @@ class _Base:
         if rest:
             yield rest
 
-    def process_file(self, file, do_yield=False):
+    def process_file(self, file, do_callbacks=True, do_yield=False):
         row = []
         first = True
         if self.opts.irs == b'\n':
@@ -143,10 +143,10 @@ class _Base:
                 is_header = self.header is None and not self.opts.no_header
                 if is_header:
                     self.header = row
-                    if self.on_header(self.header):
+                    if do_callbacks and self.on_header(self.header):
                         break
 
-                elif self.on_row(row):
+                elif do_callbacks and self.on_row(row):
                     break
 
                 if do_yield:
@@ -154,7 +154,8 @@ class _Base:
 
                 row = []
 
-        self.on_eof()
+        if do_callbacks:
+            self.on_eof()
 
     def extract_column(self, line: bytes, start: int, line_len: int, quote=ord(b'"')):
         # quoted; find closing quote, skip over repeating ones
