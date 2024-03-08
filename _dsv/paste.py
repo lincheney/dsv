@@ -40,7 +40,9 @@ class paste(_Base):
             row = sum(rows, start=[])
             if is_header[0]:
                 self.header = row
-            super().on_row(row)
+                super().on_header(row)
+            else:
+                super().on_row(row)
 
         yield
         super().on_eof()
