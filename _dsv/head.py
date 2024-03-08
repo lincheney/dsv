@@ -16,6 +16,9 @@ class head(_Base):
 
     def on_row(self, row):
         if self.ring is None:
+            if self.lines == 0:
+                return True
+
             # print first n lines
             super().on_row(row)
             self.count += 1
