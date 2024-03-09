@@ -163,7 +163,7 @@ class exec_(_Base):
 
         try:
             with self.exec_wrapper():
-                exec(self.code, globals=vars)
+                exec(self.code, vars)
         except:
             if self.opts.remove_errors:
                 return
