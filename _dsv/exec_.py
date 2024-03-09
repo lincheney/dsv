@@ -120,13 +120,12 @@ class exec_(_Base):
         script = '\n'.join(opts.script)
         self.code = compile(script, '<string>', mode)
         self.count = 0
+        self.have_printed_header = False
         self.rows = []
 
     def on_header(self, header):
         self.modifiable_header = header.copy()
         self.header_map = {k: i for i, k in enumerate(header)}
-        if not self.opts.slurp:
-            super().on_header(header)
 
     def on_row(self, row):
         if self.opts.slurp:
@@ -138,7 +137,10 @@ class exec_(_Base):
         rows = self.rows
         if self.opts.slurp:
             rows = self.exec_on_all_rows(rows)
+
+        if not self.have_printed_header:
             super().on_header(self.modifiable_header)
+            self.have_printed_header = True
 
         for row in rows:
             super().on_row(row)
@@ -168,6 +170,10 @@ class exec_(_Base):
             raise
 
         if vars.get('row') is not None:
+            if not self.have_printed_header:
+                super().on_header(self.modifiable_header)
+                self.have_printed_header = True
+
             row = [to_bytes(col) for col in vars['row']]
             super().on_row(row)
 
