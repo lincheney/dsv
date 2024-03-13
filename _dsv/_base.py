@@ -19,6 +19,7 @@ class _Base:
     PRETTY_OUTPUT = object()
     PRETTY_OUTPUT_DELIM = b'  '
     RESET_COLOUR = b'\x1b[0m'
+    RGB_OFFSET = 0.8
 
     name = None
     parser = None
@@ -226,7 +227,7 @@ class _Base:
         return row, False
 
     def get_rgb(self, i):
-        return b'\x1b[38;2;%i;%i;%im' % get_rgb(180 * i * (0.7 + 1 / self.numcols), 0.3, 255)
+        return b'\x1b[38;2;%i;%i;%im' % get_rgb(180 * i * (self.RGB_OFFSET + 1 / self.numcols), 0.3, 255)
 
     @staticmethod
     def needs_quoting(value, ofs, ors):
