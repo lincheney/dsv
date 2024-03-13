@@ -83,7 +83,7 @@ class _Base:
     def determine_delimiters(self, line):
         opts = self.opts
         if opts.ifs:
-            if re.escape(opts.ifs) != opts.ifs and not opts.plain_ifs:
+            if isinstance(opts.ifs, bytes) and re.escape(opts.ifs) != opts.ifs and not opts.plain_ifs:
                 opts.ifs = re.compile(opts.ifs)
 
         else:
@@ -94,7 +94,7 @@ class _Base:
                 opts.no_quoting = True
 
         if not opts.ofs:
-            if (opts.ifs == self.SPACE or opts.ifs == self.PPRINT or opts.ifs.isspace()) and opts.colour:
+            if (opts.ifs == self.SPACE or opts.ifs == self.PPRINT) and opts.colour:
                 opts.ofs = self.PRETTY_OUTPUT
             elif isinstance(opts.ifs, bytes):
                 opts.ofs = opts.ifs
