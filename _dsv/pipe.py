@@ -13,7 +13,7 @@ class pipe(_ColumnSlicer):
     parser.add_argument('-x', '--complement', action='store_true')
     parser.add_argument('-a', '--append-columns', action='append', default=[], type=utf8_type)
     parser.add_argument('command', nargs='+')
-    parser.add_argument('-q', '--no-quote-output', action='store_false', dest='quote_output')
+    parser.add_argument('-q', '--no-quote-input', action='store_true')
 
     def __init__(self, opts):
         super().__init__(opts)
@@ -60,7 +60,7 @@ class pipe(_ColumnSlicer):
 
     def on_row(self, row):
         input = self.slice(row, self.opts.complement)
-        input = self.opts.ofs.join(self.format_columns(input, self.opts.ofs, self.opts.ors, self.opts.quote_output))
+        input = self.opts.ofs.join(self.format_columns(input, self.opts.ofs, self.opts.ors, not self.opts.no_quote_input))
 
         proc = self.start_process()
         proc.stdin.write(input + self.opts.ors)
