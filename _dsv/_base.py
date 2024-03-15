@@ -57,7 +57,7 @@ class _Base:
 
     @classmethod
     def guess_delimiter(cls, line, default):
-        good_delims = (b',', b'\t')
+        good_delims = (b'\t', b',')
         other_delims = (b'  ', b' ', b'|', b';')
 
         delims = {k: line.count(k) for k in good_delims}
