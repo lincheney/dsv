@@ -34,6 +34,8 @@ class pipe(_ColumnSlicer):
         opts.ors = b'\n'
 
         for stdout, is_header in _Base(opts).process_file(proc.stdout, do_yield=True, do_callbacks=False):
+            if not self.queue:
+                continue
             row = self.queue.popleft()
 
             if self.opts.append_columns:
