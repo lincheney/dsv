@@ -14,7 +14,7 @@ class grep(_ColumnSlicer):
     parent.add_argument('-x', '--field-regexp', action='store_true')
     parent.add_argument('-v', '--invert-match', action='store_true')
     parent.add_argument('-s', '--case-sensitive', action='store_true')
-    parent.add_argument('-m', '--max-count', type=int)
+    parent.add_argument('-m', '--max-count', type=int, default=float('inf'))
     parent.add_argument('-k', '--fields', action='append', default=[])
     parent.add_argument('--complement', action='store_true')
     parent.set_defaults(
@@ -71,9 +71,9 @@ class grep(_ColumnSlicer):
             self.opts.before_context = 0
             self.opts.after_context = 0
         self.before = deque((), (self.opts.context if self.opts.before_context is None else self.opts.before_context) or 0)
-        self.after = (self.opts.context if self.opts.after_context is None else self.opts.after_context)
+        self.after = (self.opts.context if self.opts.after_context is None else self.opts.after_context) or 0
         self.last_matched = None
-        self.count = 0
+        self.row_num = 0
 
     def on_header(self, header):
         if self.opts.line_number:
@@ -174,35 +174,32 @@ class grep(_ColumnSlicer):
         return matched and row
 
     def on_row(self, row):
-        matched = self.grep(row)
-        if matched:
-            self.count += 1
-        reached_maxcount = self.opts.max_count and self.matched_count >= self.opts.max_count
-        is_after = self.after and self.last_matched is not None and self.last_matched + self.after >= self.count
+        self.row_num += 1
 
-        if not matched and not is_after and not self.opts.passthru:
-            # this line might be a before
-            self.before.append(row)
-            return
-
-        if matched and not reached_maxcount:
+        if matched := self.grep(row):
             # matched this line
-            self.last_matched = self.count
-            if self.opts.max_count:
-                self.matched_count += 1
+            if self.matched_count < self.opts.max_count:
+                self.last_matched = self.row_num
+            self.matched_count += 1
 
             # print the lines before
-            for i, r in enumerate(self.before, self.count - len(self.before)):
+            for i, r in enumerate(self.before, self.row_num - len(self.before)):
                 if self.opts.line_number:
                     r.insert(0, b'%i' % i)
                 super().on_row(r)
             self.before.clear()
 
-        if matched:
+        # print this line if matched or it is in after
+        if matched or (self.last_matched is not None and self.last_matched + self.after >= self.row_num):
             if self.opts.line_number:
-                row.insert(0, b'%i' % self.count)
+                row.insert(0, b'%i' % self.row_num)
             super().on_row(row)
 
+        elif not self.opts.passthru:
+            # this line might be a before
+            self.before.append(row)
+            return
+
         # quit if reached max count
-        if reached_maxcount and not is_after:
+        if self.matched_count >= self.opts.max_count and self.last_matched + self.after <= self.row_num:
             return True
