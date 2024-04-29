@@ -45,11 +45,13 @@ class _Base:
                 self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
                 self.outfile = self.outfile_proc.stdin
 
-        self.numcols = None
-        self.rgb_map = []
         if self.opts.extras:
             self.opts.parser.error('unrecognized arguments: ' + " ".join(self.opts.extras))
-        self.gathered_rows = []
+
+        # private variables
+        self.__numcols = None
+        self.__rgb_map = []
+        self.__gathered_rows = []
 
     @classmethod
     def get_name(cls):
@@ -227,7 +229,7 @@ class _Base:
         return row, False
 
     def get_rgb(self, i):
-        return b'\x1b[38;2;%i;%i;%im' % get_rgb(180 * i * (self.RGB_OFFSET + 1 / max(1, self.numcols)), 0.3, 255)
+        return b'\x1b[38;2;%i;%i;%im' % get_rgb(180 * i * (self.RGB_OFFSET + 1 / max(1, self.__numcols)), 0.3, 255)
 
     @staticmethod
     def needs_quoting(value, ofs, ors):
@@ -255,13 +257,13 @@ class _Base:
         if self.opts.colour and self.opts.rainbow_columns:
             # colour each column differently
 
-            if len(row) > len(self.rgb_map):
-                for i in range(len(self.rgb_map), len(row)):
-                    self.rgb_map.append(self.get_rgb(i))
+            if len(row) > len(self.__rgb_map):
+                for i in range(len(self.__rgb_map), len(row)):
+                    self.__rgb_map.append(self.get_rgb(i))
 
             parts = []
             ofs = b'\x1b[39m' + ofs
-            for rgb, col in zip(self.rgb_map, row):
+            for rgb, col in zip(self.__rgb_map, row):
                 parts.append(rgb)
                 parts.append(col)
                 parts.append(ofs)
@@ -286,13 +288,13 @@ class _Base:
             return _Base.on_row(self, header, padding)
 
     def on_row(self, row, padding=None):
-        if self.numcols is None:
-            self.numcols = len(row)
-            self.rgb_map = [self.get_rgb(i) for i in range(self.numcols)]
+        if self.__numcols is None:
+            self.__numcols = len(row)
+            self.__rgb_map = [self.get_rgb(i) for i in range(self.__numcols)]
 
         self.row_count += 1
         if self.opts.ofs is self.PRETTY_OUTPUT:
-            self.gathered_rows.append(self.format_columns(row, self.PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
+            self.__gathered_rows.append(self.format_columns(row, self.PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
         else:
             self.print_row(row, padding)
 
@@ -322,8 +324,8 @@ class _Base:
         # pretty print
         header_padding = None
 
-        if self.gathered_rows:
-            padding = self.justify(self.gathered_rows)
+        if self.__gathered_rows:
+            padding = self.justify(self.__gathered_rows)
 
             self.opts.ofs = self.PRETTY_OUTPUT_DELIM
             # rows are already quoted
@@ -331,7 +333,7 @@ class _Base:
             self.opts.numbered_columns = False
 
             # adjust width of each column and print
-            for i, (p, row) in enumerate(zip(padding, self.gathered_rows)):
+            for i, (p, row) in enumerate(zip(padding, self.__gathered_rows)):
                 if i == 0 and self.out_header:
                     header_padding = p
                     _Base.on_header(self, row, p)
