@@ -13,5 +13,5 @@ class exec_filter(exec_):
     group.add_argument('-E', '--remove-errors', action='store_true')
 
     def __init__(self, opts):
-        opts.script = [f'if not ({opts.script}): row = None']
+        opts.script = [f'if not ({opts.script}): del row']
         super().__init__(opts)

@@ -122,6 +122,8 @@ class exec_(_Base):
         self.count = 0
         self.have_printed_header = False
         self.rows = []
+        self.modifiable_header = []
+        self.header_map = {}
 
     def on_header(self, header):
         self.modifiable_header = header.copy()
@@ -138,9 +140,9 @@ class exec_(_Base):
         if self.opts.slurp:
             rows = self.exec_on_all_rows(rows)
 
-        if not self.have_printed_header:
+        if not self.have_printed_header and self.modifiable_header:
             super().on_header(self.modifiable_header)
-            self.have_printed_header = True
+        self.have_printed_header = True
 
         for row in rows:
             super().on_row(row)
@@ -169,10 +171,10 @@ class exec_(_Base):
                 return
             raise
 
-        if vars.get('row') is not None:
-            if not self.have_printed_header:
+        if 'row' in vars:
+            if not self.have_printed_header and self.modifiable_header:
                 super().on_header(self.modifiable_header)
-                self.have_printed_header = True
+            self.have_printed_header = True
 
             row = [to_bytes(col) for col in vars['row']]
             super().on_row(row)
