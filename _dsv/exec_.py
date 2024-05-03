@@ -32,6 +32,15 @@ class mixin:
         self.__header_map__.clear()
         self.__header_map__.update({k: i for i, k in enumerate(self.__header__)})
 
+class string_like(bytes):
+    def __eq__(self, other):
+        if isinstance(other, str):
+            try:
+                return self.decode('utf8') == other
+            except UnicodeDecodeError:
+                return False
+        return super().__eq__(other)
+
 class Row(list, mixin):
     __slots__ = ('__header__', '__header_map__')
     def __init__(self, row, header, header_map):
@@ -42,9 +51,8 @@ class Row(list, mixin):
     def __getitem__(self, key):
         key = self.__get_column__(key)
         if isinstance(key, int) and key >= len(self):
-            return b''
-        else:
-            return super().__getitem__(key)
+            return string_like()
+        return string_like(super().__getitem__(key))
 
     def __setitem__(self, key, value):
         key = self.__get_column__(key, True)
