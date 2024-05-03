@@ -97,8 +97,11 @@ class _Base:
                 opts.no_quoting = True
 
         if not opts.ofs:
-            if (opts.ifs == self.SPACE or opts.ifs == self.PPRINT) and opts.colour:
-                opts.ofs = self.PRETTY_OUTPUT
+            if opts.ifs == self.SPACE or opts.ifs == self.PPRINT:
+                if opts.colour:
+                    opts.ofs = self.PRETTY_OUTPUT
+                else:
+                    opts.ofs = b' '*4
             elif isinstance(opts.ifs, bytes):
                 opts.ofs = opts.ifs
             else:
