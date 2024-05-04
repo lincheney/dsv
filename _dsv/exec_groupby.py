@@ -1,5 +1,4 @@
 import argparse
-import itertools
 from ._base import _Base
 from ._column_slicer import _ColumnSlicer
 from .exec_ import exec_
@@ -21,28 +20,15 @@ class exec_groupby(exec_, _ColumnSlicer):
     def __init__(self, opts):
         opts.script = [opts.script]
         super().__init__(opts)
-        self.key = []
-        self.group = []
+        self.groups = {}
 
-    def exec_on_group(self, group, key):
-        if self.header is not None:
-            key = dict(zip(self.header, key))
-
-        if rows := group and self.exec_on_all_rows(group, key=key):
-            if not self.have_printed_header and self.modifiable_header:
-                _Base.on_header(self, self.modifiable_header)
-            self.have_printed_header = True
-            for row in rows:
-                _Base.on_row(self, row)
-
-    def on_row(self, row):
-        key = self.slice(row, self.opts.complement)
-        if key != self.key:
-            self.exec_on_group(self.group, self.key)
-            self.group.clear()
-            self.key = key
-        self.group.append(row)
+    def on_row(self, row, ofs=b'\x00'):
+        key = tuple(self.slice(row, self.opts.complement))
+        self.groups.setdefault(key, []).append(row)
 
     def on_eof(self):
-        self.exec_on_group(self.group, self.key)
+        for key, group in self.groups.items():
+            if self.header is not None:
+                key = dict(zip(self.slice(self.header), key))
+                self.exec_on_all_rows(group, K=key)
         _Base.on_eof(self)

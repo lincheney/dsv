@@ -49,7 +49,9 @@ class string_like(bytes):
     def __radd__(self, other):
         if isinstance(other, str):
             other = string_like(other.encode('utf8'))
-        return string_like(other + self)
+        if isinstance(other, bytes):
+            return string_like(other + self)
+        raise TypeError(other)
 
     def __eq__(self, other):
         return string_like.wrapper_fn(self, other, _fn=bytes.__eq__)
@@ -159,16 +161,8 @@ class exec_(_Base):
             self.exec_per_row(row)
 
     def on_eof(self):
-        rows = self.rows
         if self.opts.slurp:
-            rows = self.exec_on_all_rows(rows)
-
-        if not self.have_printed_header and self.modifiable_header:
-            super().on_header(self.modifiable_header)
-        self.have_printed_header = True
-
-        for row in rows:
-            super().on_row(row)
+            self.exec_on_all_rows(self.rows)
         super().on_eof()
 
     @contextmanager
@@ -195,12 +189,16 @@ class exec_(_Base):
             raise
 
         if 'row' in vars:
-            if not self.have_printed_header and self.modifiable_header:
-                super().on_header(self.modifiable_header)
-            self.have_printed_header = True
+            header = {}
+            row = self.parse_row(vars['row'], header)
+            header = [to_bytes(k) for k in header]
 
-            row = [to_bytes(col) for col in vars['row']]
+            if not self.have_printed_header and header:
+                super().on_header([to_bytes(k) for k in header])
+                self.have_printed_header = True
+
             super().on_row(row)
+        return row
 
     def exec_on_all_rows(self, rows, **vars):
         vars['N'] = len(rows)
@@ -214,13 +212,22 @@ class exec_(_Base):
         rows = []
         header = {}
         for row in vars['rows']:
-            if isinstance(row, dict):
-                for k in row:
-                    header[k] = True
-                row = [row[k] for k in header]
-            rows.append([to_bytes(col) for col in row])
+            rows.append(self.parse_row(row, header))
 
-        if header:
-            self.modifiable_header = [to_bytes(k) for k in header]
+        if not self.have_printed_header and header:
+            super().on_header([to_bytes(k) for k in header])
+            self.have_printed_header = True
 
+        for row in rows:
+            super().on_row(row)
         return rows
+
+    def parse_row(self, row, header):
+        if isinstance(row, Row):
+            for k in row.__header__:
+                header[k] = True
+        elif isinstance(row, dict):
+            for k in row:
+                header[k] = True
+            row = [row[k] for k in header]
+        return [to_bytes(col) for col in row]
