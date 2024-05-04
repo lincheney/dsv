@@ -210,7 +210,7 @@ class exec_(_Base):
         vars['N'] = len(rows)
         vars['header'] = self.modifiable_header
         vars['rows'] = [Row(row, self.modifiable_header, self.header_map) for row in rows]
-        vars['columns'] = Columns(vars, self.modifiable_header, self.header_map)
+        vars['columns'] = Columns(vars.copy(), self.modifiable_header, self.header_map)
 
         with self.exec_wrapper():
             exec(self.code, globals=vars)
