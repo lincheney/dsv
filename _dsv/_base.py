@@ -5,15 +5,6 @@ import colorsys
 import subprocess
 from . import _utils
 
-def get_rgb(hue, sat, val):
-    red = 1 + sat * (1 - abs((hue + 180) % 360 - 180) / 60)
-    green = 1 + sat * (1 - abs((hue + 60) % 360 - 180) / 60)
-    blue = 1 + sat * (1 - abs((hue + 300) % 360 - 180) / 60)
-    red = val * max(1-sat, min(red, 1))
-    green = val * max(1-sat, min(green, 1))
-    blue = val * max(1-sat, min(blue, 1))
-    return int(red), int(green), int(blue)
-
 class _Base:
     SPACE = re.compile(br'\s+')
     PPRINT = re.compile(br'\s\s+')
