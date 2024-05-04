@@ -312,7 +312,7 @@ class _Base:
 
                 if b'\x1b[' in col:
                     # remove colour escapes
-                    col = re.sub(br'\x1b\[[0-9;:]*m', b'', col)
+                    col = re.sub(br'\x1b\[[0-9;:]*[mK]', b'', col)
 
                 widths.setdefault(j, {})[i] = len(col)
                 maxwidths[j] = max(maxwidths.get(j, 0), len(col))

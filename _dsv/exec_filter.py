@@ -11,7 +11,16 @@ class exec_filter(exec_):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
+    group.add_argument('--passthru', action='store_true')
 
     def __init__(self, opts):
-        opts.script = [f'if not ({opts.script}): del row']
+        if opts.passthru:
+            opts.script = [f'''
+if ({opts.script}):
+    row[0] = "\x1b[1m" + row[0] + "\x1b[K"
+else:
+    row[0] = "\x1b[2m" + row[0]
+            ''']
+        else:
+            opts.script = [f'if not ({opts.script}): del row']
         super().__init__(opts)
