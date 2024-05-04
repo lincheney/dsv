@@ -1,6 +1,7 @@
 import sys
 import argparse
 from contextlib import contextmanager
+from functools import partial
 from ._base import _Base
 
 def to_bytes(x):
@@ -77,11 +78,13 @@ class Column(mixin):
             return self.__rows_ref__['rows'][key][self.__index__]
 
     def __setitem__(self, key, value):
-        rows = self[key]
+        rows = self.__rows_ref__['rows'][key]
         if not isinstance(key, slice):
             rows = [rows]
 
-        if not isinstance(value, (list, tuple)):
+        if isinstance(value, Column):
+            value = value[:]
+        elif not isinstance(value, (list, tuple)):
             # broadcast
             value = [value] * len(rows)
 
@@ -96,12 +99,12 @@ class Columns(mixin):
         self.__header_map__ = {}
         self.__remake_header_map__()
 
-    def __getitem__(self, key):
-        key = self.__get_column__(key)
+    def __getitem__(self, key, new=False):
+        key = self.__get_column__(key, new)
         return Column(key, self.__rows_ref__, self.__header__, self.__header_map__)
 
     def __setitem__(self, key, value):
-        self[key][:] = value
+        self.__getitem__(key, new=True)[:] = value
 
     def __delitem__(self, key):
         key = self.__get_column__(key)
