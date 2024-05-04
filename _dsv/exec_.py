@@ -34,13 +34,25 @@ class mixin:
         self.__header_map__.update({k: i for i, k in enumerate(self.__header__)})
 
 class string_like(bytes):
-    def __eq__(self, other):
+    @staticmethod
+    def wrapper_fn(self, other, *args, _fn, **kwargs):
         if isinstance(other, str):
-            try:
-                return self.decode('utf8') == other
-            except UnicodeDecodeError:
-                return False
-        return super().__eq__(other)
+            other = other.encode('utf8')
+        return _fn(self, other, *args, **kwargs)
+
+    def __getattribute__(self, key):
+        return partial(string_like.wrapper_fn, self, _fn=getattr(bytes, key))
+
+    def __add__(self, other):
+        return string_like.wrapper_fn(self, other, _fn=bytes.__add__)
+
+    def __radd__(self, other):
+        if isinstance(other, str):
+            other = string_like(other.encode('utf8'))
+        return string_like(other + self)
+
+    def __eq__(self, other):
+        return string_like.wrapper_fn(self, other, _fn=bytes.__eq__)
 
 class Row(list, mixin):
     __slots__ = ('__header__', '__header_map__')
