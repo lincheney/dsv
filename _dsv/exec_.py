@@ -202,16 +202,25 @@ class exec_(_Base):
             row = [to_bytes(col) for col in vars['row']]
             super().on_row(row)
 
-    def exec_on_all_rows(self, rows):
-        vars = {
-            'N': len(rows),
-            'header': self.modifiable_header,
-        }
+    def exec_on_all_rows(self, rows, **vars):
+        vars['N'] = len(rows)
+        vars['header'] = self.modifiable_header
         vars['rows'] = [Row(row, self.modifiable_header, self.header_map) for row in rows]
         vars['columns'] = Columns(vars, self.modifiable_header, self.header_map)
 
         with self.exec_wrapper():
             exec(self.code, globals=vars)
 
-        rows = [[to_bytes(col) for col in row] for row in vars['rows']]
+        rows = []
+        header = {}
+        for row in vars['rows']:
+            if isinstance(row, dict):
+                for k in row:
+                    header[k] = True
+                row = [row[k] for k in header]
+            rows.append([to_bytes(col) for col in row])
+
+        if header:
+            self.modifiable_header = [to_bytes(k) for k in header]
+
         return rows
