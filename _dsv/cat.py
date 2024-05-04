@@ -17,18 +17,15 @@ class cat(_Base):
             self.on_row = self.on_row_with_number
             self.on_header = self.on_header_with_number
 
-    def on_row(self, *args, child, **kwargs):
-        if not self.opts.ofs:
-            self.opts.ofs = child.opts.ofs
-        return super().on_row(*args, **kwargs)
-
     def process_file(self, file):
-        list(super().process_file(file))
-
-        for file in self.opts.files:
-            child = _Base(self.original_opts)
-            child.on_row = partial(self.on_row, child=child)
-            yield from child.process_file(file)
+        for file in [file] + self.opts.files:
+            if self.opts.ofs:
+                child = _Base(self.original_opts)
+                child.on_row = self.on_row
+                yield from child.process_file(file)
+            else:
+                # if no ofs yet (file is empty), keep using this parser
+                list(super().process_file(file))
 
         super().on_eof()
 
