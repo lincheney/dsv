@@ -1,6 +1,7 @@
 import re
 import sys
 import shutil
+import colorsys
 import subprocess
 from . import _utils
 
@@ -232,7 +233,8 @@ class _Base:
         return row, False
 
     def get_rgb(self, i):
-        return b'\x1b[38;2;%i;%i;%im' % get_rgb(180 * i * (self.RGB_OFFSET + 1 / max(1, self.__numcols)), 0.3, 255)
+        r, g, b = colorsys.hsv_to_rgb(0.5 * i * (self.RGB_OFFSET + 1 / max(1, self.__numcols)) % 1, 0.3, 1)
+        return b'\x1b[38;2;%i;%i;%im' % (r*255, g*255, b*255)
 
     @staticmethod
     def needs_quoting(value, ofs, ors):
