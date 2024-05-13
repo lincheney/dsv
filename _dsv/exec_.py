@@ -56,6 +56,9 @@ class string_like(bytes):
     def __eq__(self, other):
         return string_like.wrapper_fn(self, other, _fn=bytes.__eq__)
 
+    def __hash__(self):
+        return super().__hash__()
+
 class Row(list, mixin):
     __slots__ = ('__header__', '__header_map__')
     def __init__(self, row, header, header_map):
@@ -84,6 +87,9 @@ class Column(mixin):
         self.__rows_ref__ = rows_ref
         self.__header__ = header
         self.__header_map__ = header_map
+
+    def __len__(self):
+        return len(self.__rows_ref__['rows'])
 
     def __getitem__(self, key):
         if isinstance(key, slice):
