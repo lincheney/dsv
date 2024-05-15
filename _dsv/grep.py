@@ -128,7 +128,8 @@ class grep(_ColumnSlicer):
 
             else:
                 start = 0
-                while start < len(col):
+                # always check at least once, in case both the column and pattern are empty
+                while True:
 
                     # find the pattern that matches first
                     best = None
@@ -165,6 +166,9 @@ class grep(_ColumnSlicer):
                     if self.grep_colour:
                         parts.append(self.RESET_COLOUR)
                     start = best[1]
+
+                    if start >= len(col):
+                        break
 
             if parts:
                 row[i] = b''.join(parts)
