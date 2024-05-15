@@ -86,7 +86,7 @@ class _Base:
             opts.ifs = self.guess_delimiter(line, b'\t')
             if opts.ifs == self.SPACE or opts.ifs == self.PPRINT:
                 opts.combine_trailing_columns = True
-                opts.no_quoting = True
+                # opts.no_quoting = True
 
         if not opts.ofs:
             if opts.ifs == self.SPACE or opts.ifs == self.PPRINT:
@@ -233,10 +233,11 @@ class _Base:
         return b'"' in value or ors in value or ofs in value
 
     def format_columns(self, row, ofs, ors, quote_output):
-        if quote_output and self.needs_quoting(b''.join(row), ofs, ors):
+        pretty_output = ofs == b' ' * len(ofs)
+        if quote_output and ((pretty_output and not all(row)) or self.needs_quoting(b''.join(row), ofs, ors)):
             row = row.copy()
             for i, col in enumerate(row):
-                if self.needs_quoting(col, ofs, ors):
+                if (pretty_output and not col) or self.needs_quoting(col, ofs, ors):
                     row[i] = b'"' + col.replace(b'"', b'""') + b'"'
         return row
 
