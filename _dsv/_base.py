@@ -211,7 +211,7 @@ class _Base:
                     # no quote; append the rest of the line, but this is incomplete
                     return row, True
 
-                start = self.next_ifs(line, i+1)[1] or line_len
+                start = self.next_ifs(line, i+1)[1] or line_len + 1
 
             else:
                 # not quoted
@@ -223,6 +223,10 @@ class _Base:
                 if not s:
                     break
                 start = max(e, s+1)
+
+        # add last trailing blank space
+        if start == len(line):
+            row.append(b'')
 
         return row, False
 
