@@ -5,6 +5,8 @@ import colorsys
 import subprocess
 from . import _utils
 
+UTF8_BOM = '\ufeff'.encode('utf8')
+
 class _Base:
     SPACE = re.compile(br'\s+')
     PPRINT = re.compile(br'\s\s+')
@@ -134,6 +136,7 @@ class _Base:
 
             if first:
                 first = False
+                line = line.removeprefix(UTF8_BOM)
                 self.determine_delimiters(line)
 
             row, incomplete = self.parse_line(line, row)
