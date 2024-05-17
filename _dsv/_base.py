@@ -240,12 +240,18 @@ class _Base:
         return b'"' in value or ors in value or ofs in value
 
     def format_columns(self, row, ofs, ors, quote_output):
-        pretty_output = ofs == b' ' * len(ofs)
-        if quote_output and ((pretty_output and not all(row)) or self.needs_quoting(b''.join(row), ofs, ors)):
-            row = row.copy()
-            for i, col in enumerate(row):
-                if (pretty_output and not col) or self.needs_quoting(col, ofs, ors):
-                    row[i] = b'"' + col.replace(b'"', b'""') + b'"'
+        if quote_output:
+            # if pretty output, don't allow >1 space, no matter how long the ofs is
+            pretty_output = ofs == b' ' * len(ofs)
+            if pretty_output:
+                ofs = b'  '
+                quote_output = not all(row)
+
+            if quote_output and self.needs_quoting(b''.join(row), ofs, ors):
+                row = row.copy()
+                for i, col in enumerate(row):
+                    if (pretty_output and not col) or self.needs_quoting(col, ofs, ors):
+                        row[i] = b'"' + col.replace(b'"', b'""') + b'"'
         return row
 
     def format_row(self, row, padding=None):
