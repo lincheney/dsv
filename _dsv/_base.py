@@ -241,13 +241,14 @@ class _Base:
 
     def format_columns(self, row, ofs, ors, quote_output):
         if quote_output:
+            must_quote = False
             # if pretty output, don't allow >1 space, no matter how long the ofs is
             pretty_output = ofs == b' ' * len(ofs)
             if pretty_output:
                 ofs = b'  '
-                quote_output = not all(row)
+                must_quote = not all(row)
 
-            if quote_output and self.needs_quoting(b''.join(row), ofs, ors):
+            if must_quote or self.needs_quoting(b''.join(row), ofs, ors):
                 row = row.copy()
                 for i, col in enumerate(row):
                     if (pretty_output and not col) or self.needs_quoting(col, ofs, ors):
