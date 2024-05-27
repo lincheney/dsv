@@ -10,7 +10,6 @@ class cat(_Base):
 
     def __init__(self, opts):
         self.original_opts = argparse.Namespace(**vars(opts))
-        self.original_opts.drop_header = True
 
         super().__init__(opts)
         if self.opts.number:
@@ -22,10 +21,14 @@ class cat(_Base):
             if self.opts.ofs:
                 child = _Base(self.original_opts)
                 child.on_row = self.on_row
-                yield from child.process_file(file)
+                child.on_header = self.on_header
+                got_row = yield from child.process_file(file)
             else:
                 # if no ofs yet (file is empty), keep using this parser
-                list(super().process_file(file))
+                got_row = yield from super().process_file(file)
+
+            if got_row:
+                self.original_opts.drop_header = True
 
         super().on_eof()
 

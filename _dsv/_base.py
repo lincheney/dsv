@@ -126,6 +126,7 @@ class _Base:
     def process_file(self, file, do_callbacks=True, do_yield=False):
         row = []
         first = True
+        got_row = False
         if self.opts.irs == b'\n':
             lines = file
         else:
@@ -141,6 +142,7 @@ class _Base:
 
             row, incomplete = self.parse_line(line, row)
             if not incomplete:
+                got_row = True
                 is_header = self.header is None and not self.opts.no_header
                 if is_header:
                     self.header = row
@@ -157,6 +159,8 @@ class _Base:
 
         if do_callbacks:
             self.on_eof()
+
+        return got_row
 
     def extract_column(self, line: bytes, start: int, line_len: int, quote=ord(b'"')):
         # quoted; find closing quote, skip over repeating ones
