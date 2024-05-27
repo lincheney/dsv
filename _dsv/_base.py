@@ -296,7 +296,16 @@ class _Base:
         if not self.opts.drop_header:
             self.out_header = header
             if self.opts.numbered_columns:
-                header = [b'%i %s' % x for x in enumerate(header, 1)]
+                numbered_header = []
+                # if the header starts with whitespace, use it up
+                for i, h in enumerate(header, 1):
+                    n = b'%i ' % i
+                    if h.startswith(b' ' * len(n)):
+                        h = h[len(n):]
+                    else:
+                        h = h.lstrip(b' ')
+                    numbered_header.append(n + h)
+                header = numbered_header
             if self.opts.colour and self.opts.ofs is not self.PRETTY_OUTPUT and header:
                 header = [b''.join((self.opts.header_colour, self.opts.header_bg_colour, h, self.RESET_COLOUR, self.opts.header_bg_colour)) for h in header]
                 header[-1] += self.RESET_COLOUR
