@@ -1,5 +1,6 @@
 import re
 import sys
+import math
 import shutil
 import colorsys
 import subprocess
@@ -13,7 +14,6 @@ class _Base:
     PRETTY_OUTPUT = object()
     PRETTY_OUTPUT_DELIM = b'  '
     RESET_COLOUR = b'\x1b[0m'
-    RGB_OFFSET = 0.8
 
     name = None
     parser = None
@@ -230,8 +230,8 @@ class _Base:
 
         return row, False
 
-    def get_rgb(self, i):
-        r, g, b = colorsys.hsv_to_rgb(0.5 * i * (self.RGB_OFFSET + 1 / max(1, self.__numcols)) % 1, 0.3, 1)
+    def get_rgb(self, i, step=0.56789):
+        r, g, b = colorsys.hsv_to_rgb(step * i % 1, 0.3, 1)
         return b'\x1b[38;2;%i;%i;%im' % (r*255, g*255, b*255)
 
     @staticmethod
