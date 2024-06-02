@@ -134,6 +134,8 @@ class _Base:
 
         for line in lines:
             line = line.removesuffix(self.opts.irs)
+            if self.opts.irs == b'\n':
+                line = line.removesuffix(b'\r')
 
             if first:
                 first = False
