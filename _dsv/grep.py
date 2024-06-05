@@ -193,13 +193,13 @@ class grep(_ColumnSlicer):
                 super().on_row(r)
             self.before.clear()
 
-        # print this line if matched or it is in after
-        if matched or (self.last_matched is not None and self.last_matched + self.after >= self.row_num):
+        # print this line if matched or it is in after or we are doing passthru
+        if matched or self.opts.passthru or (self.last_matched is not None and self.last_matched + self.after >= self.row_num):
             if self.opts.line_number:
                 row.insert(0, b'%i' % self.row_num)
             super().on_row(row)
 
-        elif not self.opts.passthru:
+        else:
             # this line might be a before
             self.before.append(row)
             return
