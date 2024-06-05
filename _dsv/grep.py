@@ -34,6 +34,7 @@ class grep(_ColumnSlicer):
     parser.add_argument('-A', '--after-context', type=int, default=None)
     parser.add_argument('-B', '--before-context', type=int, default=None)
     parser.add_argument('-C', '--context', type=int, default=None)
+    parser.add_argument('-c', '--count', action='store_true')
 
     MATCH_COLOUR = b'\x1b[1;31m'
 
@@ -75,10 +76,19 @@ class grep(_ColumnSlicer):
         self.last_matched = None
         self.row_num = 0
 
+        if self.opts.count:
+            # don't print any rows and disable the pretty formatting
+            self.print_row = lambda *a, **kwa: True
+            self.opts.ofs = ','
+
     def on_header(self, header):
         if self.opts.line_number:
             header = [b'n'] + header
         super().on_header(header)
+
+    def on_eof(self):
+        if self.opts.count:
+            print(self.matched_count)
 
     def do_replace(self, match: re.Match, text: bytes):
         if match:
