@@ -61,8 +61,10 @@ class pipe(_ColumnSlicer):
         super().on_header(header + self.opts.append_columns)
 
     def on_row(self, row):
+        ofs = b'\t' if self.opts.ofs is self.PRETTY_OUTPUT else self.opts.ofs
+
         input = self.slice(row, self.opts.complement)
-        input = self.opts.ofs.join(self.format_columns(input, self.opts.ofs, self.opts.ors, not self.opts.no_quote_input))
+        input = ofs.join(self.format_columns(input, ofs, self.opts.ors, not self.opts.no_quote_input))
 
         proc = self.start_process()
         proc.stdin.write(input + self.opts.ors)
