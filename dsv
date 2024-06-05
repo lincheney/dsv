@@ -1,4 +1,4 @@
-#!/usr/bin/env -S sh -c '$(which pypy3 || which python3) "$@"' -
+#!/usr/bin/env -S sh -c '$(which pypy3 2>/dev/null || echo python3) "$@"' -
 # vi: ft=python
 
 import argparse
