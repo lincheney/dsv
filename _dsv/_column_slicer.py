@@ -43,8 +43,9 @@ class _ColumnSlicer(_Base):
                         newrow[i] = None
                     else:
                         newrow.append(row[i])
-                elif not complement and allow_empty:
-                    # add blank if column does not exist
+                elif not complement and allow_empty and i is not None:
+                    # add blank if column exists but just not for this row
+                    # to make sure all columns align
                     newrow.append(b'')
 
         if complement:
