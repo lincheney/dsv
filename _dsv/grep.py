@@ -87,6 +87,7 @@ class grep(_ColumnSlicer):
         super().on_header(header)
 
     def on_eof(self):
+        super().on_eof()
         if self.opts.count:
             print(self.matched_count)
 
