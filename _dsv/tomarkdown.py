@@ -20,7 +20,7 @@ class tomarkdown(_Base):
         if not self.rows:
             return
         if self.opts.no_header:
-            self.rows.insert([b''] * len(self.rows[0]))
+            self.rows.insert(0, [b''] * len(self.rows[0]))
         padding = self.justify(self.rows)
 
         # rows are already quoted
