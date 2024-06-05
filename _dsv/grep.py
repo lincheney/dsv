@@ -65,7 +65,7 @@ class grep(_ColumnSlicer):
         # compile the patterns
         if not opts.fixed_strings:
             # but if it is just a fixed string leave as is
-            self.patterns = [p if p == re.escape(p) else re.compile(p, re.I if opts.case_sensitive else 0) for p in self.patterns]
+            self.patterns = [p if p == re.escape(p) else re.compile(p, 0 if opts.case_sensitive else re.IGNORECASE) for p in self.patterns]
 
         if self.opts.passthru:
             self.opts.before_context = 0
