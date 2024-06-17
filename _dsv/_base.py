@@ -23,8 +23,9 @@ class _Base:
     outfile_proc = None
     out_header = None
 
-    def __init__(self, opts):
+    def __init__(self, opts, outfile=None):
         self.opts = opts
+        self.outfile = outfile
 
         if not self.outfile:
             if not _utils.stdout_is_tty():

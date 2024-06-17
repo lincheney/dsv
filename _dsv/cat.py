@@ -19,7 +19,7 @@ class cat(_Base):
     def process_file(self, file):
         for file in [file] + self.opts.files:
             if self.opts.ofs:
-                child = _Base(self.original_opts)
+                child = _Base(self.original_opts, outfile=self.outfile)
                 child.on_row = self.on_row
                 child.on_header = self.on_header
                 got_row = yield from child.process_file(file)
