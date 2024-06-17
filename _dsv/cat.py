@@ -10,11 +10,7 @@ class cat(_Base):
 
     def __init__(self, opts):
         self.original_opts = argparse.Namespace(**vars(opts))
-
         super().__init__(opts)
-        if self.opts.number:
-            self.on_row = self.on_row_with_number
-            self.on_header = self.on_header_with_number
 
     def process_file(self, file):
         for file in [file] + self.opts.files:
@@ -32,13 +28,14 @@ class cat(_Base):
 
         super().on_eof()
 
-    def on_header_with_number(self, header):
+    def on_header(self, header):
         if self.opts.number:
             header = [b'n'] + header
         super().on_header(header)
+        # drop all future headers
         self.on_header = lambda h: 0
 
-    def on_row_with_number(self, row):
+    def on_row(self, row):
         if self.opts.number:
             row.insert(0, b'%i' % self.row_count)
         super().on_row(row)
