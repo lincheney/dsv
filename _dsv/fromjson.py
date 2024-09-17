@@ -15,7 +15,7 @@ class fromjson(_Base):
                     self.header = [x.encode('utf8') for x in row.keys()]
                     if self.on_header(self.header):
                         break
-                row = [x.encode('utf8') for x in row.values()]
+                row = [(x if isinstance(x, str) else json.dumps(x)).encode('utf8') for x in row.values()]
                 if self.on_row(row):
                     break
         self.on_eof()
