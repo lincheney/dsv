@@ -4,10 +4,10 @@ from ._base import _Base
 
 class fromjson(_Base):
     ''' convert from json '''
-    parser = argparse.ArgumentParser()
-    parser.set_defaults(ofs=_Base.PRETTY_OUTPUT)
 
     def process_file(self, file):
+        self.determine_delimiters(b'')
+
         for line in file:
             row = json.loads(line)
             if isinstance(row, dict):
