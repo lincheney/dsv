@@ -1,4 +1,5 @@
 import sys
+import math
 import argparse
 from contextlib import contextmanager
 from functools import partial
@@ -113,6 +114,19 @@ class Column(mixin):
         for row, val in zip(rows, value):
             row[self.__index__] = val
 
+    def __repr__(self):
+        return f'{type(self).__name__}{self[:]}'
+
+    def float(self):
+        result = []
+        for i in self:
+            try:
+                result.append(float(i))
+            except ValueError as e:
+                print(e, file=sys.stderr)
+                result.append(math.nan)
+        return result
+
 class Columns(mixin):
     __slots__ = ('__rows_ref__', '__header__', '__header_map__')
     def __init__(self, rows_ref, header, header_map):
@@ -120,6 +134,9 @@ class Columns(mixin):
         self.__header__ = header
         self.__header_map__ = {}
         self.__remake_header_map__()
+
+    def __repr__(self):
+        return f'{type(self).__name__}{self.__header__}'
 
     def __getitem__(self, key, new=False):
         key = self.__get_column__(key, new)
