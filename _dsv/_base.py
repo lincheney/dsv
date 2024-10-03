@@ -133,7 +133,11 @@ class _Base:
         else:
             lines = self.iter_lines(file, self.opts.irs)
 
-        for line in lines:
+        sentinel = object()
+
+        line = next(lines, sentinel)
+        while line is not sentinel:
+
             line = line.removesuffix(self.opts.irs)
             if self.opts.irs == b'\n':
                 line = line.removesuffix(b'\r')
@@ -144,7 +148,9 @@ class _Base:
                 self.determine_delimiters(line)
 
             row, incomplete = self.parse_line(line, row)
-            if not incomplete:
+            line = next(lines, sentinel)
+
+            if not incomplete or line is sentinel:
                 got_row = True
                 is_header = self.header is None and not self.opts.no_header
                 if is_header:
