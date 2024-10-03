@@ -1,6 +1,5 @@
 import re
 import sys
-import math
 import shutil
 import colorsys
 import subprocess
