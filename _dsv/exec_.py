@@ -41,6 +41,8 @@ class string_like(bytes):
         return _fn(self, other, *args, **kwargs)
 
     def __getattribute__(self, key):
+        if key == 'decode':
+            return super().decode
         return partial(string_like.wrapper_fn, self, _fn=getattr(bytes, key))
 
     def __add__(self, other):
