@@ -14,7 +14,7 @@ class tomarkdown(_Base):
 
     def on_row(self, row):
         row = [col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') for col in row]
-        self.rows.append(self.format_columns(row, self.ofs, self.opts.ors, quote_output=self.opts.quote_output) + [b''])
+        self.rows.append(self.format_columns(row, self.ofs, self.opts.ors, quote_output=False) + [b''])
 
     def on_eof(self):
         if not self.rows:
