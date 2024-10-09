@@ -19,5 +19,8 @@ class fromjson(_Base):
                 row = [(x if isinstance(x, str) else json.dumps(x)).encode('utf8') for x in row]
                 if self.on_row(row):
                     break
+            else:
+                print('not a json object:', row, file=sys.stderr)
+
         self.on_eof()
         return ()
