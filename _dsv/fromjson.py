@@ -10,6 +10,8 @@ class fromjson(_Base):
             utf8_buf = buffer.decode('utf8')
         except UnicodeDecodeError as e:
             utf8_buf = buffer[:e.start].decode('utf8')
+            if not utf8_buf:
+                raise
             remainder = buffer[e.start:]
         else:
             remainder = b''
@@ -17,30 +19,27 @@ class fromjson(_Base):
         value, index = json_decoder.raw_decode(utf8_buf)
         return value, utf8_buf[index:].lstrip().encode('utf8') + remainder
 
-    def read_json(self, file, bufsize=4096):
-        buffer = b''
-        while True:
-            data = file.read(bufsize)
+    def iter_json(self, file, chunk=8192):
+        rest = b''
+        while buf := file.read1(chunk):
+            rest += buf
+            try:
+                while rest:
+                    try:
+                        value, rest = self.parse_json(rest)
+                    except json.JSONDecodeError:
+                        break
+                    yield value
+            except UnicodeDecodeError:
+                break
 
-            if not data and not buffer:
-                # no more data
-                return
-
-            buffer += data
-            while True:
-                try:
-                    value, buffer = self.parse_json(buffer)
-                except json.JSONDecodeError:
-                    if not data:
-                        print('invalid json:', buffer, file=sys.stderr)
-                        return
-                    break
-                yield value
+        if rest:
+            print('invalid json:', rest, file=sys.stderr)
 
     def process_file(self, file):
         self.determine_delimiters(b'')
 
-        for row in self.read_json(file):
+        for row in self.iter_json(file):
             if not isinstance(row, dict):
                 print('not a json object:', row, file=sys.stderr)
                 continue
