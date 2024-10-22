@@ -1,5 +1,5 @@
 import argparse
-from .exec_ import exec_
+from .exec_ import exec_, to_bytes
 
 class exec_filter(exec_):
     ''' filter rows using python '''
@@ -13,13 +13,25 @@ class exec_filter(exec_):
     group.add_argument('--passthru', action='store_true')
 
     def __init__(self, opts):
-        if opts.passthru:
-            opts.script = [f'''
-if ({opts.script}):
-    {opts.var}[0] = "\x1b[1m" + {opts.var}[0] + "\x1b[K"
-else:
-    {opts.var}[0] = "\x1b[2m" + {opts.var}[0]
-            ''']
-        else:
-            opts.script = [f'if not ({opts.script}): del {opts.var}']
+        opts.script = [f'{opts.var} = (({opts.script}), {opts.var})']
         super().__init__(opts)
+
+    def handle_exec_result(self, vars):
+        success, result = vars[self.opts.var]
+
+        if self.opts.passthru:
+            headers = result.__headers__
+            result = [to_bytes(v) for v in result[0]]
+            if success:
+                result[0] = b'\x1b[1m' + result[0] + b'\x1b[K'
+            else:
+                result[0] = b'\x1b[2m' + result[0]
+            vars[self.opts.var] = dict(zip(headers, result))
+
+        else:
+            if success:
+                vars[self.opts.var] = result
+            else:
+                del vars[self.opts.var]
+
+        super().handle_exec_result(vars)

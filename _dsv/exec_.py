@@ -3,7 +3,6 @@ import math
 import argparse
 import itertools
 from contextlib import contextmanager
-from functools import partial
 from ._base import _Base
 
 def to_bytes(x):
@@ -184,9 +183,13 @@ class exec_(_Base):
     parent.add_argument('-q', '--quiet', action='store_true')
     parent.add_argument('--var', default='X')
     parent.add_argument('--no-auto-convert', action='store_true')
+    parent.set_defaults(
+        expr=False,
+    )
 
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+')
+    parser.add_argument('--expr', action='store_true')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
@@ -195,7 +198,13 @@ class exec_(_Base):
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
 
-        script = '\n'.join(opts.script)
+        if not opts.expr:
+            script = '\n'.join(opts.script)
+        elif len(opts.script) == 1:
+            script = f'{opts.var} = {opts.script[0]}'
+        else:
+            script = f'{opts.var} = [{", ".join(opts.script[0])}]'
+
         self.code = compile(script, '<string>', mode)
         self.count = 0
         self.have_printed_header = False
@@ -248,16 +257,23 @@ class exec_(_Base):
         if not self.opts.no_auto_convert:
             rows = [self.parse_value(row) for row in rows]
 
-        vars[self.opts.var] = table = Table(rows, self.header_map)
+        vars[self.opts.var] = Table(rows, self.header_map)
 
         with self.exec_wrapper(vars):
             exec(self.code, vars)
 
-        if vars.get(self.opts.var) is table:
-            headers = table.__headers__
-            rows = table.__data__
+        self.handle_exec_result(vars)
+
+    def handle_exec_result(self, vars):
+        if isinstance(vars.get(self.opts.var), Table):
+            headers = vars[self.opts.var].__headers__
+            rows = vars[self.opts.var].__data__
 
         elif self.opts.var in vars:
+            if self.opts.expr:
+                print(vars[self.opts.var])
+                return
+
             if isinstance(vars[self.opts.var], dict):
                 vars[self.opts.var] = [vars[self.opts.var]]
             if isinstance(vars[self.opts.var], list) and all(isinstance(row, dict) for row in vars[self.opts.var]):
