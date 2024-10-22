@@ -16,10 +16,10 @@ class exec_filter(exec_):
         if opts.passthru:
             opts.script = [f'''
 if ({opts.script}):
-    row[0] = "\x1b[1m" + row[0] + "\x1b[K"
+    {opts.var}[0] = "\x1b[1m" + {opts.var}[0] + "\x1b[K"
 else:
-    row[0] = "\x1b[2m" + row[0]
+    {opts.var}[0] = "\x1b[2m" + {opts.var}[0]
             ''']
         else:
-            opts.script = [f'if not ({opts.script}): del row']
+            opts.script = [f'if not ({opts.script}): del {opts.var}']
         super().__init__(opts)
