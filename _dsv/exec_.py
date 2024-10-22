@@ -10,30 +10,6 @@ def to_bytes(x):
         x = str(x).encode('utf8')
     return x
 
-class mixin:
-    def __setattr__(self, key, value):
-        if key in self.__slots__:
-            super().__setattr__(key, value)
-        else:
-            self[key] = value
-    def __delattr__(self, key):
-        del self[key]
-    def __getattr__(self, key):
-        return self[key]
-
-    def __get_column__(self, key, new=False):
-        if isinstance(key, str):
-            key = key.encode('utf8')
-            if new and key not in self.__header_map__:
-                self.__header_map__[key] = len(self.__header__)
-                self.__header__.append(key)
-            key = self.__header_map__[key]
-        return key
-
-    def __remake_header_map__(self):
-        self.__header_map__.clear()
-        self.__header_map__.update({k: i for i, k in enumerate(self.__header__)})
-
 class string_like(bytes):
     @staticmethod
     def wrapper_fn(self, other, *args, _fn, **kwargs):
@@ -62,96 +38,161 @@ class string_like(bytes):
     def __hash__(self):
         return super().__hash__()
 
-class Row(list, mixin):
-    __slots__ = ('__header__', '__header_map__')
-    def __init__(self, row, header, header_map):
-        super().__init__(row)
-        self.__header__ = header
-        self.__header_map__ = header_map
+class Table:
+    def __init__(self, data, headers):
+        super().__setattr__('__headers__', headers)
+        super().__setattr__('__data__', data)
 
-    def __getitem__(self, key):
-        key = self.__get_column__(key)
-        if isinstance(key, int) and key >= len(self):
-            return string_like()
-        return string_like(super().__getitem__(key))
-
-    def __setitem__(self, key, value):
-        key = self.__get_column__(key, True)
-        if isinstance(key, int) and key >= len(self):
-            self += [b''] * (key - len(self) - 1)
-            self.append(value)
-        else:
-            return super().__setitem__(key, value)
-
-class Column(mixin):
-    __slots__ = ('__index__', '__rows_ref__', '__header__', '__header_map__')
-    def __init__(self, index, rows_ref, header, header_map):
-        self.__index__ = index
-        self.__rows_ref__ = rows_ref
-        self.__header__ = header
-        self.__header_map__ = header_map
+    def __setattr__(self, key, value):
+        self[key] = value
+    def __delattr__(self, key):
+        del self[key]
+    def __getattr__(self, key):
+        return self[key]
 
     def __len__(self):
-        return len(self.__rows_ref__['rows'])
+        return len(self.__data__)
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
+
+    def __parse_key__(self, key, new=False):
+        if isinstance(key, tuple) and len(key) == 1:
+            key = key[0]
+
+        if isinstance(key, str):
+            key = (slice(None), key)
+        elif isinstance(key, (int, slice)):
+            key = (key, slice(None))
+        elif not isinstance(key, tuple) or len(key) != 2:
+            raise IndexError(key)
+
+        rows, cols = key
+
+        if isinstance(cols, str):
+            cols = cols.encode('utf8')
+            if new and cols not in self.__headers__:
+                self.__headers__[cols] = len(self.__headers__)
+            cols = self.__headers__[cols]
+
+        return rows, cols
 
     def __getitem__(self, key):
-        if isinstance(key, slice):
-            return [r[self.__index__] for r in self.__rows_ref__['rows'][key]]
-        else:
-            return self.__rows_ref__['rows'][key][self.__index__]
+        rows, cols = self.__parse_key__(key)
+
+        # get a specific cell
+        if isinstance(rows, int) and isinstance(cols, int):
+            if cols >= len(self.__data__):
+                return string_like()
+            return string_like(self.__data__[rows][cols])
+
+        return proxy(self, rows, cols)
 
     def __setitem__(self, key, value):
-        rows = self.__rows_ref__['rows'][key]
-        if not isinstance(key, slice):
-            rows = [rows]
+        rows, cols = self.__parse_key__(key, new=True)
 
-        if isinstance(value, Column):
-            value = value[:]
-        elif not isinstance(value, (list, tuple)):
-            # broadcast
-            value = [value] * len(rows)
+        if isinstance(rows, int):
+            rows = [self.__data__[rows]]
+        else:
+            rows = self.__data__[rows]
 
-        for row, val in zip(rows, value):
-            row[self.__index__] = val
+        # set a specific column
+        for row in rows:
+            if isinstance(cols, int) and cols >= len(row):
+                row += [b''] * (cols - len(row) - 1)
+                row.append(value)
+            else:
+                row[cols] = value
+
+    def __delitem__(self, key):
+        rows, cols = self.__parse_key__(key, new=True)
+        full_slice = slice(None, None, None)
+
+        if rows == full_slice:
+            # delete columns
+            for row in self.__data__:
+                del row[cols]
+            header = list(self.__headers__.keys())
+            del header[cols]
+            super().__setattr__('__headers__', {k: i for i, k in enumerate(header)})
+
+        elif cols == full_slice:
+            # delete rows
+            del self.__data__[rows]
+
+        else:
+            raise IndexError(key)
+
+class proxy:
+    def __init__(self, parent, rows, cols):
+        self.__parent__ = parent
+        self.__rows__ = rows
+        self.__cols__ = cols
+
+    def __is_row__(self):
+        return isinstance(self.__rows__, int)
+
+    def __is_column__(self):
+        return isinstance(self.__cols__, int)
+
+    def __inner__(self):
+        if self.__is_row__():
+            return self.__parent__.__data__[self.__rows__]
+
+        if self.__is_column__():
+            return [r[self.__cols__] for r in self.__parent__.__data__]
+
+        return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
 
     def __repr__(self):
-        return f'{type(self).__name__}{self[:]}'
+        return repr(self.__inner__())
+
+    def __parse_key__(self, key):
+        if isinstance(key, tuple):
+            if self.__is_column__() or self.__is_row__():
+                raise IndexError(key)
+            return (self.__rows__[key[0]], self.__cols__[key[1]])
+
+        if isinstance(key, str):
+            if self.__is_column__():
+                raise IndexError(key)
+            _, key = self.__parent__.__parse_key__(key)
+            return (self.__rows__, key)
+
+        if isinstance(key, (int, slice)):
+
+            if self.__is_row__():
+                return (self.__rows__, key)
+
+            if self.__is_column__():
+                return (key, self.__cols__)
+
+            # get a specific row(s)
+            return (self.__rows__[key], self.__cols__)
+
+        raise IndexError(key)
+
+    def __getitem__(self, key):
+        key = self.__parse_key__(key)
+        return self.__parent__[key]
+
+    def __setitem__(self, key, value):
+        key = self.__parse_key__(key)
+        self.__parent__[key] = value
 
     def float(self):
+        if not self.__is_row__() and not self.__is_column__():
+            raise TypeError(self)
+
         result = []
-        for i in self:
+        for i in self.__inner__():
             try:
                 result.append(float(i))
             except ValueError as e:
                 print(e, file=sys.stderr)
                 result.append(math.nan)
         return result
-
-class Columns(mixin):
-    __slots__ = ('__rows_ref__', '__header__', '__header_map__')
-    def __init__(self, rows_ref, header, header_map):
-        self.__rows_ref__ = rows_ref
-        self.__header__ = header
-        self.__header_map__ = {}
-        self.__remake_header_map__()
-
-    def __repr__(self):
-        return f'{type(self).__name__}{self.__header__}'
-
-    def __getitem__(self, key, new=False):
-        key = self.__get_column__(key, new)
-        return Column(key, self.__rows_ref__, self.__header__, self.__header_map__)
-
-    def __setitem__(self, key, value):
-        self.__getitem__(key, new=True)[:] = value
-
-    def __delitem__(self, key):
-        key = self.__get_column__(key)
-        # remove from header as well
-        for row in self.__rows_ref__['rows'] + [self.__header__]:
-            if key < len(row):
-                del row[key]
-        self.__remake_header_map__()
 
 class exec_(_Base):
     ''' run python on each row '''
@@ -162,7 +203,7 @@ class exec_(_Base):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
-    parser.add_argument('-s', '--slurp', action='store_true')
+    group.add_argument('-s', '--slurp', action='store_true')
 
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
@@ -191,68 +232,52 @@ class exec_(_Base):
         super().on_eof()
 
     @contextmanager
-    def exec_wrapper(self):
+    def exec_wrapper(self, vars):
         try:
             yield
         except Exception as e:
             if not self.opts.quiet:
                 print(f'{type(e).__name__}: {e}', file=sys.stderr)
+            if self.opts.remove_errors:
+                vars.pop('X', None)
+                return
             if not self.opts.ignore_errors and not self.opts.quiet:
                 raise
 
-    def exec_per_row(self, row):
-        self.count = self.count + 1
-        row = Row(row, self.modifiable_header, self.header_map)
-        vars = {'row': row, 'N': self.count, 'header': self.modifiable_header}
+    def do_exec(self, rows, **vars):
+        vars['X'] = table = Table(rows, self.header_map)
 
-        try:
-            with self.exec_wrapper():
-                exec(self.code, vars)
-        except:
-            if self.opts.remove_errors:
-                return
-            raise
+        with self.exec_wrapper(vars):
+            exec(self.code, vars)
 
-        if 'row' in vars:
-            header = {}
-            row = self.parse_row(vars['row'], header)
-            header = [to_bytes(k) for k in header]
+        if vars.get('X') is table:
+            headers = table.__headers__
+            rows = table.__data__
 
-            if not self.have_printed_header and header:
-                super().on_header([to_bytes(k) for k in header])
-                self.have_printed_header = True
+        elif 'X' in vars:
+            if isinstance(vars['X'], dict):
+                vars['X'] = [vars['X']]
+            if isinstance(vars['X'], list) and all(isinstance(row, dict) for row in vars['X']):
+                headers = {}
+                for row in vars['X']:
+                    headers.update(dict.fromkeys(row))
+                rows = [row.values() for row in vars['X']]
+            else:
+                raise ValueError(vars['X'])
 
-            super().on_row(row)
-        return row
+        else:
+            return
 
-    def exec_on_all_rows(self, rows, **vars):
-        vars['N'] = len(rows)
-        vars['header'] = self.modifiable_header
-        vars['rows'] = [Row(row, self.modifiable_header, self.header_map) for row in rows]
-        vars['columns'] = Columns(vars.copy(), self.modifiable_header, self.header_map)
-
-        with self.exec_wrapper():
-            exec(self.code, globals=vars)
-
-        rows = []
-        header = {}
-        for row in vars['rows']:
-            rows.append(self.parse_row(row, header))
-
-        if not self.have_printed_header and header:
-            super().on_header([to_bytes(k) for k in header])
+        if not self.have_printed_header and headers:
+            super().on_header([to_bytes(k) for k in headers])
             self.have_printed_header = True
 
         for row in rows:
-            super().on_row(row)
-        return rows
+            super().on_row([to_bytes(x) for x in row])
 
-    def parse_row(self, row, header):
-        if isinstance(row, Row):
-            for k in row.__header__:
-                header[k] = True
-        elif isinstance(row, dict):
-            for k in row:
-                header[k] = True
-            row = [row[k] for k in header]
-        return [to_bytes(col) for col in row]
+    def exec_per_row(self, row, **vars):
+        self.count = self.count + 1
+        self.do_exec([row], N=self.count, **vars)
+
+    def exec_on_all_rows(self, rows, **vars):
+        self.do_exec(rows, N=len(rows), **vars)
