@@ -10,34 +10,6 @@ def to_bytes(x):
         x = str(x).encode('utf8')
     return x
 
-class string_like(bytes):
-    @staticmethod
-    def wrapper_fn(self, other, *args, _fn, **kwargs):
-        if isinstance(other, str):
-            other = other.encode('utf8')
-        return _fn(self, other, *args, **kwargs)
-
-    def __getattribute__(self, key):
-        if key == 'decode':
-            return super().decode
-        return partial(string_like.wrapper_fn, self, _fn=getattr(bytes, key))
-
-    def __add__(self, other):
-        return string_like.wrapper_fn(self, other, _fn=bytes.__add__)
-
-    def __radd__(self, other):
-        if isinstance(other, str):
-            other = string_like(other.encode('utf8'))
-        if isinstance(other, bytes):
-            return string_like(other + self)
-        raise TypeError(other)
-
-    def __eq__(self, other):
-        return string_like.wrapper_fn(self, other, _fn=bytes.__eq__)
-
-    def __hash__(self):
-        return super().__hash__()
-
 class Table:
     def __init__(self, data, headers):
         super().__setattr__('__headers__', headers)
@@ -84,8 +56,8 @@ class Table:
         # get a specific cell
         if isinstance(rows, int) and isinstance(cols, int):
             if cols >= len(self.__data__):
-                return string_like()
-            return string_like(self.__data__[rows][cols])
+                return b''
+            return self.__data__[rows][cols]
 
         return proxy(self, rows, cols)
 
@@ -145,6 +117,9 @@ class proxy:
 
         return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
 
+    def __iter__(self):
+        return iter(self.__inner__())
+
     def __repr__(self):
         return repr(self.__inner__())
 
@@ -197,14 +172,18 @@ class proxy:
 class exec_(_Base):
     ''' run python on each row '''
     name = 'exec'
-    parser = argparse.ArgumentParser()
+
+    parent = argparse.ArgumentParser(add_help=False)
+    parent.add_argument('-q', '--quiet', action='store_true')
+    parent.add_argument('--var', default='X')
+    parent.add_argument('--no-auto-convert', action='store_true')
+
+    parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+')
-    parser.add_argument('-q', '--quiet', action='store_true')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
     group.add_argument('-s', '--slurp', action='store_true')
-    parser.add_argument('--var', default='X')
 
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
@@ -245,7 +224,23 @@ class exec_(_Base):
             if not self.opts.ignore_errors and not self.opts.quiet:
                 raise
 
+    def parse_value(self, value):
+        if isinstance(value, (list, tuple)):
+            return [self.parse_value(x) for x in value]
+
+        try:
+            try:
+                value = value.decode('utf8')
+            except UnicodeDecodeError:
+                return value
+            return float(value)
+        except ValueError:
+            return value
+
     def do_exec(self, rows, **vars):
+        if not self.opts.no_auto_convert:
+            rows = [self.parse_value(row) for row in rows]
+
         vars[self.opts.var] = table = Table(rows, self.header_map)
 
         with self.exec_wrapper(vars):

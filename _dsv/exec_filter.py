@@ -4,15 +4,13 @@ from .exec_ import exec_
 class exec_filter(exec_):
     ''' filter rows using python '''
     name = None
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(parents=[exec_.parent])
     parser.set_defaults(slurp=False)
     parser.add_argument('script')
-    parser.add_argument('-q', '--quiet', action='store_true')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
     group.add_argument('--passthru', action='store_true')
-    parser.add_argument('--var', default='X')
 
     def __init__(self, opts):
         if opts.passthru:
