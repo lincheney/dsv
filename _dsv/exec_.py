@@ -1,6 +1,7 @@
 import sys
 import math
 import argparse
+import itertools
 from contextlib import contextmanager
 from functools import partial
 from ._base import _Base
@@ -64,6 +65,12 @@ class Table:
     def __setitem__(self, key, value):
         rows, cols = self.__parse_key__(key, new=True)
 
+        if isinstance(value, list) and isinstance(cols, int) and isinstance(rows, slice):
+            # zip the value over the rows
+            value = iter(value)
+        else:
+            value = itertools.repeat(value)
+
         if isinstance(rows, int):
             rows = [self.__data__[rows]]
         else:
@@ -73,9 +80,9 @@ class Table:
         for row in rows:
             if isinstance(cols, int) and cols >= len(row):
                 row += [b''] * (cols - len(row) - 1)
-                row.append(value)
+                row.append(next(value))
             else:
-                row[cols] = value
+                row[cols] = next(value)
 
     def __delitem__(self, key):
         rows, cols = self.__parse_key__(key, new=True)
