@@ -204,6 +204,7 @@ class exec_(_Base):
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
     group.add_argument('-s', '--slurp', action='store_true')
+    parser.add_argument('--var', default='X')
 
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
@@ -239,31 +240,31 @@ class exec_(_Base):
             if not self.opts.quiet:
                 print(f'{type(e).__name__}: {e}', file=sys.stderr)
             if self.opts.remove_errors:
-                vars.pop('X', None)
+                vars.pop(self.opts.var, None)
                 return
             if not self.opts.ignore_errors and not self.opts.quiet:
                 raise
 
     def do_exec(self, rows, **vars):
-        vars['X'] = table = Table(rows, self.header_map)
+        vars[self.opts.var] = table = Table(rows, self.header_map)
 
         with self.exec_wrapper(vars):
             exec(self.code, vars)
 
-        if vars.get('X') is table:
+        if vars.get(self.opts.var) is table:
             headers = table.__headers__
             rows = table.__data__
 
-        elif 'X' in vars:
-            if isinstance(vars['X'], dict):
-                vars['X'] = [vars['X']]
-            if isinstance(vars['X'], list) and all(isinstance(row, dict) for row in vars['X']):
+        elif self.opts.var in vars:
+            if isinstance(vars[self.opts.var], dict):
+                vars[self.opts.var] = [vars[self.opts.var]]
+            if isinstance(vars[self.opts.var], list) and all(isinstance(row, dict) for row in vars[self.opts.var]):
                 headers = {}
-                for row in vars['X']:
+                for row in vars[self.opts.var]:
                     headers.update(dict.fromkeys(row))
-                rows = [row.values() for row in vars['X']]
+                rows = [row.values() for row in vars[self.opts.var]]
             else:
-                raise ValueError(vars['X'])
+                raise ValueError(vars[self.opts.var])
 
         else:
             return
