@@ -283,6 +283,10 @@ class exec_(_Base):
             headers = result.__headers__
             rows = result.__data__
 
+        elif isinstance(result, proxy) and not result.__is_row__() and not result.__is_column__():
+            headers = list(result.__parent__.__headers__)[result.__cols__]
+            rows = list(result)
+
         elif result is not None:
             if self.opts.expr:
                 print(result)
@@ -291,7 +295,7 @@ class exec_(_Base):
             if not isinstance(result, dict):
                 raise ValueError(result)
 
-            columns = [list(v) if isinstance(v, (list, tuple)) else [v] for v in result.values()]
+            columns = [list(v) if isinstance(v, (list, tuple, proxy)) else [v] for v in result.values()]
             max_rows = max(len(col) for col in columns)
             if any(col and max_rows % len(col) != 0 for col in columns):
                 raise ValueError(f'mismatched rows: {result}')
