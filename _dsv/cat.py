@@ -1,5 +1,4 @@
 import argparse
-from functools import partial
 from ._base import _Base
 
 class cat(_Base):
