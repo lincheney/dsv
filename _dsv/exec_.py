@@ -276,19 +276,22 @@ class exec_(_Base):
             rows = vars[self.opts.var].__data__
 
         elif self.opts.var in vars:
+            result = vars[self.opts.var]
+
             if self.opts.expr:
-                print(vars[self.opts.var])
+                print(result)
                 return
 
-            if isinstance(vars[self.opts.var], dict):
-                vars[self.opts.var] = [vars[self.opts.var]]
-            if isinstance(vars[self.opts.var], list) and all(isinstance(row, dict) for row in vars[self.opts.var]):
-                headers = {}
-                for row in vars[self.opts.var]:
-                    headers.update(dict.fromkeys(row))
-                rows = [row.values() for row in vars[self.opts.var]]
-            else:
-                raise ValueError(vars[self.opts.var])
+            if not isinstance(result, dict):
+                raise ValueError(result)
+
+            columns = [v if isinstance(v, (list, tuple)) else [v] for v in result.values()]
+            max_rows = max(len(col) for col in columns)
+            if any(col and max_rows % len(col) != 0 for col in columns):
+                raise ValueError(f'mismatched rows: {result}')
+            columns = [col * (max_rows // len(col)) if col else [b''] * max_rows for col in columns]
+            rows = list(zip(*columns))
+            headers = result.keys()
 
         else:
             return
