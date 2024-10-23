@@ -181,7 +181,9 @@ class vec(list):
 for fn in ('str', 'round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
     key = f'__{fn}__'
     def fn(self, *args, key=key):
-        return [getattr(x, key)(*args) for x in self]
+        if args and isinstance(args[0], (vec, proxy)):
+            return vec(getattr(x, key)(y) for x, y in zip(self, args[0]))
+        return vec(getattr(x, key)(*args) for x in self)
     setattr(proxy, key, fn)
     setattr(vec, key, fn)
 
