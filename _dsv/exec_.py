@@ -213,7 +213,7 @@ class exec_(_Base):
         if not opts.expr:
             script = '\n'.join(opts.script)
         elif len(opts.script) == 1:
-            script = f'{opts.var} = {opts.script[0]}'
+            script = f'{opts.var} = ({opts.script[0]})'
         else:
             script = f'{opts.var} = [{", ".join(opts.script[0])}]'
 
