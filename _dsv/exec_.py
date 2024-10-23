@@ -64,7 +64,7 @@ class Table:
     def __setitem__(self, key, value):
         rows, cols = self.__parse_key__(key, new=True)
 
-        if isinstance(value, list) and isinstance(cols, int) and isinstance(rows, slice):
+        if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, slice):
             # zip the value over the rows
             value = iter(value)
         else:
@@ -175,11 +175,15 @@ class proxy:
                 result.append(math.nan)
         return result
 
+class vec(list):
+    pass
+
 for fn in ('str', 'round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
     key = f'__{fn}__'
     def fn(self, *args, key=key):
         return [getattr(x, key)(*args) for x in self]
     setattr(proxy, key, fn)
+    setattr(vec, key, fn)
 
 class exec_(_Base):
     ''' run python on each row '''
@@ -271,13 +275,13 @@ class exec_(_Base):
         self.handle_exec_result(vars)
 
     def handle_exec_result(self, vars):
-        if isinstance(vars.get(self.opts.var), Table):
-            headers = vars[self.opts.var].__headers__
-            rows = vars[self.opts.var].__data__
+        result = vars.get(self.opts.var)
 
-        elif self.opts.var in vars:
-            result = vars[self.opts.var]
+        if isinstance(result, Table):
+            headers = result.__headers__
+            rows = result.__data__
 
+        elif result is not None:
             if self.opts.expr:
                 print(result)
                 return
@@ -285,7 +289,7 @@ class exec_(_Base):
             if not isinstance(result, dict):
                 raise ValueError(result)
 
-            columns = [v if isinstance(v, (list, tuple)) else [v] for v in result.values()]
+            columns = [list(v) if isinstance(v, (list, tuple)) else [v] for v in result.values()]
             max_rows = max(len(col) for col in columns)
             if any(col and max_rows % len(col) != 0 for col in columns):
                 raise ValueError(f'mismatched rows: {result}')

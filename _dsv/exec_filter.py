@@ -1,5 +1,5 @@
 import argparse
-from .exec_ import exec_, to_bytes
+from .exec_ import exec_, to_bytes, vec
 
 class exec_filter(exec_):
     ''' filter rows using python '''
@@ -18,6 +18,9 @@ class exec_filter(exec_):
 
     def handle_exec_result(self, vars):
         success, result = vars[self.opts.var]
+
+        if isinstance(success, vec):
+            success = success[0]
 
         if self.opts.passthru:
             headers = result.__headers__
