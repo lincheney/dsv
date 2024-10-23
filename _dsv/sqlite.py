@@ -8,6 +8,8 @@ class sqlite(_Base):
     parser.add_argument('sql', nargs='+')
     parser.add_argument('-t', '--table', default='input')
 
+    DELIM = b'\t'
+
     def __init__(self, opts):
         super().__init__(opts)
         self.proc = None
@@ -18,7 +20,7 @@ class sqlite(_Base):
         if not self.proc:
             self.proc = subprocess.Popen([
                 'sqlite3', '-csv', '-header',
-                '-separator', self.opts.ofs,
+                '-separator', self.DELIM,
                 '-cmd', f'.import /dev/stdin {self.opts.table}',
                 '-cmd', ' '.join(self.opts.sql),
             ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
@@ -28,10 +30,11 @@ class sqlite(_Base):
 
     def on_row(self, row):
         self.start_proc()
-        self.proc.stdin.write(self.opts.ofs.join(self.format_columns(row, self.opts.ofs, b'\n', True)) + b'\n')
+        self.proc.stdin.write(self.DELIM.join(self.format_columns(row, self.DELIM, b'\n', True)) + b'\n')
 
     def on_eof(self):
         if self.proc:
             self.proc.stdin.close()
+            self.opts.ifs = self.DELIM
             list(_Base(self.opts).process_file(self.proc.stdout))
             self.proc.wait()
