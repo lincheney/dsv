@@ -123,6 +123,9 @@ class proxy:
 
         return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
 
+    def __len__(self):
+        return len(self.__inner__())
+
     def __iter__(self):
         return iter(self.__inner__())
 
