@@ -32,12 +32,12 @@ class exec_groupby(_ColumnSlicer, exec_):
 
             if header is None:
                 if self.header is None:
-                    header = [str(x) for x in range(1, len(key)+1)]
+                    header = []
                 else:
                     header = self.header
                     if not self.opts.no_auto_convert:
                         header = self.parse_value(self.header)
-                header = self.slice(header)
+                header = self.slice(header, default=lambda i: str(i+1))
 
             if not self.opts.no_auto_convert:
                 key = self.parse_value(key)
