@@ -259,6 +259,9 @@ class exec_(_Base):
         if isinstance(value, (list, tuple)):
             return [self.parse_value(x) for x in value]
 
+        if value.isdigit():
+            return int(value)
+
         try:
             try:
                 value = value.decode('utf8')
