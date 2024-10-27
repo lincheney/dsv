@@ -55,7 +55,7 @@ class Table:
 
         # get a specific cell
         if isinstance(rows, int) and isinstance(cols, int):
-            if cols >= len(self.__data__):
+            if cols >= len(self.__data__[rows]):
                 return b''
             return self.__data__[rows][cols]
 
