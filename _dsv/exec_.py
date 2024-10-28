@@ -245,13 +245,13 @@ class exec_(_Base):
         self.have_printed_header = False
         self.rows = []
         self.modifiable_header = []
-        self.header_map = {}
+        self.header_numbers = {}
         if self.opts.remove_errors:
             self.opts.ignore_errors = True
 
     def on_header(self, header):
         self.modifiable_header = header.copy()
-        self.header_map = {k: i for i, k in enumerate(header)}
+        self.header_numbers = {k: i for i, k in enumerate(header)}
 
     def on_row(self, row):
         if self.opts.slurp:
@@ -296,7 +296,7 @@ class exec_(_Base):
         if not self.opts.bytes:
             rows = [self.parse_value(row) for row in rows]
 
-        vars[self.opts.var] = Table(rows, self.header_map)
+        vars[self.opts.var] = Table(rows, self.header_numbers)
 
         with self.exec_wrapper(vars):
             exec(self.code, vars)
