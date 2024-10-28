@@ -361,6 +361,7 @@ _shtab__dsv_join_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "*-1[join on these fields from stdin]:left_fields:"
   "*-2[join on these fields from FILE]:right_fields:"
+  "-e[replace missing input fields with STRING]:empty_value:"
   "*-a[also print unpairable lines from the given file]:show_all:(1 2)"
   "--join[type of join to perform]:join:(inner left right outer)"
   {-H,--header}"[does the input have a header row]:header:(no auto yes)"
