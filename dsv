@@ -1,0 +1,12 @@
+#!/usr/bin/env -S sh -c '$(which pypy3 2>/dev/null || echo python3) "$@"' -
+# vi: ft=python
+
+import os
+import sys
+
+if __name__ == '__main__':
+    try:
+        import _dsv.__main__
+        _dsv.__main__.main()
+    except BrokenPipeError:
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
