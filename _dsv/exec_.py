@@ -233,7 +233,7 @@ class exec_(_Base):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
-    group.add_argument('-s', '--slurp', action='store_true')
+    group.add_argument('-S', '--no-slurp', action='store_false', dest='slurp')
 
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
