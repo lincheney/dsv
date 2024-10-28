@@ -1,5 +1,6 @@
 import sys
 import argparse
+import linecache
 import itertools
 import operator
 from functools import partialmethod
@@ -241,6 +242,9 @@ class exec_(_Base):
             script = '\n'.join(opts.script)
 
         self.code = compile(script, '<string>', mode)
+        # load it into the linecache so it shows up in tracebacks
+        linecache.cache['<string>'] = (len(script), None, (script + '\n').splitlines(True), 'asd')
+
         self.count = 0
         self.have_printed_header = False
         self.rows = []
