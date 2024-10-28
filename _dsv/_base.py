@@ -150,7 +150,7 @@ class _Base:
                 got_row = True
 
                 if self.header is None and self.opts.header == 'auto':
-                    self.opts.header = 'yes' if all(re.fullmatch(rb'[_a-zA-Z]\w*', c) for c in row) else 'no'
+                    self.opts.header = 'yes' if all(re.match(rb'[_a-zA-Z]', c) for c in row) else 'no'
 
                 is_header = self.header is None and self.opts.header == 'yes'
 
