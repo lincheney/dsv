@@ -1,6 +1,3 @@
-#!/usr/bin/env -S sh -c '$(which pypy3 2>/dev/null || echo python3) "$@"' -
-# vi: ft=python
-
 import argparse
 import pkgutil
 import sys
@@ -38,7 +35,7 @@ def make_parser(**kwargs):
     group.add_argument('-Q', '--no-quoting', action='store_true')
     return parser
 
-def main():
+def make_main_parser(sub_mapping={}, help=None):
     parent = make_parser(add_help=False, argument_default=argparse.SUPPRESS)
     parser = make_parser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(handler=None, quote_output=True)
@@ -47,17 +44,21 @@ def main():
     handlers = [getattr(__import__('_dsv.'+name, fromlist=[name]), name) for name in modules]
 
     descr = '\n'.join(sorted(f'{h.get_name().ljust(20)}{h.__doc__ or ""}' for h in handlers))
-    subparsers = parser.add_subparsers(dest='command', help=argparse.SUPPRESS, title='Commands', description=descr)
-    sub_mapping = {}
+    subparsers = parser.add_subparsers(dest='command', title='Commands', help=help, description=descr)
 
     for h in sorted(handlers, key=lambda h: h.get_name()):
         parents = [parent]
         if h.parser:
             parents.insert(0, h.parser)
-        sub = subparsers.add_parser(h.get_name(), parents=parents, description=h.__doc__, add_help=False)
+        sub = subparsers.add_parser(h.get_name(), parents=parents, description=h.__doc__, add_help=False, help=None)
         sub.set_defaults(handler=h)
         sub_mapping[h] = sub
 
+    return parser
+
+def main():
+    sub_mapping = {}
+    parser = make_main_parser(sub_mapping, help=argparse.SUPPRESS)
     opts, extras = parser.parse_known_args()
 
     # print help if no input file
