@@ -37,6 +37,7 @@ _shtab__dsv_commands() {
 
 _shtab__dsv_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -62,6 +63,7 @@ _shtab__dsv_options=(
 _shtab__dsv_cat_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--number}"[number all output lines]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -88,6 +90,7 @@ _shtab__dsv_cat_options=(
 _shtab__dsv_cut_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-x,--complement}"[exclude, rather than include, field names]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -120,6 +123,7 @@ _shtab__dsv_exec_options=(
   {-I,--ignore-errors}"[do not abort on python errors]"
   {-E,--remove-errors}"[remove rows on python errors]"
   {-S,--no-slurp}"[run python on one row at a time]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -150,6 +154,7 @@ _shtab__dsv_exec_filter_options=(
   {-b,--bytes}"[do not auto convert data to int, str etc, treat everything as bytes]"
   {-I,--ignore-errors}"[do not abort on python errors]"
   "--passthru[print both matching and non-matching lines]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -182,6 +187,7 @@ _shtab__dsv_exec_groupby_options=(
   {-e,--expr}"[print the last python expression given]"
   {-I,--ignore-errors}"[do not abort on python errors]"
   {-E,--remove-errors}"[remove rows on python errors]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -210,6 +216,7 @@ _shtab__dsv_flip_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--lines}"[print the first NUM lines]:lines:"
   "--row-sep[show a separator between the rows]:row_sep:(never always auto)"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -235,6 +242,7 @@ _shtab__dsv_flip_options=(
 _shtab__dsv_fromjson_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-f,--flatten}"[flatten objects and arrays. (default seperator\: .)]:flatten:"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -258,6 +266,7 @@ _shtab__dsv_fromjson_options=(
 )
 
 _shtab__dsv_frommarkdown_options=(
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -298,6 +307,7 @@ _shtab__dsv_grep_options=(
   {-B,--before-context}"[show NUM lines before each match]:before_context:"
   {-C,--context}"[show NUM lines before and after each match]:context:"
   {-c,--count}"[print only the count of matching rows]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -324,6 +334,7 @@ _shtab__dsv_grep_options=(
 _shtab__dsv_head_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--lines}"[print the first NUM lines]:lines:"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -352,6 +363,7 @@ _shtab__dsv_join_options=(
   "*-2[join on these fields from FILE]:right_fields:"
   "*-a[also print unpairable lines from the given file]:show_all:(1 2)"
   "--join[type of join to perform]:join:(inner left right outer)"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -378,6 +390,7 @@ _shtab__dsv_join_options=(
 
 _shtab__dsv_page_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -402,6 +415,7 @@ _shtab__dsv_page_options=(
 
 _shtab__dsv_paste_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -431,6 +445,7 @@ _shtab__dsv_pipe_options=(
   {-x,--complement}"[exclude, rather than include, field names]"
   "*"{-a,--append-columns}"[append output as extra fields rather than replacing]:append_columns:"
   {-q,--no-quote-input}"[do not do CSV quoting on the input]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -456,6 +471,7 @@ _shtab__dsv_pipe_options=(
 
 _shtab__dsv_pretty_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -489,6 +505,7 @@ _shtab__dsv_replace_options=(
   {-m,--max-count}"[show only the first NUM matching rows]:max_count:"
   "*"{-k,--fields}"[search only on these fields]:fields:"
   "--complement[exclude, rather than include, field names]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -517,6 +534,7 @@ _shtab__dsv_set_header_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--only[drop all other header names]"
   "*"{-r,--rename}"[rename field A to B]:rename:"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -554,6 +572,7 @@ _shtab__dsv_sort_options=(
   "*"{-R,--random-sort}"[shuffle, but group identical keys]"
   "*"{-r,--reverse}"[sort in reverse order]"
   "*"{-V,--version-sort}"[natural sort of version numbers within text]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -580,6 +599,7 @@ _shtab__dsv_sort_options=(
 _shtab__dsv_sqlite_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-t,--table}"[name of sql table (default\: input)]:table:"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -604,6 +624,7 @@ _shtab__dsv_sqlite_options=(
 )
 
 _shtab__dsv_tac_options=(
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -629,6 +650,7 @@ _shtab__dsv_tac_options=(
 _shtab__dsv_tail_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--lines}"[print the first NUM lines]:lines:"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -653,6 +675,7 @@ _shtab__dsv_tail_options=(
 
 _shtab__dsv_tocsv_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -676,6 +699,8 @@ _shtab__dsv_tocsv_options=(
 )
 
 _shtab__dsv_tojson_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -699,6 +724,7 @@ _shtab__dsv_tojson_options=(
 )
 
 _shtab__dsv_tomarkdown_options=(
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -723,6 +749,7 @@ _shtab__dsv_tomarkdown_options=(
 
 _shtab__dsv_totsv_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
@@ -750,6 +777,7 @@ _shtab__dsv_uniq_options=(
   {-x,--complement}"[exclude, rather than include, field names]"
   {-c,--count}"[prefix lines by the number of occurrences]"
   {-C,--count-column}"[name of column to put the count in]:count_column:"
+  {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
   "--trailer[print a trailer]:trailer:(never always auto)"
