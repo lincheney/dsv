@@ -238,12 +238,11 @@ class exec_(_Base):
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
 
-        if not opts.expr:
-            script = '\n'.join(opts.script)
-        elif len(opts.script) == 1:
-            script = f'{opts.var} = ({opts.script[0]})'
+        if opts.expr:
+            script = '\n'.join(opts.script[:-1])
+            script += f'\n{opts.var} = ({opts.script[-1]})'
         else:
-            script = f'{opts.var} = [{", ".join(opts.script[0])}]'
+            script = '\n'.join(opts.script)
 
         self.code = compile(script, '<string>', mode)
         self.count = 0
