@@ -2,6 +2,8 @@ import sys
 import math
 import argparse
 import itertools
+import operator
+from functools import partialmethod
 from contextlib import contextmanager
 from ._base import _Base
 
@@ -9,6 +11,16 @@ def to_bytes(x):
     if not isinstance(x, bytes):
         x = str(x).encode('utf8')
     return x
+
+def getattr_to_vec(self, key):
+    value = [getattr(x, key) for x in self]
+    if all(map(callable, value)):
+        return (lambda *a, **kw: vec(fn(*a, **kw) for fn in value))
+    return vec(value)
+
+def apply_to_vec(self, *args, **kwargs):
+    key, *args = args
+    return getattr_to_vec(self, key)(*args, **kwargs)
 
 class Table:
     def __init__(self, data, headers):
@@ -132,6 +144,11 @@ class proxy:
     def __repr__(self):
         return repr(self.__inner__())
 
+    def __getattr__(self, key):
+        if self.__is_column__():
+            return getattr_to_vec(self, key)
+        return self[key]
+
     def __parse_key__(self, key):
         if isinstance(key, tuple):
             if self.__is_column__() or self.__is_row__():
@@ -165,12 +182,12 @@ class proxy:
         key = self.__parse_key__(key)
         self.__parent__[key] = value
 
-    def float(self):
+    def as_float(self):
         if not self.__is_row__() and not self.__is_column__():
             raise TypeError(self)
 
-        result = []
-        for i in self.__inner__():
+        result = vec()
+        for i in self:
             try:
                 result.append(float(i))
             except ValueError as e:
@@ -179,14 +196,30 @@ class proxy:
         return result
 
 class vec(list):
-    pass
+    def __getattr__(self, key):
+        return getattr_to_vec(self, key)
+
+    def as_float(self):
+        result = vec()
+        for i in self:
+            try:
+                result.append(float(i))
+            except ValueError as e:
+                print(e, file=sys.stderr)
+                result.append(math.nan)
+        return result
 
 for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
     key = f'__{fn}__'
-    def fn(self, *args, key=key):
-        if args and isinstance(args[0], (vec, proxy)):
-            return vec(getattr(x, key)(y) for x, y in zip(self, args[0]))
-        return vec(getattr(x, key)(*args) for x in self)
+
+    if op := getattr(operator, key, None):
+        def fn(self, *args, op=op):
+            if args and isinstance(args[0], (vec, proxy)):
+                return vec(op(x, y) for x, y in zip(self, args[0]))
+            return vec(op(x, *args) for x in self)
+    else:
+        fn = partialmethod(apply_to_vec, key)
+
     setattr(proxy, key, fn)
     setattr(vec, key, fn)
 
