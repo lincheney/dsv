@@ -35,11 +35,11 @@ class exec_groupby(_ColumnSlicer, exec_):
                     header = []
                 else:
                     header = self.header
-                    if not self.opts.no_auto_convert:
+                    if not self.opts.bytes:
                         header = self.parse_value(self.header)
                 header = self.slice(header, default=lambda i: str(i+1))
 
-            if not self.opts.no_auto_convert:
+            if not self.opts.bytes:
                 key = self.parse_value(key)
 
             key = dict(zip(header, key))
