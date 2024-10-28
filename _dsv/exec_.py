@@ -230,14 +230,14 @@ class exec_(_Base):
     parent = argparse.ArgumentParser(add_help=False)
     parent.add_argument('-q', '--quiet', action='store_true')
     parent.add_argument('--var', default='X')
-    parent.add_argument('--no-auto-convert', action='store_true')
+    parent.add_argument('-b', '--bytes', action='store_true')
     parent.set_defaults(
         expr=False,
     )
 
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+')
-    parser.add_argument('--expr', action='store_true')
+    parser.add_argument('-x', '--expr', action='store_true')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')
@@ -305,7 +305,7 @@ class exec_(_Base):
             return value
 
     def do_exec(self, rows, **vars):
-        if not self.opts.no_auto_convert:
+        if not self.opts.bytes:
             rows = [self.parse_value(row) for row in rows]
 
         vars[self.opts.var] = Table(rows, self.header_map)
