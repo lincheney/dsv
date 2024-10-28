@@ -1,9 +1,26 @@
 import sys
 import json
+import argparse
 from ._base import _Base
+
+def flatten(d, sep='.', parent_key=None):
+    data = {}
+    if isinstance(d, dict):
+        items = d.items()
+    elif isinstance(d, list):
+        items = enumerate(d)
+    else:
+        data[parent_key] = d
+        return data
+    for i, v in items:
+        key = f"{parent_key}{sep}{i}" if parent_key else str(i)
+        data.update(flatten(v, sep=sep, parent_key=key))
+    return data
 
 class fromjson(_Base):
     ''' convert from json '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-f', '--flatten', nargs='?', const='.', help='flatten objects and arrays. (default seperator: %(const)s)')
 
     def parse_json(self, buffer, json_decoder=json.JSONDecoder()):
         try:
@@ -44,6 +61,8 @@ class fromjson(_Base):
                 print('not a json object:', row, file=sys.stderr)
                 continue
 
+            if self.opts.flatten:
+                row = flatten(row, self.opts.flatten)
             if self.header is None:
                 self.header = [x.encode('utf8') for x in row.keys()]
                 if self.on_header(self.header):
