@@ -30,11 +30,8 @@ class _Base:
             if not _utils.stdout_is_tty():
                 self.outfile = sys.stdout.buffer
             elif self.opts.page:
-                cmd = ['less', '-RX']
-                if not opts.no_header:
-                    cmd.append('--header=1')
-                self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-                self.outfile = self.outfile_proc.stdin
+                # setup the pager later
+                pass
             else:
                 self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
                 self.outfile = self.outfile_proc.stdin
@@ -151,7 +148,12 @@ class _Base:
 
             if not incomplete or line is sentinel:
                 got_row = True
-                is_header = self.header is None and not self.opts.no_header
+
+                if self.header is None and self.opts.header == 'auto':
+                    self.opts.header = 'yes' if all(re.fullmatch(rb'[a-zA-Z]\w*', c) for c in row) else 'no'
+
+                is_header = self.header is None and self.opts.header == 'yes'
+
                 if is_header:
                     self.header = row
                     if do_callbacks and self.on_header(self.header):
@@ -297,7 +299,16 @@ class _Base:
 
         return ofs.join(row)
 
+    def start_pager(self):
+        if self.opts.page and self.outfile_proc is None:
+            cmd = ['less', '-RX']
+            if self.header is not None and not self.opts.drop_header:
+                cmd.append('--header=1')
+            self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+            self.outfile = self.outfile_proc.stdin
+
     def print_row(self, row, padding=None):
+        self.start_pager()
         self.outfile.write(self.format_row(row, padding) + self.opts.ors)
 
     def on_header(self, header, padding=None):

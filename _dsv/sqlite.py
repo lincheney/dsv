@@ -13,11 +13,14 @@ class sqlite(_Base):
     def __init__(self, opts):
         super().__init__(opts)
         self.proc = None
-        if self.opts.no_header:
-            self.opts.parser.error('Cannot use -N/--no-header with sqlite')
+        if self.opts.header == 'yes':
+            self.opts.parser.error('Cannot use sqlite without a header')
 
     def start_proc(self):
         if not self.proc:
+            if self.opts.header != 'yes':
+                self.opts.parser.error('Cannot use sqlite without a header')
+
             self.proc = subprocess.Popen([
                 'sqlite3', '-csv', '-header',
                 '-separator', self.DELIM,

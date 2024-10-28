@@ -12,9 +12,11 @@ class cat(_Base):
         super().__init__(opts)
 
     def process_file(self, file):
+        dummy = object()
+
         for file in [file] + self.opts.files:
             if self.opts.ofs:
-                child = _Base(self.original_opts, outfile=self.outfile)
+                child = _Base(self.original_opts, outfile=dummy)
                 child.on_row = self.on_row
                 child.on_header = self.on_header
                 got_row = yield from child.process_file(file)
@@ -28,6 +30,9 @@ class cat(_Base):
         super().on_eof()
 
     def on_header(self, header):
+        if self.header is None:
+            self.header = header
+
         if self.opts.number:
             header = [b'n'] + header
         super().on_header(header)

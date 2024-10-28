@@ -16,7 +16,7 @@ class flip(_Base):
 
     def on_header(self, header):
         header = [b'row', b'column']
-        if not self.opts.no_header:
+        if self.opts.header == 'yes':
             header.append(b'key')
         header.append(b'value')
         super().on_header(header)
@@ -35,7 +35,7 @@ class flip(_Base):
 
         for i, value in enumerate(row, 1):
             row = [b'%i' % self.count, b'%i' % i]
-            if not self.opts.no_header:
+            if self.opts.header == 'yes':
                 row.append(self.header[i-1] if i <= len(self.header) else b'')
             row.append(value)
             super().on_row(row)

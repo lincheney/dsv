@@ -1,3 +1,4 @@
+import subprocess
 from ._base import _Base
 
 class tomarkdown(_Base):
@@ -19,12 +20,14 @@ class tomarkdown(_Base):
     def on_eof(self):
         if not self.rows:
             return
-        if self.opts.no_header:
+        if self.opts.header == 'no':
             self.rows.insert(0, [b''] * len(self.rows[0]))
         padding = self.justify(self.rows)
 
         # rows are already quoted
         self.opts.quote_output = False
+
+        self.start_pager()
 
         self.opts.ofs = self.ofs
         for i, (p, row) in enumerate(zip(padding, self.rows)):
@@ -35,3 +38,9 @@ class tomarkdown(_Base):
                 self.outfile.write(b'| ')
                 row = [b'-'*len(col) for col in row]
                 super().on_row(row)
+
+    def start_pager(self):
+        if self.opts.page and self.outfile_proc is None:
+            cmd = ['less', '-RX', '--header=2']
+            self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+            self.outfile = self.outfile_proc.stdin

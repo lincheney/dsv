@@ -30,7 +30,7 @@ class pipe(_ColumnSlicer):
 
     def read_from_proc(self, proc):
         opts = argparse.Namespace(**vars(self.opts))
-        opts.no_header = True
+        opts.header = 'no'
         opts.ors = b'\n'
 
         for stdout, is_header in _Base(opts).process_file(proc.stdout, do_yield=True, do_callbacks=False):
