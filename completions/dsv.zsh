@@ -234,6 +234,8 @@ _shtab__dsv_flip_options=(
 )
 
 _shtab__dsv_fromjson_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-f,--flatten}"[flatten objects and arrays. (default seperator\: .)]:flatten:"
   {-N,--no-header}"[]"
   "--drop-header[]"
   "--trailer[]:trailer:(never always auto)"
