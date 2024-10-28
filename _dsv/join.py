@@ -2,6 +2,7 @@ import argparse
 import threading
 from queue import Queue
 from ._column_slicer import _ColumnSlicer
+from . import _utils
 
 class join(_ColumnSlicer):
     ''' join lines of two files on a common field '''
@@ -10,6 +11,7 @@ class join(_ColumnSlicer):
     parser.add_argument('fields', nargs='*', help='join on these fields from stdin and FILE')
     parser.add_argument('-1', dest='left_fields', action='append', help='join on these fields from stdin')
     parser.add_argument('-2', dest='right_fields', action='append', help='join on these fields from FILE')
+    parser.add_argument('-e', dest='empty_value', type=_utils.utf8_type, default='', metavar='STRING', help='replace missing input fields with STRING')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-a', dest='show_all', choices=('1', '2'), action='append', help='also print unpairable lines from the given file')
     group.add_argument('--join', choices=('inner', 'left', 'right', 'outer'), default='inner', help='type of join to perform')
@@ -97,12 +99,14 @@ class join(_ColumnSlicer):
                 super().on_row(list(key) + self.slice(left, True) + right)
 
             if not lefts and self.opts.join in ('right', 'outer'):
-                super().on_row(list(key) + [b''] * (len(self.header) - len(key)) + right)
+                padding = [self.opts.empty_value] * (len(self.header) - len(key))
+                super().on_row(list(key) + padding + right)
 
         if self.opts.join in ('left', 'outer'):
             for key in self.left.keys() - matched:
+                padding = [self.opts.empty_value] * (len(self.collector.header) - len(key))
                 for left in self.left[key]:
-                    super().on_row(list(key) + self.slice(left, True))
+                    super().on_row(list(key) + self.slice(left, True) + padding)
 
         super().on_eof()
         self.thread.join()
