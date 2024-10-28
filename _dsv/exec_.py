@@ -128,10 +128,10 @@ class proxy:
 
     def __inner__(self):
         if self.__is_row__():
-            return self.__parent__.__data__[self.__rows__]
+            return self.__parent__.__data__[self.__rows__][self.__cols__]
 
         if self.__is_column__():
-            return [r[self.__cols__] for r in self.__parent__.__data__]
+            return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
 
         return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
 
