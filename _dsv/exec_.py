@@ -267,13 +267,12 @@ class exec_(_Base):
         try:
             yield
         except Exception as e:
+            if not self.opts.ignore_errors and not self.opts.quiet:
+                raise
             if not self.opts.quiet:
                 print(f'{type(e).__name__}: {e}', file=sys.stderr)
             if self.opts.remove_errors:
                 vars.pop(self.opts.var, None)
-                return
-            if not self.opts.ignore_errors and not self.opts.quiet:
-                raise
 
     def parse_value(self, value):
         if isinstance(value, (list, tuple)):
