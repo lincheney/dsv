@@ -37,6 +37,7 @@ class join(_ColumnSlicer):
         self.left = {}
         self.right = Queue()
         self.header_lock = threading.Semaphore(1)
+        self.header_event = threading.Event()
 
         self.collector = _ColumnSlicer(right_opts)
         self.collector.on_header = self.on_collector_header
@@ -61,19 +62,25 @@ class join(_ColumnSlicer):
         self.got_header()
 
     def got_header(self):
+        no_join_fields = not self.opts.fields and not self.collector.opts.fields
+
         # the semaphore only has 1, so the second time it is called it will return false and go through
         if not self.header_lock.acquire(blocking=False):
-            if not self.opts.fields and not self.collector.opts.fields:
+            if no_join_fields:
                 self.opts.fields = self.collector.opts.fields = list(set(self.header) & set(self.collector.header))
             header = self.paste_row(self.header, self.collector.header)
             super().on_header(header)
+            self.header_event.set()
+
+        if no_join_fields:
+            # wait for the other thread to set the join fields
+            self.header_event.wait()
 
     def paste_row(self, left, right):
-        return left + self.collector.slice(right, True)
+        return self.slice(left) + self.slice(left, True) + self.collector.slice(right, True)
 
     def on_row(self, row, ofs=b'\x00'):
-        key = self.slice(row, False)
-        key = ofs.join(self.format_columns(key, ofs, ofs, True))
+        key = tuple(self.slice(row, False))
         self.left.setdefault(key, []).append(row)
 
     def on_eof(self, ofs=b'\x00'):
@@ -81,23 +88,21 @@ class join(_ColumnSlicer):
 
         # left has finished, now read off the right
         while (right := self.right.get()) is not None:
-            key = self.collector.slice(right, False)
-            key = ofs.join(self.format_columns(key, None, None, False))
+            key = tuple(self.collector.slice(right, False))
+            right = self.collector.slice(right, True)
             matched.add(key)
 
             lefts = self.left.get(key, ())
             for left in lefts:
-                row = self.paste_row(left, right)
-                super().on_row(row)
+                super().on_row(list(key) + self.slice(left, True) + right)
 
             if not lefts and self.opts.join in ('right', 'outer'):
-                row = self.paste_row([b''] * self.header, right)
-                super().on_row(row)
+                super().on_row(list(key) + [b''] * (len(self.header) - len(key)) + right)
 
         if self.opts.join in ('left', 'outer'):
             for key in self.left.keys() - matched:
                 for left in self.left[key]:
-                    super().on_row(left)
+                    super().on_row(list(key) + self.slice(left, True))
 
         super().on_eof()
         self.thread.join()
