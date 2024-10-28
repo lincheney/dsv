@@ -1,5 +1,7 @@
 import os
 import re
+import sys
+import math
 import argparse
 from functools import cache
 
@@ -23,3 +25,11 @@ def regex_arg_type(regex):
 
 def resolve_tty_auto(x: str):
     return x == 'always' or (x == 'auto' and stdout_is_tty())
+
+def as_float(value, warn=True):
+    try:
+        return float(value)
+    except ValueError as e:
+        if warn:
+            print(e, file=sys.stderr)
+        return math.nan

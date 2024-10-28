@@ -14,7 +14,7 @@ def make_parser(**kwargs):
     parser = argparse.ArgumentParser(allow_abbrev=False, **kwargs)
     group = parser.add_argument_group('common options')
     group.add_argument('-H', '--header', choices=('no', 'auto', 'yes'), nargs='?', const='yes', default='auto', help='does the input have a header row')
-    group.add_argument('-N', '--no-header', dest='header', const='yes', action='store_const', help='do not treat first row as header')
+    group.add_argument('-N', '--no-header', dest='header', const='no', action='store_const', help='do not treat first row as header')
     group.add_argument('--drop-header', action='store_true', help='do not print the header')
     group.add_argument('--trailer', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='print a trailer')
     group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='number the columns in the header')

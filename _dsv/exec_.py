@@ -1,11 +1,11 @@
 import sys
-import math
 import argparse
 import itertools
 import operator
 from functools import partialmethod
 from contextlib import contextmanager
 from ._base import _Base
+from . import _utils
 
 def to_bytes(x):
     if not isinstance(x, bytes):
@@ -194,11 +194,7 @@ class vec(list):
     def as_float(self):
         result = vec()
         for i in self:
-            try:
-                result.append(float(i))
-            except ValueError as e:
-                print(e, file=sys.stderr)
-                result.append(math.nan)
+            result.append(_utils.as_float(i))
         return result
 
 for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
