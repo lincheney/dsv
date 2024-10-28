@@ -229,7 +229,7 @@ class exec_(_Base):
 
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+')
-    parser.add_argument('-x', '--expr', action='store_true')
+    parser.add_argument('-e', '--expr', action='store_true')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true')
     group.add_argument('-E', '--remove-errors', action='store_true')

@@ -10,6 +10,7 @@ class exec_groupby(_ColumnSlicer, exec_):
     parser.set_defaults(slurp=True)
     parser.add_argument('fields', nargs='*')
     parser.add_argument('-x', '--complement', action='store_true')
+    parser.add_argument('-e', '--expr', action='store_true')
 
     parser.add_argument('script')
     group = parser.add_mutually_exclusive_group()
