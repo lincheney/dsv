@@ -534,6 +534,7 @@ _shtab__dsv_set_header_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--only[drop all other header names]"
   "*"{-r,--rename}"[rename field A to B]:rename:"
+  "--auto[automatically name the headers, only useful if there is no input header]:auto:"
   {-H,--header}"[does the input have a header row]:header:(no auto yes)"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
