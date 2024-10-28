@@ -250,6 +250,8 @@ class exec_(_Base):
         self.rows = []
         self.modifiable_header = []
         self.header_map = {}
+        if self.opts.remove_errors:
+            self.opts.ignore_errors = True
 
     def on_header(self, header):
         self.modifiable_header = header.copy()
