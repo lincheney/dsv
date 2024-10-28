@@ -3,7 +3,6 @@ import argparse
 import linecache
 import itertools
 import operator
-from functools import partialmethod
 from contextlib import contextmanager
 from ._base import _Base
 from . import _utils
@@ -18,10 +17,6 @@ def getattr_to_vec(self, key):
     if all(map(callable, value)):
         return (lambda *a, **kw: vec(fn(*a, **kw) for fn in value))
     return vec(value)
-
-def apply_to_vec(self, *args, **kwargs):
-    key, *args = args
-    return getattr_to_vec(self, key)(*args, **kwargs)
 
 class Table:
     def __init__(self, data, headers):
@@ -204,10 +199,11 @@ for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 
     if op := getattr(operator, key, None):
         def fn(self, *args, op=op):
             if args and isinstance(args[0], (vec, proxy)):
-                return vec(op(x, y) for x, y in zip(self, args[0]))
+                return vec(map(op, self, args[0]))
             return vec(op(x, *args) for x in self)
     else:
-        fn = partialmethod(apply_to_vec, key)
+        def fn(self, *args, key=key):
+            return getattr_to_vec(self, key)(*args)
 
     setattr(proxy, key, fn)
     setattr(vec, key, fn)
