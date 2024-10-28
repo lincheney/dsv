@@ -8,14 +8,14 @@ class exec_groupby(_ColumnSlicer, exec_):
     name = None
     parser = argparse.ArgumentParser(parents=[exec_.parent])
     parser.set_defaults(slurp=True)
-    parser.add_argument('fields', nargs='*')
-    parser.add_argument('-x', '--complement', action='store_true')
-    parser.add_argument('-e', '--expr', action='store_true')
+    parser.add_argument('fields', nargs='*', help='group based only no these fields')
+    parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
+    parser.add_argument('-e', '--expr', action='store_true', help='print the last python expression given')
 
-    parser.add_argument('script')
+    parser.add_argument('script', help='python statements to run')
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-I', '--ignore-errors', action='store_true')
-    group.add_argument('-E', '--remove-errors', action='store_true')
+    group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
+    group.add_argument('-E', '--remove-errors', action='store_true', help='remove rows on python errors')
 
     def __init__(self, opts):
         opts.script = [opts.script]

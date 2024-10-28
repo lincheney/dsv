@@ -5,10 +5,10 @@ from . import _utils
 class uniq(_ColumnSlicer):
     ''' omit repeated lines '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('fields', nargs='*')
-    parser.add_argument('-x', '--complement', action='store_true')
-    parser.add_argument('-c', '--count', action='store_true')
-    parser.add_argument('-C', '--count-column', type=_utils.utf8_type)
+    parser.add_argument('fields', nargs='*', help='check these only fields for uniqueness')
+    parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
+    parser.add_argument('-c', '--count', action='store_true', help='prefix lines by the number of occurrences')
+    parser.add_argument('-C', '--count-column', type=_utils.utf8_type, help='name of column to put the count in')
 
     def __init__(self, opts):
         super().__init__(opts)

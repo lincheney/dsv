@@ -6,7 +6,7 @@ from . import _utils
 class tail(_Base):
     ''' output the last lines '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--lines', type=_utils.regex_arg_type(r'\+?\d+'), default='10')
+    parser.add_argument('-n', '--lines', type=_utils.regex_arg_type(r'\+?\d+'), default='10', metavar='NUM', help='print the first NUM lines')
 
     def __init__(self, opts):
         super().__init__(opts)

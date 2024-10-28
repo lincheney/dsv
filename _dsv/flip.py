@@ -5,8 +5,8 @@ from . import _utils
 class flip(_Base):
     ''' prints each column on a separate line '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--lines', type=int)
-    parser.add_argument('--row-sep', choices=('never', 'always', 'auto'), default='auto')
+    parser.add_argument('-n', '--lines', type=int, metavar='NUM', help='print the first NUM lines')
+    parser.add_argument('--row-sep', choices=('never', 'always', 'auto'), default='auto', help='show a separator between the rows')
     parser.set_defaults(ofs=_Base.PRETTY_OUTPUT)
 
     def __init__(self, opts):

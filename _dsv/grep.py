@@ -8,15 +8,15 @@ class grep(_ColumnSlicer):
     ''' print lines that match patterns '''
 
     parent = argparse.ArgumentParser(add_help=False)
-    parent.add_argument('-e', '--regexp', dest='patterns', action='append')
-    parent.add_argument('-F', '--fixed-strings', action='store_true')
-    parent.add_argument('-w', '--word-regexp', action='store_true')
-    parent.add_argument('-x', '--field-regexp', action='store_true')
-    parent.add_argument('-v', '--invert-match', action='store_true')
-    parent.add_argument('-s', '--case-sensitive', action='store_true')
-    parent.add_argument('-m', '--max-count', type=int, default=float('inf'))
-    parent.add_argument('-k', '--fields', action='append', default=[])
-    parent.add_argument('--complement', action='store_true')
+    parent.add_argument('-e', '--regexp', dest='patterns', action='append', help='pattern to search for')
+    parent.add_argument('-F', '--fixed-strings', action='store_true', help='treat all patterns as literals instead of as regular expressions')
+    parent.add_argument('-w', '--word-regexp', action='store_true', help='select only those matches surrounded by word boundaries')
+    parent.add_argument('-x', '--field-regexp', action='store_true', help='select only those matches that exactly match the column')
+    parent.add_argument('-v', '--invert-match', action='store_true', help='select non-matching lines')
+    parent.add_argument('-s', '--case-sensitive', action='store_true', help='search case sensitively')
+    parent.add_argument('-m', '--max-count', type=int, default=float('inf'), metavar='NUM', help='show only the first NUM matching rows')
+    parent.add_argument('-k', '--fields', action='append', default=[], help='search only on these fields')
+    parent.add_argument('--complement', action='store_true', help='exclude, rather than include, field names')
     parent.set_defaults(
         replace=None,
         line_number=False,
@@ -28,14 +28,14 @@ class grep(_ColumnSlicer):
     )
 
     parser = argparse.ArgumentParser(parents=[parent])
-    parser.add_argument('patterns', nargs='*', action='extend')
-    parser.add_argument('--replace', type=_utils.utf8_type)
-    parser.add_argument('-n', '--line-number', action='store_true')
-    parser.add_argument('--passthru', action='store_true')
-    parser.add_argument('-A', '--after-context', type=int, default=None)
-    parser.add_argument('-B', '--before-context', type=int, default=None)
-    parser.add_argument('-C', '--context', type=int, default=None)
-    parser.add_argument('-c', '--count', action='store_true')
+    parser.add_argument('patterns', nargs='*', action='extend', help='pattern to search for')
+    parser.add_argument('--replace', type=_utils.utf8_type, help='replaces every match with the given text')
+    parser.add_argument('-n', '--line-number', action='store_true', help='show line numbers')
+    parser.add_argument('--passthru', action='store_true', help='print both matching and non-matching lines')
+    parser.add_argument('-A', '--after-context', type=int, default=None, metavar='NUM', help='show NUM lines after each match')
+    parser.add_argument('-B', '--before-context', type=int, default=None, metavar='NUM', help='show NUM lines before each match')
+    parser.add_argument('-C', '--context', type=int, default=None, metavar='NUM', help='show NUM lines before and after each match')
+    parser.add_argument('-c', '--count', action='store_true', help='print only the count of matching rows')
 
     MATCH_COLOUR = b'\x1b[1;31m'
 

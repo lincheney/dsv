@@ -5,8 +5,8 @@ from ._base import _Base
 class sqlite(_Base):
     ''' use sql on the data '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('sql', nargs='+')
-    parser.add_argument('-t', '--table', default='input')
+    parser.add_argument('sql', nargs='+', help='sql statements to run')
+    parser.add_argument('-t', '--table', default='input', help='name of sql table (default: %(default)s)')
 
     DELIM = b'\t'
 

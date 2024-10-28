@@ -5,7 +5,7 @@ from ._base import _Base
 class paste(_Base):
     ''' concatenate files by column '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*')
+    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*', help='other files to concatenate to stdin')
 
     empty_rows = None
 

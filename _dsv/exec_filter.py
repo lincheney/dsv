@@ -6,15 +6,16 @@ class exec_filter(exec_):
     name = None
     parser = argparse.ArgumentParser(parents=[exec_.parent])
     parser.set_defaults(slurp=False)
-    parser.add_argument('script')
+    parser.add_argument('script', help='python statements to run')
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-I', '--ignore-errors', action='store_true')
-    group.add_argument('-E', '--remove-errors', action='store_true')
-    group.add_argument('--passthru', action='store_true')
+    group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
+    group.add_argument('--passthru', action='store_true', help='print both matching and non-matching lines')
 
     def __init__(self, opts):
         opts.script = [f'{opts.var} = (({opts.script}), {opts.var})']
         super().__init__(opts)
+        if self.opts.ignore_errors:
+            self.opts.remove_errors = True
 
     def handle_exec_result(self, vars):
         success, result = vars[self.opts.var]

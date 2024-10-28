@@ -6,13 +6,13 @@ from ._column_slicer import _ColumnSlicer
 class join(_ColumnSlicer):
     ''' join lines of two files on a common field '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('file', type=argparse.FileType('rb'))
-    parser.add_argument('fields', nargs='*')
-    parser.add_argument('-1', dest='left_fields', action='append')
-    parser.add_argument('-2', dest='right_fields', action='append')
+    parser.add_argument('file', type=argparse.FileType('rb'), metavar='FILE', help='join stdin with FILE')
+    parser.add_argument('fields', nargs='*', help='join on these fields from stdin and FILE')
+    parser.add_argument('-1', dest='left_fields', action='append', help='join on these fields from stdin')
+    parser.add_argument('-2', dest='right_fields', action='append', help='join on these fields from FILE')
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-a', dest='show_all', choices=('1', '2'), action='append')
-    group.add_argument('--join', choices=('inner', 'left', 'right', 'outer'), default='inner')
+    group.add_argument('-a', dest='show_all', choices=('1', '2'), action='append', help='also print unpairable lines from the given file')
+    group.add_argument('--join', choices=('inner', 'left', 'right', 'outer'), default='inner', help='type of join to perform')
 
     def __init__(self, opts):
         opts.fields.extend(opts.extras)

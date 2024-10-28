@@ -4,8 +4,8 @@ from ._column_slicer import _ColumnSlicer
 class cut(_ColumnSlicer):
     ''' select columns '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('fields', nargs='+')
-    parser.add_argument('-x', '--complement', action='store_true')
+    parser.add_argument('fields', nargs='+', help='select only these fields')
+    parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
 
     header_map = None
     def on_header(self, header):

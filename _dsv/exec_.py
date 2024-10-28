@@ -220,20 +220,20 @@ class exec_(_Base):
     name = 'exec'
 
     parent = argparse.ArgumentParser(add_help=False)
-    parent.add_argument('-q', '--quiet', action='store_true')
-    parent.add_argument('--var', default='X')
-    parent.add_argument('-b', '--bytes', action='store_true')
+    parent.add_argument('-q', '--quiet', action='store_true', help='do not print errors')
+    parent.add_argument('--var', default='X', help='python variable to use to refer to the data (default: %(default)s)')
+    parent.add_argument('-b', '--bytes', action='store_true', help='do not auto convert data to int, str etc, treat everything as bytes')
     parent.set_defaults(
         expr=False,
     )
 
     parser = argparse.ArgumentParser(parents=[parent])
-    parser.add_argument('script', nargs='+')
-    parser.add_argument('-e', '--expr', action='store_true')
+    parser.add_argument('script', nargs='+', help='python statements to run')
+    parser.add_argument('-e', '--expr', action='store_true', help='print the last python expression given')
     group = parser.add_mutually_exclusive_group()
-    group.add_argument('-I', '--ignore-errors', action='store_true')
-    group.add_argument('-E', '--remove-errors', action='store_true')
-    group.add_argument('-S', '--no-slurp', action='store_false', dest='slurp')
+    group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
+    group.add_argument('-E', '--remove-errors', action='store_true', help='remove rows on python errors')
+    group.add_argument('-S', '--no-slurp', action='store_false', dest='slurp', help='run python on one row at a time')
 
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)

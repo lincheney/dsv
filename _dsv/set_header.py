@@ -5,9 +5,9 @@ from . import _utils
 class set_header(_Base):
     ''' sets the header labels '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('fields', nargs='*', type=_utils.utf8_type)
-    parser.add_argument('--only', action='store_true')
-    parser.add_argument('-r', '--rename', nargs=2, action='append', type=_utils.utf8_type)
+    parser.add_argument('fields', nargs='*', type=_utils.utf8_type, help='new header names')
+    parser.add_argument('--only', action='store_true', help='drop all other header names')
+    parser.add_argument('-r', '--rename', nargs=2, action='append', type=_utils.utf8_type, metavar=('A', 'B'), help='rename field A to B')
 
     set_header = False
 
