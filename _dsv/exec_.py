@@ -184,16 +184,8 @@ class proxy:
 
     def as_float(self):
         if not self.__is_row__() and not self.__is_column__():
-            raise TypeError(self)
-
-        result = vec()
-        for i in self:
-            try:
-                result.append(float(i))
-            except ValueError as e:
-                print(e, file=sys.stderr)
-                result.append(math.nan)
-        return result
+            return vec(vec(row).as_float() for row in self)
+        return vec(self).as_float()
 
 class vec(list):
     def __getattr__(self, key):
