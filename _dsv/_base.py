@@ -149,7 +149,7 @@ class _Base:
             if not incomplete or line is sentinel:
                 got_row = True
 
-                if self.header is None and self.opts.header == 'auto':
+                if self.header is None and self.opts.header is None:
                     self.opts.header = 'yes' if all(re.match(rb'[_a-zA-Z]', c) for c in row) else 'no'
 
                 is_header = self.header is None and self.opts.header == 'yes'

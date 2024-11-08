@@ -89,7 +89,7 @@ class Table:
         # set a specific column
         for row in rows:
             if isinstance(cols, int) and cols >= len(row):
-                row += [b''] * (cols - len(row) - 1)
+                row += [b''] * (cols - len(row))
                 row.append(next(value))
             else:
                 row[cols] = next(value)
