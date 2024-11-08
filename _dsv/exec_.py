@@ -192,7 +192,7 @@ class proxy:
         return vec(vec(row).map(fn) for row in self)
 
     def as_float(self):
-        return self.map(vec.as_float)
+        return self.map(_utils.as_float)
 
     def sum(self):
         return sum(self.__flat__())
@@ -205,10 +205,7 @@ class vec(list):
         return vec(map(fn, self))
 
     def as_float(self):
-        result = vec()
-        for i in self:
-            result.append(_utils.as_float(i))
-        return result
+        return self.map(_utils.as_float)
 
     def sum(self):
         return sum(self)
