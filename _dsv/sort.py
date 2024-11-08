@@ -6,7 +6,7 @@ from ._column_slicer import _ColumnSlicer
 class sort(_ColumnSlicer):
     ''' sort the rows '''
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument('fields', nargs='*', help='sort based only no these fields')
+    parser.add_argument('fields', nargs='*', help='sort based only on these fields')
     parser.add_argument('--help', action='help', help='show this help message and exit')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
     parser.add_argument('-b', '--ignore-leading-blanks', action='append_const', dest='sort_flags', const='-b', help='ignore leading blanks')

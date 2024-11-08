@@ -8,7 +8,6 @@ class exec_groupby(_ColumnSlicer, exec_):
     name = None
     parser = argparse.ArgumentParser(parents=[exec_.parent])
     parser.set_defaults(slurp=True)
-    parser.add_argument('fields', nargs='*', help='group based only no these fields')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
     parser.add_argument('-e', '--expr', action='store_true', help='evaluate the python expression given and output in a new table')
     parser.add_argument('fields', nargs='*', help='group based only on these fields')
