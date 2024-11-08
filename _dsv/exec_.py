@@ -216,9 +216,6 @@ class exec_(_Base):
     parent.add_argument('-q', '--quiet', action='store_true', help='do not print errors')
     parent.add_argument('--var', default='X', help='python variable to use to refer to the data (default: %(default)s)')
     parent.add_argument('-b', '--bytes', action='store_true', help='do not auto convert data to int, str etc, treat everything as bytes')
-    parent.set_defaults(
-        expr=False,
-    )
 
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+', help='python statements to run')
@@ -232,10 +229,8 @@ class exec_(_Base):
         super().__init__(opts)
 
         if opts.expr:
-            script = '\n'.join(opts.script[:-1])
-            script += f'\n{opts.var} = ({opts.script[-1]})'
-        else:
-            script = '\n'.join(opts.script)
+            opts.script[-1] = f'{opts.var} = ({opts.script[-1]})'
+        script = '\n'.join(opts.script)
 
         self.code = compile(script, '<string>', mode)
         # load it into the linecache so it shows up in tracebacks
@@ -303,42 +298,46 @@ class exec_(_Base):
 
         self.handle_exec_result(vars)
 
-    def handle_exec_result(self, vars):
-        result = vars.get(self.opts.var)
+    def convert_to_table(self, value):
+        if isinstance(value, Table):
+            return value
 
-        if isinstance(result, Table):
-            headers = result.__headers__
-            rows = result.__data__
+        elif isinstance(value, proxy) and not value.__is_row__() and not value.__is_column__():
+            data = list(value)
+            headers = list(value.__parent__.__headers__)[value.__cols__]
+            return Table(data, headers)
 
-        elif isinstance(result, proxy) and not result.__is_row__() and not result.__is_column__():
-            headers = list(result.__parent__.__headers__)[result.__cols__]
-            rows = list(result)
-
-        elif result is not None:
-            if self.opts.expr:
-                print(result)
-                return
-
-            if not isinstance(result, dict):
-                raise ValueError(result)
-
-            columns = [list(v) if isinstance(v, (list, tuple, proxy)) else [v] for v in result.values()]
+        if isinstance(value, dict):
+            columns = [list(v) if isinstance(v, (list, tuple, proxy)) else [v] for v in value.values()]
             max_rows = max(len(col) for col in columns)
             if any(col and max_rows % len(col) != 0 for col in columns):
-                raise ValueError(f'mismatched rows: {result}')
+                raise ValueError(f'mismatched rows: {value}')
             columns = [col * (max_rows // len(col)) if col else [b''] * max_rows for col in columns]
-            rows = list(zip(*columns))
-            headers = result.keys()
+            data = list(zip(*columns))
+            headers = value.keys()
+            return Table(data, headers)
 
-        else:
+    def handle_exec_result(self, vars):
+        result = vars.get(self.opts.var)
+        table = self.convert_to_table(result)
+
+        if table is not None:
+            headers = table.__headers__
+            rows = table.__data__
+
+            if not self.have_printed_header and headers:
+                super().on_header([to_bytes(k) for k in headers])
+                self.have_printed_header = True
+
+            for row in rows:
+                super().on_row([to_bytes(x) for x in row])
+
+        elif result is None:
             return
-
-        if not self.have_printed_header and headers:
-            super().on_header([to_bytes(k) for k in headers])
-            self.have_printed_header = True
-
-        for row in rows:
-            super().on_row([to_bytes(x) for x in row])
+        elif self.opts.expr:
+            print(result)
+        else:
+            raise ValueError(result)
 
     def exec_per_row(self, row, **vars):
         self.count = self.count + 1

@@ -10,15 +10,16 @@ class exec_groupby(_ColumnSlicer, exec_):
     parser.set_defaults(slurp=True)
     parser.add_argument('fields', nargs='*', help='group based only no these fields')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
-    parser.add_argument('-e', '--expr', action='store_true', help='print the last python expression given')
-
+    parser.add_argument('-e', '--expr', action='store_true', help='evaluate the python expression given and output in a new table')
+    parser.add_argument('fields', nargs='*', help='group based only on these fields')
     parser.add_argument('script', help='python statements to run')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
     group.add_argument('-E', '--remove-errors', action='store_true', help='remove rows on python errors')
 
     def __init__(self, opts):
-        opts.script = [opts.script]
+        self.script = opts.script
+        opts.script = [self.script]
         super().__init__(opts)
         self.groups = {}
 
@@ -43,6 +44,15 @@ class exec_groupby(_ColumnSlicer, exec_):
             if not self.opts.bytes:
                 key = self.parse_value(key)
 
-            key = dict(zip(header, key))
-            self.exec_on_all_rows(group, K=key)
+            self.current_key = dict(zip(header, key))
+            self.exec_on_all_rows(group, K=self.current_key)
         _Base.on_eof(self)
+
+    def handle_exec_result(self, vars):
+        if self.opts.expr:
+            result = vars.get(self.opts.var)
+            if not isinstance(result, dict):
+                result = {self.script: result}
+            vars[self.opts.var] = {**self.current_key, **result}
+
+        return super().handle_exec_result(vars)
