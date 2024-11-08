@@ -3,6 +3,9 @@ import argparse
 import linecache
 import itertools
 import operator
+from functools import partial
+import math
+import statistics
 from contextlib import contextmanager
 from ._base import _Base
 from . import _utils
@@ -178,20 +181,37 @@ class proxy:
         key = self.__parse_key__(key)
         self.__parent__[key] = value
 
+    def __flat__(self):
+        if self.__is_row__() or self.__is_column__():
+            return self
+        return itertools.chain.from_iterable(self)
+
+    def map(self, fn):
+        if self.__is_row__() or self.__is_column__():
+            return vec(self).map(fn)
+        return vec(vec(row).map(fn) for row in self)
+
     def as_float(self):
-        if not self.__is_row__() and not self.__is_column__():
-            return vec(vec(row).as_float() for row in self)
-        return vec(self).as_float()
+        return self.map(vec.as_float)
+
+    def sum(self):
+        return sum(self.__flat__())
 
 class vec(list):
     def __getattr__(self, key):
         return getattr_to_vec(self, key)
+
+    def map(self, fn):
+        return vec(map(fn, self))
 
     def as_float(self):
         result = vec()
         for i in self:
             result.append(_utils.as_float(i))
         return result
+
+    def sum(self):
+        return sum(self)
 
 for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
     key = f'__{fn}__'
@@ -207,6 +227,23 @@ for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 
 
     setattr(proxy, key, fn)
     setattr(vec, key, fn)
+
+for key in ('mean', 'fmean', 'geometric_mean', 'harmonic_mean', 'median', 'median_low', 'median_high', 'median_grouped', 'mode', 'multimode', 'quantiles', 'pstdev', 'pvariance', 'stdev', 'variance'):
+
+    def fn(self, *args, _fn=getattr(statistics, key), **kwargs):
+        return _fn(self.__flat__(), *args, **kwargs)
+
+    setattr(proxy, key, fn)
+    setattr(vec, key, getattr(statistics, key))
+
+for key in ('ceil', 'fabs', 'floor', 'isfinite', 'isinf', 'isnan', 'isqrt', 'prod', 'trunc', 'exp', 'log', 'log2', 'log10', 'sqrt'):
+
+    def fn(self, *args, _fn=getattr(math, key), **kwargs):
+        return self.map(partial(_fn, *args, **kwargs))
+
+    setattr(proxy, key, fn)
+    setattr(vec, key, fn)
+
 
 class exec_(_Base):
     ''' run python on each row '''
