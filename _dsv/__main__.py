@@ -17,12 +17,12 @@ def make_parser(**kwargs):
     header_group.add_argument('-H', '--header', const='yes', action='store_const', help='treat first row as a header')
     header_group.add_argument('-N', '--no-header', dest='header', const='no', action='store_const', help='do not treat first row as header')
     group.add_argument('--drop-header', action='store_true', help='do not print the header')
-    group.add_argument('--trailer', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='print a trailer')
-    group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='number the columns in the header')
+    group.add_argument('--trailer', choices=('never', 'always', 'auto'), nargs='?', help='print a trailer')
+    group.add_argument('--numbered-columns', choices=('never', 'always', 'auto'), nargs='?', help='number the columns in the header')
     group.add_argument('-d', '--ifs', type=interpret_c_escapes, help='input field separator')
     group.add_argument('--plain-ifs', action='store_true', help='treat input field separator as a literal not a regex')
     group.add_argument('-D', '--ofs', type=interpret_c_escapes, help='output field separator')
-    group.add_argument('--irs', type=interpret_c_escapes, default=b'\n', help='input row separator')
+    group.add_argument('--irs', type=interpret_c_escapes, help='input row separator')
     group.add_argument('--ors', type=interpret_c_escapes, help='output row separator')
     group.add_argument('--csv', dest='ifs', action='store_const', const=b',', help='treat input as csv')
     group.add_argument('--tsv', dest='ifs', action='store_const', const=b'\t', help='treat input as tsv')
@@ -30,7 +30,7 @@ def make_parser(**kwargs):
     group.add_argument('--combine-trailing-columns', action='store_true', help='if a row has more columns than the header, combine the last ones into one, useful with --ssv')
     group.add_argument('-P', '--pretty', dest='ofs', action='store_const', const=_Base.PRETTY_OUTPUT, help='prettified output')
     group.add_argument('--page', action='store_true', help='show output in a pager (less)')
-    group.add_argument('--colour', '--color', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='enable colour')
+    group.add_argument('--colour', '--color', choices=('never', 'always', 'auto'), nargs='?', help='enable colour')
     group.add_argument('--header-colour', type=_utils.utf8_type, default='\x1b[1;4m', help='ansi escape code for the header')
     group.add_argument('--header-bg-colour', type=_utils.utf8_type, default='\x1b[48;5;237m', help='ansi escape code for the header background')
     group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='enable rainbow columns')
@@ -71,12 +71,15 @@ def main():
     opts.extras = extras
     opts.parser = parser
     opts.handler = opts.handler or _Base
+    opts.irs = opts.irs or b'\n'
     opts.ors = opts.ors or opts.irs
 
-    opts.trailer = opts.trailer or 'always'
-    opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'always')
-    opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'always')
-    opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'always')
+    opts.trailer = opts.trailer or 'auto'
+    opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
+    opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'auto')
+    opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'auto')
+    opts.header_colour = opts.header_colour or '\x1b[1;4m'
+    opts.header_bg_colour = opts.header_bg_colour or '\x1b[48;5;237m'
 
     handler = opts.handler(opts)
     try:
