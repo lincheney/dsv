@@ -48,7 +48,7 @@ class exec_groupby(_ColumnSlicer, exec_):
         _Base.on_eof(self)
 
     def handle_exec_result(self, vars):
-        if self.opts.expr:
+        if self.opts.expr and self.opts.var in vars:
             result = vars.get(self.opts.var)
             if not isinstance(result, dict):
                 result = {self.script: result}

@@ -277,10 +277,10 @@ class exec_(_Base):
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+', help='python statements to run')
     parser.add_argument('-e', '--expr', action='store_true', help='print the last python expression given')
+    parser.add_argument('-S', '--no-slurp', action='store_false', dest='slurp', help='run python on one row at a time')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
     group.add_argument('-E', '--remove-errors', action='store_true', help='remove rows on python errors')
-    group.add_argument('-S', '--no-slurp', action='store_false', dest='slurp', help='run python on one row at a time')
 
     def __init__(self, opts, mode='exec'):
         super().__init__(opts)
@@ -325,7 +325,7 @@ class exec_(_Base):
                 raise
             if not self.opts.quiet:
                 print(f'{type(e).__name__}: {e}', file=sys.stderr)
-            if self.opts.remove_errors:
+            if self.opts.remove_errors or (self.opts.ignore_errors and self.opts.expr):
                 vars.pop(self.opts.var, None)
 
     def parse_value(self, value):
