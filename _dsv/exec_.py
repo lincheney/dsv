@@ -134,9 +134,9 @@ class Table:
 
 class proxy:
     def __init__(self, parent, rows, cols):
-        self.__parent__ = parent
-        self.__rows__ = rows
-        self.__cols__ = cols
+        super().__setattr__('__parent__', parent)
+        super().__setattr__('__rows__', rows)
+        super().__setattr__('__cols__', cols)
 
     def __is_row__(self):
         return isinstance(self.__rows__, int)
@@ -181,6 +181,9 @@ class proxy:
         if self.__is_column__():
             return getattr_to_vec(self, key)
         return self[key]
+
+    def __setattr__(self, key, value):
+        self[key] = value
 
     def __parse_key__(self, key):
         if isinstance(key, tuple):
