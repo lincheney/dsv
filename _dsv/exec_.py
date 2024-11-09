@@ -48,19 +48,27 @@ class Table:
         return self.__headers__[col]
 
     def __parse_key__(self, key, new=False):
+        rows = slice(None)
+        cols = slice(None)
+
         if isinstance(key, (str, bytes)):
-            key = (slice(None), key)
-        elif isinstance(key, (list, tuple)) and all(isinstance(c, (str, bytes)) for c in key):
-            key = (slice(None), key)
+            cols = key
+        elif isinstance(key, (list, tuple)) and all(isinstance(x, (str, bytes)) for x in key):
+            cols = key
         elif isinstance(key, (int, slice)):
-            key = (key, slice(None))
+            rows = key
+        elif isinstance(key, (list, tuple)) and len(key) == len(self) and all(isinstance(x, bool) for x in key):
+            rows = key
         elif not isinstance(key, tuple) or len(key) != 2:
             raise IndexError(key)
+        else:
+            rows, cols = key
 
-        rows, cols = key
+        if isinstance(rows, (list, tuple)) and len(rows) == len(self) and all(isinstance(x, bool) for x in rows):
+            rows = [i for i, x in enumerate(rows) if x]
 
-        if isinstance(cols, (list, tuple)) and all(isinstance(c, (str, bytes)) for c in cols):
-            cols = [self.__get_col__(c, new) for c in cols]
+        if isinstance(cols, (list, tuple)) and all(isinstance(x, (str, bytes)) for x in cols):
+            cols = [self.__get_col__(x, new) for x in cols]
         elif isinstance(cols, (str, bytes)):
             cols = self.__get_col__(cols, new)
 
@@ -88,8 +96,10 @@ class Table:
 
         if isinstance(rows, int):
             rows = [self.__data__[rows]]
-        else:
+        elif isinstance(rows, slice):
             rows = self.__data__[rows]
+        else:
+            rows = [self.__data__[r] for r in rows]
 
         if isinstance(cols, int):
             cols = (cols,)
