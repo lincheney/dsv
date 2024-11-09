@@ -303,6 +303,12 @@ class exec_(_Base):
     name = 'exec'
 
     parent = argparse.ArgumentParser(add_help=False)
+    parent.set_defaults(
+        expr=False,
+        slurp=False,
+        ignore_errors=False,
+        remove_errors=False,
+    )
     parent.add_argument('-q', '--quiet', action='store_true', help='do not print errors')
     parent.add_argument('--var', default='X', help='python variable to use to refer to the data (default: %(default)s)')
     parent.add_argument('-b', '--bytes', action='store_true', help='do not auto convert data to int, str etc, treat everything as bytes')
