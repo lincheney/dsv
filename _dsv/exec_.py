@@ -79,8 +79,6 @@ class Table:
 
     def __setitem__(self, key, value):
         rows, cols = self.__parse_key__(key, new=True)
-        if isinstance(cols, int):
-            cols = (cols,)
 
         if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, slice):
             # zip the value over the rows
@@ -92,6 +90,9 @@ class Table:
             rows = [self.__data__[rows]]
         else:
             rows = self.__data__[rows]
+
+        if isinstance(cols, int):
+            cols = (cols,)
 
         # set a specific column
         for row in rows:
