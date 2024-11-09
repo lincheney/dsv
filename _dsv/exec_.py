@@ -40,11 +40,17 @@ class Table:
         for i in range(len(self)):
             yield self[i]
 
-    def __parse_key__(self, key, new=False):
-        if isinstance(key, tuple) and len(key) == 1:
-            key = key[0]
+    def __get_col__(self, col, new=False):
+        if isinstance(col, str):
+            col = col.encode('utf8')
+        if new and col not in self.__headers__:
+            self.__headers__[col] = len(self.__headers__)
+        return self.__headers__[col]
 
-        if isinstance(key, str):
+    def __parse_key__(self, key, new=False):
+        if isinstance(key, (str, bytes)):
+            key = (slice(None), key)
+        elif isinstance(key, (list, tuple)) and all(isinstance(c, (str, bytes)) for c in key):
             key = (slice(None), key)
         elif isinstance(key, (int, slice)):
             key = (key, slice(None))
@@ -53,11 +59,10 @@ class Table:
 
         rows, cols = key
 
-        if isinstance(cols, str):
-            cols = cols.encode('utf8')
-            if new and cols not in self.__headers__:
-                self.__headers__[cols] = len(self.__headers__)
-            cols = self.__headers__[cols]
+        if isinstance(cols, (list, tuple)) and all(isinstance(c, (str, bytes)) for c in cols):
+            cols = [self.__get_col__(c, new) for c in cols]
+        elif isinstance(cols, (str, bytes)):
+            cols = self.__get_col__(cols, new)
 
         return rows, cols
 
@@ -74,6 +79,8 @@ class Table:
 
     def __setitem__(self, key, value):
         rows, cols = self.__parse_key__(key, new=True)
+        if isinstance(cols, int):
+            cols = (cols,)
 
         if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, slice):
             # zip the value over the rows
@@ -88,11 +95,12 @@ class Table:
 
         # set a specific column
         for row in rows:
-            if isinstance(cols, int) and cols >= len(row):
-                row += [b''] * (cols - len(row))
-                row.append(next(value))
-            else:
-                row[cols] = next(value)
+            for col in (range(len(row[cols])) if isinstance(cols, slice) else cols):
+                if col >= len(row):
+                    row += [b''] * (col - len(row))
+                    row.append(next(value))
+                else:
+                    row[col] = next(value)
 
     def __delitem__(self, key):
         rows, cols = self.__parse_key__(key, new=True)
@@ -125,14 +133,29 @@ class proxy:
     def __is_column__(self):
         return isinstance(self.__cols__, int)
 
+    def __colslice__(self, rows):
+        cols = self.__cols__
+        if isinstance(cols, (int, slice)):
+            return [r[cols] for r in rows]
+        else:
+            return [[r[c] for c in cols] for r in rows]
+
     def __inner__(self):
+        data = self.__parent__.__data__
+
+        rows = self.__rows__
+        if isinstance(rows, int):
+            data = (data[rows],)
+        elif isinstance(rows, slice):
+            data = data[rows]
+        else:
+            data = [data[r] for r in rows]
+
+        data = self.__colslice__(data)
+
         if self.__is_row__():
-            return self.__parent__.__data__[self.__rows__][self.__cols__]
-
-        if self.__is_column__():
-            return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
-
-        return [r[self.__cols__] for r in self.__parent__.__data__[self.__rows__]]
+            return data[0]
+        return data
 
     def __len__(self):
         return len(self.__inner__())
@@ -338,7 +361,7 @@ class exec_(_Base):
 
         elif isinstance(value, proxy) and not value.__is_row__() and not value.__is_column__():
             data = list(value)
-            headers = list(value.__parent__.__headers__)[value.__cols__]
+            headers = value.__colslice__([list(value.__parent__.__headers__)])[0]
             return Table(data, headers)
 
         if isinstance(value, dict):
