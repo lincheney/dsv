@@ -10,6 +10,8 @@ from contextlib import contextmanager
 from ._base import _Base
 from . import _utils
 
+FULL_SLICE = slice(None)
+
 def to_bytes(x):
     if not isinstance(x, bytes):
         x = str(x).encode('utf8')
@@ -21,10 +23,29 @@ def getattr_to_vec(self, key):
         return (lambda *a, **kw: vec(fn(*a, **kw) for fn in value))
     return vec(value)
 
+def is_list_of(value, types):
+    return isinstance(value, (list, tuple)) and all(isinstance(x, types) for x in value)
+
+def apply_slice(data, key, flat=False):
+    if isinstance(data, slice):
+        data = slice_to_list(data)
+
+    if isinstance(key, slice) or (isinstance(key, int) and flat):
+        return data[key]
+    if isinstance(key, int):
+        return (data[key],)
+    else:
+        return [data[k] for k in key if k < len(data)]
+
+def slice_to_list(key):
+    return list(range(*key.indices(key.stop)))
+
 class Table:
     def __init__(self, data, headers):
-        super().__setattr__('__headers__', headers)
-        super().__setattr__('__data__', data)
+        self.__dict__.update(
+            __headers__=headers,
+            __data__=data,
+        )
 
     def __setattr__(self, key, value):
         self[key] = value
@@ -40,37 +61,38 @@ class Table:
         for i in range(len(self)):
             yield self[i]
 
+    def __add_col__(self, name):
+        self.__headers__[name] = len(self.__headers__)
+        return self.__headers__[name]
+
     def __get_col__(self, col, new=False):
         if isinstance(col, str):
             col = col.encode('utf8')
         if new and col not in self.__headers__:
-            self.__headers__[col] = len(self.__headers__)
+            self.__add_col__(col)
         return self.__headers__[col]
 
     def __parse_key__(self, key, new=False):
-        rows = slice(None)
-        cols = slice(None)
-
-        if isinstance(key, (str, bytes)):
-            cols = key
-        elif isinstance(key, (list, tuple)) and all(isinstance(x, (str, bytes)) for x in key):
-            cols = key
-        elif isinstance(key, (int, slice)):
-            rows = key
-        elif isinstance(key, (list, tuple)) and len(key) == len(self) and all(isinstance(x, bool) for x in key):
-            rows = key
+        if isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes)):
+            key = (FULL_SLICE, key)
+        elif isinstance(key, (int, slice)) or (is_list_of(key, bool) and len(key) == len(self)):
+            key = (key, FULL_SLICE)
         elif not isinstance(key, tuple) or len(key) != 2:
             raise IndexError(key)
-        else:
-            rows, cols = key
 
-        if isinstance(rows, (list, tuple)) and len(rows) == len(self) and all(isinstance(x, bool) for x in rows):
+        rows, cols = key
+
+        if is_list_of(rows, bool) and len(rows) == len(self):
             rows = [i for i, x in enumerate(rows) if x]
+        elif isinstance(rows, slice):
+            rows = slice(*rows.indices(len(self)))
 
-        if isinstance(cols, (list, tuple)) and all(isinstance(x, (str, bytes)) for x in cols):
+        if is_list_of(cols, (str, bytes)):
             cols = [self.__get_col__(x, new) for x in cols]
         elif isinstance(cols, (str, bytes)):
             cols = self.__get_col__(cols, new)
+        elif isinstance(cols, slice):
+            cols = slice(*cols.indices(len(self.__headers__)))
 
         return rows, cols
 
@@ -88,25 +110,21 @@ class Table:
     def __setitem__(self, key, value):
         rows, cols = self.__parse_key__(key, new=True)
 
-        if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, slice):
+        if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, (slice, list, tuple)):
             # zip the value over the rows
             value = iter(value)
         else:
             value = itertools.repeat(value)
 
-        if isinstance(rows, int):
-            rows = [self.__data__[rows]]
-        elif isinstance(rows, slice):
-            rows = self.__data__[rows]
-        else:
-            rows = [self.__data__[r] for r in rows]
-
         if isinstance(cols, int):
             cols = (cols,)
+        elif isinstance(cols, slice):
+            cols = slice_to_list(cols)
+        rows = apply_slice(self.__data__, rows)
 
         # set a specific column
         for row in rows:
-            for col in (range(len(row[cols])) if isinstance(cols, slice) else cols):
+            for col in cols:
                 if col >= len(row):
                     row += [b''] * (col - len(row))
                     row.append(next(value))
@@ -115,108 +133,36 @@ class Table:
 
     def __delitem__(self, key):
         rows, cols = self.__parse_key__(key, new=True)
-        full_slice = slice(None, None, None)
 
-        if rows == full_slice:
-            # delete columns
-            for row in self.__data__:
-                del row[cols]
-            header = list(self.__headers__.keys())
-            del header[cols]
-            super().__setattr__('__headers__', {k: i for i, k in enumerate(header)})
-
-        elif cols == full_slice:
-            # delete rows
-            del self.__data__[rows]
-
-        else:
+        delete_cols = rows == slice(*FULL_SLICE.indices(len(self.__data__))) and isinstance(key, tuple) and len(key) > 1
+        delete_rows = cols == slice(*FULL_SLICE.indices(len(self.__headers__)))
+        if not delete_cols and not delete_rows:
             raise IndexError(key)
 
-class proxy:
-    def __init__(self, parent, rows, cols):
-        super().__setattr__('__parent__', parent)
-        super().__setattr__('__rows__', rows)
-        super().__setattr__('__cols__', cols)
+        if delete_rows:
+            # delete rows
+            if isinstance(rows, (int, slice)):
+                rows = [rows]
+            else:
+                rows = set(rows)
 
-    def __is_row__(self):
-        return isinstance(self.__rows__, int)
+            for r in sorted(rows, reverse=True):
+                del self.__data__[r]
 
-    def __is_column__(self):
-        return isinstance(self.__cols__, int)
+        if delete_cols:
+            # delete columns
+            header = list(self.__headers__.keys())
+            if isinstance(cols, (int, slice)):
+                cols = [cols]
+            else:
+                cols = set(cols)
 
-    def __colslice__(self, rows):
-        cols = self.__cols__
-        if isinstance(cols, (int, slice)):
-            return [r[cols] for r in rows]
-        else:
-            return [[r[c] for c in cols] for r in rows]
+            for c in sorted(cols, reverse=True):
+                for row in self.__data__:
+                    del row[c]
+                del header[c]
 
-    def __inner__(self):
-        data = self.__parent__.__data__
-
-        rows = self.__rows__
-        if isinstance(rows, int):
-            data = (data[rows],)
-        elif isinstance(rows, slice):
-            data = data[rows]
-        else:
-            data = [data[r] for r in rows]
-
-        data = self.__colslice__(data)
-
-        if self.__is_row__():
-            return data[0]
-        return data
-
-    def __len__(self):
-        return len(self.__inner__())
-
-    def __iter__(self):
-        return iter(self.__inner__())
-
-    def __repr__(self):
-        return repr(self.__inner__())
-
-    def __getattr__(self, key):
-        if self.__is_column__():
-            return getattr_to_vec(self, key)
-        return self[key]
-
-    def __setattr__(self, key, value):
-        self[key] = value
-
-    def __parse_key__(self, key):
-        if isinstance(key, tuple):
-            if self.__is_column__() or self.__is_row__():
-                raise IndexError(key)
-            return (self.__rows__[key[0]], self.__cols__[key[1]])
-
-        if isinstance(key, str):
-            if self.__is_column__():
-                raise IndexError(key)
-            _, key = self.__parent__.__parse_key__(key)
-            return (self.__rows__, key)
-
-        if isinstance(key, (int, slice)):
-
-            if self.__is_row__():
-                return (self.__rows__, key)
-
-            if self.__is_column__():
-                return (key, self.__cols__)
-
-            # get a specific row(s)
-            return (self.__rows__[key], self.__cols__)
-
-        raise IndexError(key)
-
-    def __getitem__(self, key):
-        key = self.__parse_key__(key)
-        return self.__parent__[key]
-
-    def __setitem__(self, key, value):
-        key = self.__parse_key__(key)
-        self.__parent__[key] = value
+            self.__dict__['__headers__'] = {k: i for i, k in enumerate(header)}
 
     def __flat__(self):
         if self.__is_row__() or self.__is_column__():
@@ -233,6 +179,79 @@ class proxy:
 
     def sum(self):
         return sum(self.__flat__())
+
+
+class proxy(Table):
+    def __init__(self, parent, rows, cols):
+        self.__dict__.update(
+            __parent__=parent,
+            __rows__=rows,
+            __cols__=cols,
+            __headers__={k: i for i, k in enumerate(apply_slice(list(parent.__headers__), cols))},
+        )
+
+    def __is_row__(self):
+        return isinstance(self.__rows__, int)
+
+    def __is_column__(self):
+        return isinstance(self.__cols__, int)
+
+    def __add_col__(self, name):
+        assert not self.__is_row__() and not self.__is_column__()
+
+        num = self.__parent__.__add_col__(name)
+        if isinstance(self.__cols__, slice):
+            self.__cols__ = slice_to_list(self.__cols__)
+        self.__cols__.append(num)
+
+        return super().__add_col__(name)
+
+    @property
+    def __data__(self):
+        data = self.__parent__.__data__
+        data = apply_slice(data, self.__rows__)
+        data = [apply_slice(row, self.__cols__, flat=True) for row in data]
+
+        if self.__is_row__():
+            return data[0]
+        return data
+
+    def __iter__(self):
+        return iter(self.__data__)
+
+    def __repr__(self):
+        return repr(self.__data__)
+
+    def __getattr__(self, key):
+        if self.__is_column__():
+            return getattr_to_vec(self, key)
+        return super().__getattr__(key)
+
+    def __parse_key__(self, key, new=False):
+        rows, cols = super().__parse_key__(key, new)
+
+        if self.__is_column__():
+            if isinstance(key, tuple) or cols != FULL_SLICE:
+                raise IndexError(key)
+            return (apply_slice(self.__rows__, rows), self.__cols__)
+
+        if self.__is_row__():
+            if isinstance(key, tuple) or rows != FULL_SLICE:
+                raise IndexError(key)
+            return (self.__rows__, apply_slice(self.__cols__, cols))
+
+        return (apply_slice(self.__rows__, rows), apply_slice(self.__cols__, cols))
+
+    def __getitem__(self, key):
+        key = self.__parse_key__(key)
+        return self.__parent__[key]
+
+    def __setitem__(self, key, value):
+        key = self.__parse_key__(key, True)
+        self.__parent__[key] = value
+
+    def __delitem__(self, key):
+        raise TypeError(f"{type(self).__name__!r} object doesn't support item deletion")
 
 class vec(list):
     def __getattr__(self, key):
@@ -370,13 +389,13 @@ class exec_(_Base):
         self.handle_exec_result(vars)
 
     def convert_to_table(self, value):
+        if isinstance(value, proxy) and not value.__is_row__() and not value.__is_column__():
+            data = list(value)
+            headers = apply_slice(list(value.__parent__.__headers__), value.__cols__)
+            return Table(data, headers)
+
         if isinstance(value, Table):
             return value
-
-        elif isinstance(value, proxy) and not value.__is_row__() and not value.__is_column__():
-            data = list(value)
-            headers = value.__colslice__([list(value.__parent__.__headers__)])[0]
-            return Table(data, headers)
 
         if isinstance(value, dict):
             columns = [list(v) if isinstance(v, (list, tuple, proxy)) else [v] for v in value.values()]
