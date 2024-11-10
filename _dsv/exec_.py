@@ -400,7 +400,7 @@ class exec_(_Base):
             headers = apply_slice(list(value.__parent__.__headers__), value.__cols__)
             return Table(data, headers)
 
-        if isinstance(value, Table):
+        if isinstance(value, Table) and not isinstance(value, proxy):
             return value
 
         if isinstance(value, dict):
