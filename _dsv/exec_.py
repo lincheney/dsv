@@ -33,9 +33,11 @@ def apply_slice(data, key, flat=False):
     if isinstance(key, slice) or (isinstance(key, int) and flat):
         return data[key]
     if isinstance(key, int):
-        return (data[key],)
+        return (data[key],) if key < len(data) else ()
     else:
-        return [data[k] for k in key if k < len(data)]
+        while key and key[-1] >= len(data):
+            key = key[:-1]
+        return [data[k] if k < len(data) else b'' for k in key]
 
 def slice_to_list(key):
     return list(range(*key.indices(key.stop)))
@@ -74,9 +76,9 @@ class BaseTable:
 
         length = len(self)
         if is_list_of(rows, int):
-            rows = [x % length for x in rows]
+            rows = [length and x % length for x in rows]
         elif isinstance(rows, int):
-            rows = rows % length
+            rows = length and rows % length
         elif isinstance(rows, slice):
             rows = slice(*rows.indices(length))
         elif is_list_of(rows, bool) and len(rows) == length:
@@ -84,11 +86,11 @@ class BaseTable:
         else:
             raise IndexError(key)
 
-        length = len(self.__headers__)
+        length = len(self.__headers__ or self.__data__[0])
         if is_list_of(cols, (str, bytes, int)):
-            cols = [x % length if isinstance(x, int) else self.__get_col__(x, new) for x in cols]
+            cols = [length and x % length if isinstance(x, int) else self.__get_col__(x, new) for x in cols]
         elif isinstance(cols, int):
-            cols = cols % length
+            cols = length and cols % length
         elif isinstance(cols, slice):
             cols = slice(*cols.indices(length))
         elif isinstance(cols, (str, bytes)):
