@@ -88,7 +88,7 @@ class BaseTable:
         else:
             raise IndexError(key)
 
-        length = len(self.__headers__ or self.__data__[0])
+        length = self.__numcols__()
         indices = range(length)
         if is_list_of(real_cols, (str, bytes, int)):
             real_cols = cols = [indices[x] if isinstance(x, int) else self.__get_col__(x, new) for x in real_cols]
@@ -127,6 +127,9 @@ class Table(BaseTable):
             __data__=data,
         )
 
+    def __numcols__(self):
+        return len(self.__headers__ or (self.__data__ and self.__data__[0]))
+
     def __iter__(self):
         for i in range(len(self)):
             yield self[i]
@@ -161,7 +164,6 @@ class Table(BaseTable):
 
         if not non_scalar:
             value = itertools.repeat(value)
-        value = iter(value)
 
         for row in rows:
             for col, v in zip(cols, value):
@@ -203,6 +205,15 @@ class Table(BaseTable):
 
             self.__dict__['__headers__'] = {k: i for i, k in enumerate(header)}
 
+    def append(self, value):
+        if not isinstance(value, (list, tuple)):
+            value = [value] * self.__numcols__()
+        self.__data__.append(value)
+
+    def insert(self, index, value):
+        if not isinstance(value, (list, tuple)):
+            value = [value] * self.__numcols__()
+        self.__data__.insert(index, value)
 
 class Proxy(BaseTable):
     def __init__(self, parent, rows, cols):
