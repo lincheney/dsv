@@ -64,37 +64,40 @@ class BaseTable:
         return self.__headers__[col]
 
     def __parse_key__(self, key, new=False):
-        k = key
-        if isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes, int)):
-            k = (FULL_SLICE, key)
-        elif isinstance(key, (int, slice)) or is_list_of(key, int) or (is_list_of(key, bool) and len(key) == len(self)):
+        if isinstance(key, (int, slice)) or is_list_of(key, int) or (is_list_of(key, bool) and len(key) == len(self)):
             k = (key, FULL_SLICE)
+        elif isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes, int)):
+            k = (FULL_SLICE, key)
         elif not isinstance(key, tuple) or len(key) != 2:
             raise IndexError(key)
+        else:
+            k = key
 
         real_rows, real_cols = k
 
         length = len(self)
-        if is_list_of(real_rows, int):
-            real_rows = rows = [length and x % length for x in real_rows]
+        indices = range(length)
+        if is_list_of(real_rows, bool) and len(real_rows) == length:
+            real_rows = rows = [i for i, x in enumerate(real_rows) if x]
+        elif is_list_of(real_rows, int):
+            real_rows = rows = [indices[x] for x in real_rows]
         elif isinstance(real_rows, int):
-            real_rows = rows = length and real_rows % length
+            real_rows = rows = indices[real_rows]
         elif isinstance(real_rows, slice):
             rows = slice(*real_rows.indices(length))
-        elif is_list_of(real_rows, bool) and len(real_rows) == length:
-            real_rows = rows = [i for i, x in enumerate(real_rows) if x]
         else:
             raise IndexError(key)
 
         length = len(self.__headers__ or self.__data__[0])
+        indices = range(length)
         if is_list_of(real_cols, (str, bytes, int)):
-            real_cols = cols = [length and x % length if isinstance(x, int) else self.__get_col__(x, new) for x in real_cols]
-        elif isinstance(real_cols, int):
-            real_cols = cols = length and real_cols % length
-        elif isinstance(real_cols, slice):
-            cols = slice(*real_cols.indices(length))
+            real_cols = cols = [indices[x] if isinstance(x, int) else self.__get_col__(x, new) for x in real_cols]
         elif isinstance(real_cols, (str, bytes)):
             real_cols = cols = self.__get_col__(real_cols, new)
+        elif isinstance(real_cols, int):
+            real_cols = cols = indices[real_cols]
+        elif isinstance(real_cols, slice):
+            cols = slice(*real_cols.indices(length))
         else:
             raise IndexError(key)
 
@@ -140,28 +143,31 @@ class Table(BaseTable):
         return Proxy(self, rows, cols)
 
     def __setitem__(self, key, value):
-        _, _, rows, cols = self.__parse_key__(key, new=True)
+        real_rows, real_cols, rows, cols = self.__parse_key__(key, new=True)
+        # non scalar if value is non scalar and exactly one of rows/cols is non scalar
+        non_scalar = isinstance(value, (list, tuple)) and isinstance(rows, int) != isinstance(cols, int)
+        rows = apply_slice(self.__data__, rows)
 
-        if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, (slice, list, tuple)):
-            # zip the value over the rows
-            value = iter(value)
-        else:
-            value = itertools.repeat(value)
+        if real_cols == FULL_SLICE:
+            # replace whole rows
+            for row in rows:
+                row[:] = value if non_scalar else [value] * len(row)
+            return
 
         if isinstance(cols, int):
             cols = (cols,)
         elif isinstance(cols, slice):
             cols = slice_to_list(cols)
-        rows = apply_slice(self.__data__, rows)
 
-        # set a specific column
+        if not non_scalar:
+            value = itertools.repeat(value)
+        value = iter(value)
+
         for row in rows:
-            for col in cols:
+            for col, v in zip(cols, value):
                 if col >= len(row):
-                    row += [b''] * (col - len(row))
-                    row.append(next(value))
-                else:
-                    row[col] = next(value)
+                    row += [b''] * (col + 1 - len(row))
+                row[col] = v
 
     def __delitem__(self, key):
         real_rows, real_cols, rows, cols = self.__parse_key__(key, new=True)
@@ -172,7 +178,6 @@ class Table(BaseTable):
             raise IndexError(key)
 
         if delete_rows:
-            # delete rows
             if isinstance(rows, (int, slice)):
                 rows = [rows]
             else:
@@ -182,14 +187,16 @@ class Table(BaseTable):
                 del self.__data__[r]
 
         if delete_cols:
-            # delete columns
-            header = list(self.__headers__.keys())
             if isinstance(cols, (int, slice)):
                 cols = [cols]
             else:
                 cols = set(cols)
 
+            header = list(self.__headers__.keys())
             for c in sorted(cols, reverse=True):
+                if isinstance(c, int):
+                    c = slice(c, c+1)
+
                 for row in self.__data__:
                     del row[c]
                 del header[c]
@@ -283,7 +290,7 @@ class Vec(list):
     def sum(self):
         return sum(self)
 
-for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index', 'rtruediv', 'rfloordiv', 'radd', 'rsub', 'rmul', 'rmod', 'rdivmod', 'rpow', 'rlshift', 'rrshift', 'rand', 'rxor', 'ror'):
+for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
     key = f'__{fn}__'
 
     if op := getattr(operator, key, None):
@@ -295,6 +302,13 @@ for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 
         def fn(self, *args, key=key):
             return getattr_to_vec(self, key)(*args)
 
+    setattr(Proxy, key, fn)
+    setattr(Vec, key, fn)
+
+for fn in ('truediv', 'floordiv', 'add', 'sub', 'mul', 'mod', 'divmod', 'pow', 'lshift', 'rshift', 'and', 'xor', 'or'):
+    key = f'__r{fn}__'
+    def fn(self, other, key=f'__{fn}__'):
+        return getattr(Vec([other] * len(self)), key)(self)
     setattr(Proxy, key, fn)
     setattr(Vec, key, fn)
 

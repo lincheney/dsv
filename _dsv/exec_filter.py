@@ -18,16 +18,13 @@ class exec_filter(exec_):
 
     def handle_exec_result(self, result, vars, table):
         if isinstance(result, Vec):
-            result = result[0]
+            result = all(result)
 
         if self.opts.passthru:
             if self.opts.colour:
-                if result:
-                    table[0][0] = b'\x1b[1m' + to_bytes(table[0][0]) + b'\x1b[K'
-                else:
-                    table[0][0] = b'\x1b[2m' + to_bytes(table[0][0])
+                for row in table:
+                    row[:] = (b'\x1b[1m' if result else b'\x1b[2m') + row.map(to_bytes)
             result = table
-
         else:
             result = table if result else None
 
