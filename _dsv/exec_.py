@@ -75,7 +75,7 @@ class Table:
     def __parse_key__(self, key, new=False):
         if isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes)):
             key = (FULL_SLICE, key)
-        elif isinstance(key, (int, slice)) or (is_list_of(key, bool) and len(key) == len(self)):
+        elif isinstance(key, (int, slice)) or is_list_of(key, int) or (is_list_of(key, bool) and len(key) == len(self)):
             key = (key, FULL_SLICE)
         elif not isinstance(key, tuple) or len(key) != 2:
             raise IndexError(key)
