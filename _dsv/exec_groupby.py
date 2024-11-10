@@ -9,7 +9,6 @@ class exec_groupby(_ColumnSlicer, exec_):
     parser = argparse.ArgumentParser(parents=[exec_.parent])
     parser.set_defaults(slurp=True)
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
-    parser.add_argument('-e', '--expr', action='store_true', help='evaluate the python expression given and output in a new table')
     parser.add_argument('-k', '--fields', action='append', default=[], help='search only on these fields')
     parser.add_argument('script', nargs='+', help='python statements to run')
     group = parser.add_mutually_exclusive_group()
@@ -17,7 +16,6 @@ class exec_groupby(_ColumnSlicer, exec_):
     group.add_argument('-E', '--remove-errors', action='store_true', help='remove rows on python errors')
 
     def __init__(self, opts):
-        self.script = opts.script[-1]
         super().__init__(opts)
         self.groups = {}
 
@@ -46,11 +44,10 @@ class exec_groupby(_ColumnSlicer, exec_):
             self.exec_on_all_rows(group, K=self.current_key)
         _Base.on_eof(self)
 
-    def handle_exec_result(self, vars):
-        if self.opts.expr and self.opts.var in vars:
-            result = vars.get(self.opts.var)
+    def handle_exec_result(self, result, vars, table):
+        if self.expr and self.opts.var in vars:
             if not isinstance(result, dict):
-                result = {self.script: result}
-            vars[self.opts.var] = {**self.current_key, **result}
+                result = {self.opts.script[-1]: result}
+            result = {**self.current_key, **result}
 
-        return super().handle_exec_result(vars)
+        return super().handle_exec_result(result, vars, table)

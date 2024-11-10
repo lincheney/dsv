@@ -24,7 +24,7 @@ def getattr_to_vec(self, key):
     return Vec(value)
 
 def is_list_of(value, types):
-    return isinstance(value, (list, tuple)) and all(isinstance(x, types) for x in value)
+    return isinstance(value, list) and all(isinstance(x, types) for x in value)
 
 def apply_slice(data, key, flat=False):
     if isinstance(data, slice):
@@ -72,33 +72,33 @@ class BaseTable:
         elif not isinstance(key, tuple) or len(key) != 2:
             raise IndexError(key)
 
-        rows, cols = k
+        real_rows, real_cols = k
 
         length = len(self)
-        if is_list_of(rows, int):
-            rows = [length and x % length for x in rows]
-        elif isinstance(rows, int):
-            rows = length and rows % length
-        elif isinstance(rows, slice):
-            rows = slice(*rows.indices(length))
-        elif is_list_of(rows, bool) and len(rows) == length:
-            rows = [i for i, x in enumerate(rows) if x]
+        if is_list_of(real_rows, int):
+            real_rows = rows = [length and x % length for x in real_rows]
+        elif isinstance(real_rows, int):
+            real_rows = rows = length and real_rows % length
+        elif isinstance(real_rows, slice):
+            rows = slice(*real_rows.indices(length))
+        elif is_list_of(real_rows, bool) and len(real_rows) == length:
+            real_rows = rows = [i for i, x in enumerate(real_rows) if x]
         else:
             raise IndexError(key)
 
         length = len(self.__headers__ or self.__data__[0])
-        if is_list_of(cols, (str, bytes, int)):
-            cols = [length and x % length if isinstance(x, int) else self.__get_col__(x, new) for x in cols]
-        elif isinstance(cols, int):
-            cols = length and cols % length
-        elif isinstance(cols, slice):
-            cols = slice(*cols.indices(length))
-        elif isinstance(cols, (str, bytes)):
-            cols = self.__get_col__(cols, new)
+        if is_list_of(real_cols, (str, bytes, int)):
+            real_cols = cols = [length and x % length if isinstance(x, int) else self.__get_col__(x, new) for x in real_cols]
+        elif isinstance(real_cols, int):
+            real_cols = cols = length and real_cols % length
+        elif isinstance(real_cols, slice):
+            cols = slice(*real_cols.indices(length))
+        elif isinstance(real_cols, (str, bytes)):
+            real_cols = cols = self.__get_col__(real_cols, new)
         else:
             raise IndexError(key)
 
-        return rows, cols
+        return real_rows, real_cols, rows, cols
 
     def __flat__(self):
         if self.__is_row__() or self.__is_column__():
@@ -129,7 +129,7 @@ class Table(BaseTable):
             yield self[i]
 
     def __getitem__(self, key):
-        rows, cols = self.__parse_key__(key)
+        _, _, rows, cols = self.__parse_key__(key)
 
         # get a specific cell
         if isinstance(rows, int) and isinstance(cols, int):
@@ -140,7 +140,7 @@ class Table(BaseTable):
         return Proxy(self, rows, cols)
 
     def __setitem__(self, key, value):
-        rows, cols = self.__parse_key__(key, new=True)
+        _, _, rows, cols = self.__parse_key__(key, new=True)
 
         if isinstance(value, (list, tuple)) and isinstance(cols, int) and isinstance(rows, (slice, list, tuple)):
             # zip the value over the rows
@@ -164,10 +164,10 @@ class Table(BaseTable):
                     row[col] = next(value)
 
     def __delitem__(self, key):
-        rows, cols = self.__parse_key__(key, new=True)
+        real_rows, real_cols, rows, cols = self.__parse_key__(key, new=True)
 
-        delete_cols = rows == slice(*FULL_SLICE.indices(len(self.__data__))) and isinstance(key, tuple) and len(key) > 1
-        delete_rows = cols == slice(*FULL_SLICE.indices(len(self.__headers__)))
+        delete_cols = real_rows == FULL_SLICE
+        delete_rows = real_cols == FULL_SLICE
         if not delete_cols and not delete_rows:
             raise IndexError(key)
 
@@ -245,17 +245,19 @@ class Proxy(BaseTable):
         return super().__getattr__(key)
 
     def __parse_key__(self, key, new=False):
-        rows, cols = super().__parse_key__(key, new)
+        real_rows, real_cols, rows, cols = super().__parse_key__(key, new)
 
         if self.__is_column__():
-            if isinstance(key, tuple) or cols != FULL_SLICE:
+            if isinstance(key, tuple) or real_cols != FULL_SLICE:
                 raise IndexError(key)
-            return (apply_slice(self.__rows__, rows), self.__cols__)
+            return (apply_slice(self.__rows__, rows, flat=True), self.__cols__)
 
         if self.__is_row__():
-            if isinstance(key, tuple) or rows != FULL_SLICE:
+            if isinstance(key, tuple):
                 raise IndexError(key)
-            return (self.__rows__, apply_slice(self.__cols__, cols))
+            elif real_rows != FULL_SLICE:
+                cols = rows
+            return (self.__rows__, apply_slice(self.__cols__, cols, flat=True))
 
         return (apply_slice(self.__rows__, rows), apply_slice(self.__cols__, cols))
 
@@ -330,22 +332,30 @@ class exec_(_Base):
 
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+', help='python statements to run')
-    parser.add_argument('-e', '--expr', action='store_true', help='print the last python expression given')
     parser.add_argument('-S', '--no-slurp', action='store_false', dest='slurp', help='run python on one row at a time')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
     group.add_argument('-E', '--remove-errors', action='store_true', help='remove rows on python errors')
 
-    def __init__(self, opts, mode='exec'):
+    def __init__(self, opts, filename='<string>', eval_only=False):
         super().__init__(opts)
 
-        if opts.expr:
-            opts.script[-1] = f'{opts.var} = ({opts.script[-1]})'
-        script = '\n'.join(opts.script)
+        self.prelude = compile('\n'.join(opts.script[:-1]), filename, 'exec')
+        # add some newlines so that newlines add up
+        script = '\n' * (len(opts.script) - 1) + opts.script[-1]
+        # test if it is an expr
+        try:
+            self.code = compile(script, filename, 'eval')
+            self.expr = True
+        except SyntaxError:
+            if eval_only:
+                raise
+            self.code = compile(script, filename, 'exec')
+            self.expr = False
 
-        self.code = compile(script, '<string>', mode)
         # load it into the linecache so it shows up in tracebacks
-        linecache.cache['<string>'] = (len(script), None, (script + '\n').splitlines(True), 'asd')
+        script = '\n'.join(opts.script)
+        linecache.cache[filename] = (len(script), None, (script + '\n').splitlines(True), filename)
 
         self.count = 0
         self.have_printed_header = False
@@ -379,7 +389,7 @@ class exec_(_Base):
                 raise
             if not self.opts.quiet:
                 print(f'{type(e).__name__}: {e}', file=sys.stderr)
-            if self.opts.remove_errors or (self.opts.ignore_errors and self.opts.expr):
+            if self.opts.remove_errors or (self.opts.ignore_errors and self.expr):
                 vars.pop(self.opts.var, None)
 
     def parse_value(self, value):
@@ -402,12 +412,17 @@ class exec_(_Base):
         if not self.opts.bytes:
             rows = [self.parse_value(row) for row in rows]
 
-        vars[self.opts.var] = Table(rows, self.header_numbers)
+        table = vars[self.opts.var] = Table(rows, self.header_numbers)
 
         with self.exec_wrapper(vars):
-            exec(self.code, vars)
+            exec(self.prelude, vars)
+            if self.expr:
+                vars[self.opts.var] = eval(self.code, vars)
+            else:
+                exec(self.code, vars)
 
-        self.handle_exec_result(vars)
+        result = vars.get(self.opts.var)
+        self.handle_exec_result(result, vars, table)
 
     def convert_to_table(self, value):
         if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
@@ -428,8 +443,7 @@ class exec_(_Base):
             headers = value.keys()
             return Table(data, headers)
 
-    def handle_exec_result(self, vars):
-        result = vars.get(self.opts.var)
+    def handle_exec_result(self, result, vars, table):
         table = self.convert_to_table(result)
 
         if table is not None:
@@ -445,7 +459,7 @@ class exec_(_Base):
 
         elif result is None:
             return
-        elif self.opts.expr:
+        elif self.expr:
             print(result)
         else:
             raise ValueError(result)

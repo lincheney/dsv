@@ -11,30 +11,24 @@ class exec_filter(exec_):
     group.add_argument('--passthru', action='store_true', help='print both matching and non-matching lines')
 
     def __init__(self, opts):
-        opts.script = [f'{opts.var} = (({opts.script}), {opts.var})']
-        super().__init__(opts)
+        opts.slurp = False
+        super().__init__(opts, eval_only=True)
         if self.opts.ignore_errors:
             self.opts.remove_errors = True
 
-    def handle_exec_result(self, vars):
-        success, result = vars[self.opts.var]
-
-        if isinstance(success, Vec):
-            success = success[0]
+    def handle_exec_result(self, result, vars, table):
+        if isinstance(result, Vec):
+            result = result[0]
 
         if self.opts.passthru:
-            headers = result.__headers__
-            result = [to_bytes(v) for v in result[0]]
-            if success:
-                result[0] = b'\x1b[1m' + result[0] + b'\x1b[K'
-            else:
-                result[0] = b'\x1b[2m' + result[0]
-            vars[self.opts.var] = dict(zip(headers, result))
+            if self.opts.colour:
+                if result:
+                    table[0][0] = b'\x1b[1m' + to_bytes(table[0][0]) + b'\x1b[K'
+                else:
+                    table[0][0] = b'\x1b[2m' + to_bytes(table[0][0])
+            result = table
 
         else:
-            if success:
-                vars[self.opts.var] = result
-            else:
-                del vars[self.opts.var]
+            result = table if result else None
 
-        super().handle_exec_result(vars)
+        super().handle_exec_result(result, vars, table)
