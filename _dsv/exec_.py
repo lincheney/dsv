@@ -20,8 +20,8 @@ def to_bytes(x):
 def getattr_to_vec(self, key):
     value = [getattr(x, key) for x in self]
     if all(map(callable, value)):
-        return (lambda *a, **kw: vec(fn(*a, **kw) for fn in value))
-    return vec(value)
+        return (lambda *a, **kw: Vec(fn(*a, **kw) for fn in value))
+    return Vec(value)
 
 def is_list_of(value, types):
     return isinstance(value, (list, tuple)) and all(isinstance(x, types) for x in value)
@@ -40,13 +40,7 @@ def apply_slice(data, key, flat=False):
 def slice_to_list(key):
     return list(range(*key.indices(key.stop)))
 
-class Table:
-    def __init__(self, data, headers):
-        self.__dict__.update(
-            __headers__=headers,
-            __data__=data,
-        )
-
+class BaseTable:
     def __setattr__(self, key, value):
         self[key] = value
     def __delattr__(self, key):
@@ -57,44 +51,80 @@ class Table:
     def __len__(self):
         return len(self.__data__)
 
-    def __iter__(self):
-        for i in range(len(self)):
-            yield self[i]
-
     def __add_col__(self, name):
         self.__headers__[name] = len(self.__headers__)
         return self.__headers__[name]
 
     def __get_col__(self, col, new=False):
-        if isinstance(col, str):
-            col = col.encode('utf8')
+        col = to_bytes(col)
         if new and col not in self.__headers__:
             self.__add_col__(col)
         return self.__headers__[col]
 
     def __parse_key__(self, key, new=False):
-        if isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes)):
-            key = (FULL_SLICE, key)
+        k = key
+        if isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes, int)):
+            k = (FULL_SLICE, key)
         elif isinstance(key, (int, slice)) or is_list_of(key, int) or (is_list_of(key, bool) and len(key) == len(self)):
-            key = (key, FULL_SLICE)
+            k = (key, FULL_SLICE)
         elif not isinstance(key, tuple) or len(key) != 2:
             raise IndexError(key)
 
-        rows, cols = key
+        rows, cols = k
 
-        if is_list_of(rows, bool) and len(rows) == len(self):
-            rows = [i for i, x in enumerate(rows) if x]
+        length = len(self)
+        if is_list_of(rows, int):
+            rows = [x % length for x in rows]
+        elif isinstance(rows, int):
+            rows = rows % length
         elif isinstance(rows, slice):
-            rows = slice(*rows.indices(len(self)))
+            rows = slice(*rows.indices(length))
+        elif is_list_of(rows, bool) and len(rows) == length:
+            rows = [i for i, x in enumerate(rows) if x]
+        else:
+            raise IndexError(key)
 
-        if is_list_of(cols, (str, bytes)):
-            cols = [self.__get_col__(x, new) for x in cols]
+        length = len(self.__headers__)
+        if is_list_of(cols, (str, bytes, int)):
+            cols = [x % length if isinstance(x, int) else self.__get_col__(x, new) for x in cols]
+        elif isinstance(cols, int):
+            cols = cols % length
+        elif isinstance(cols, slice):
+            cols = slice(*cols.indices(length))
         elif isinstance(cols, (str, bytes)):
             cols = self.__get_col__(cols, new)
-        elif isinstance(cols, slice):
-            cols = slice(*cols.indices(len(self.__headers__)))
+        else:
+            raise IndexError(key)
 
         return rows, cols
+
+    def __flat__(self):
+        if self.__is_row__() or self.__is_column__():
+            return self
+        return itertools.chain.from_iterable(self)
+
+    def map(self, fn):
+        if self.__is_row__() or self.__is_column__():
+            return Vec(self).map(fn)
+        return Vec(Vec(row).map(fn) for row in self)
+
+    def as_float(self):
+        return self.map(_utils.as_float)
+
+    def sum(self):
+        return sum(self.__flat__())
+
+
+class Table(BaseTable):
+    def __init__(self, data, headers):
+        self.__dict__.update(
+            __headers__=headers,
+            __data__=data,
+        )
+
+    def __iter__(self):
+        for i in range(len(self)):
+            yield self[i]
 
     def __getitem__(self, key):
         rows, cols = self.__parse_key__(key)
@@ -105,7 +135,7 @@ class Table:
                 return b''
             return self.__data__[rows][cols]
 
-        return proxy(self, rows, cols)
+        return Proxy(self, rows, cols)
 
     def __setitem__(self, key, value):
         rows, cols = self.__parse_key__(key, new=True)
@@ -164,24 +194,8 @@ class Table:
 
             self.__dict__['__headers__'] = {k: i for i, k in enumerate(header)}
 
-    def __flat__(self):
-        if self.__is_row__() or self.__is_column__():
-            return self
-        return itertools.chain.from_iterable(self)
 
-    def map(self, fn):
-        if self.__is_row__() or self.__is_column__():
-            return vec(self).map(fn)
-        return vec(vec(row).map(fn) for row in self)
-
-    def as_float(self):
-        return self.map(_utils.as_float)
-
-    def sum(self):
-        return sum(self.__flat__())
-
-
-class proxy(Table):
+class Proxy(BaseTable):
     def __init__(self, parent, rows, cols):
         self.__dict__.update(
             __parent__=parent,
@@ -199,6 +213,7 @@ class proxy(Table):
     def __add_col__(self, name):
         assert not self.__is_row__() and not self.__is_column__()
 
+        # add it to the parent as well
         num = self.__parent__.__add_col__(name)
         if isinstance(self.__cols__, slice):
             self.__cols__ = slice_to_list(self.__cols__)
@@ -250,15 +265,13 @@ class proxy(Table):
         key = self.__parse_key__(key, True)
         self.__parent__[key] = value
 
-    def __delitem__(self, key):
-        raise TypeError(f"{type(self).__name__!r} object doesn't support item deletion")
 
-class vec(list):
+class Vec(list):
     def __getattr__(self, key):
         return getattr_to_vec(self, key)
 
     def map(self, fn):
-        return vec(map(fn, self))
+        return Vec(map(fn, self))
 
     def as_float(self):
         return self.map(_utils.as_float)
@@ -271,31 +284,31 @@ for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 
 
     if op := getattr(operator, key, None):
         def fn(self, *args, op=op):
-            if args and isinstance(args[0], (vec, proxy)):
-                return vec(map(op, self, args[0]))
-            return vec(op(x, *args) for x in self)
+            if args and isinstance(args[0], (Vec, Proxy)):
+                return Vec(map(op, self, args[0]))
+            return Vec(op(x, *args) for x in self)
     else:
         def fn(self, *args, key=key):
             return getattr_to_vec(self, key)(*args)
 
-    setattr(proxy, key, fn)
-    setattr(vec, key, fn)
+    setattr(Proxy, key, fn)
+    setattr(Vec, key, fn)
 
 for key in ('mean', 'fmean', 'geometric_mean', 'harmonic_mean', 'median', 'median_low', 'median_high', 'median_grouped', 'mode', 'multimode', 'quantiles', 'pstdev', 'pvariance', 'stdev', 'variance'):
 
     def fn(self, *args, _fn=getattr(statistics, key), **kwargs):
         return _fn(self.__flat__(), *args, **kwargs)
 
-    setattr(proxy, key, fn)
-    setattr(vec, key, getattr(statistics, key))
+    setattr(Proxy, key, fn)
+    setattr(Vec, key, getattr(statistics, key))
 
 for key in ('ceil', 'fabs', 'floor', 'isfinite', 'isinf', 'isnan', 'isqrt', 'prod', 'trunc', 'exp', 'log', 'log2', 'log10', 'sqrt'):
 
     def fn(self, *args, _fn=getattr(math, key), **kwargs):
         return self.map(partial(_fn, *args, **kwargs))
 
-    setattr(proxy, key, fn)
-    setattr(vec, key, fn)
+    setattr(Proxy, key, fn)
+    setattr(Vec, key, fn)
 
 
 class exec_(_Base):
@@ -395,16 +408,16 @@ class exec_(_Base):
         self.handle_exec_result(vars)
 
     def convert_to_table(self, value):
-        if isinstance(value, proxy) and not value.__is_row__() and not value.__is_column__():
+        if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
             data = list(value)
             headers = apply_slice(list(value.__parent__.__headers__), value.__cols__)
             return Table(data, headers)
 
-        if isinstance(value, Table) and not isinstance(value, proxy):
+        if isinstance(value, Table):
             return value
 
         if isinstance(value, dict):
-            columns = [list(v) if isinstance(v, (list, tuple, proxy)) else [v] for v in value.values()]
+            columns = [list(v) if isinstance(v, (list, tuple, Proxy)) else [v] for v in value.values()]
             max_rows = max(len(col) for col in columns)
             if any(col and max_rows % len(col) != 0 for col in columns):
                 raise ValueError(f'mismatched rows: {value}')
