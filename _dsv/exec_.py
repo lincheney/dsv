@@ -305,7 +305,7 @@ class exec_(_Base):
     parent = argparse.ArgumentParser(add_help=False)
     parent.set_defaults(
         expr=False,
-        slurp=False,
+        slurp=True,
         ignore_errors=False,
         remove_errors=False,
     )
