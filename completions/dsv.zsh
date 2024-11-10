@@ -119,10 +119,9 @@ _shtab__dsv_exec_options=(
   {-q,--quiet}"[do not print errors]"
   "--var[python variable to use to refer to the data (default\: X)]:var:"
   {-b,--bytes}"[do not auto convert data to int, str etc, treat everything as bytes]"
-  {-e,--expr}"[print the last python expression given]"
+  {-S,--no-slurp}"[run python on one row at a time]"
   {-I,--ignore-errors}"[do not abort on python errors]"
   {-E,--remove-errors}"[remove rows on python errors]"
-  {-S,--no-slurp}"[run python on one row at a time]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -175,7 +174,7 @@ _shtab__dsv_exec_filter_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
-  ":python statements to run:"
+  "(*):python statements to run:"
 )
 
 _shtab__dsv_exec_groupby_options=(
@@ -184,7 +183,7 @@ _shtab__dsv_exec_groupby_options=(
   "--var[python variable to use to refer to the data (default\: X)]:var:"
   {-b,--bytes}"[do not auto convert data to int, str etc, treat everything as bytes]"
   {-x,--complement}"[exclude, rather than include, field names]"
-  {-e,--expr}"[evaluate the python expression given and output in a new table]"
+  "*"{-k,--fields}"[search only on these fields]:fields:"
   {-I,--ignore-errors}"[do not abort on python errors]"
   {-E,--remove-errors}"[remove rows on python errors]"
   {-H,--header}"[treat first row as a header]"
@@ -208,8 +207,7 @@ _shtab__dsv_exec_groupby_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
-  "(*)::group based only on these fields:"
-  ":python statements to run:"
+  "(*):python statements to run:"
 )
 
 _shtab__dsv_flip_options=(
