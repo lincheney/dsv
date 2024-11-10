@@ -5,7 +5,7 @@ class exec_filter(exec_):
     ''' filter rows using python '''
     name = None
     parser = argparse.ArgumentParser(parents=[exec_.parent])
-    parser.add_argument('script', help='python statements to run')
+    parser.add_argument('script', nargs='+', help='python statements to run')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')
     group.add_argument('--passthru', action='store_true', help='print both matching and non-matching lines')
