@@ -369,12 +369,15 @@ class exec_(_Base):
         # add some newlines so that newlines add up
         script = '\n' * (len(opts.script) - 1) + opts.script[-1]
         # test if it is an expr
+        self.code = None
         try:
             self.code = compile(script, filename, 'eval')
             self.expr = True
         except SyntaxError:
             if eval_only:
                 raise
+        # compile outside the above try-except to avoid a double traceback on error
+        if self.code is None:
             self.code = compile(script, filename, 'exec')
             self.expr = False
 
