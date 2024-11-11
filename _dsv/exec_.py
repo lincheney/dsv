@@ -18,12 +18,6 @@ def to_bytes(x):
         x = str(x).encode('utf8')
     return x
 
-def getattr_to_vec(self, key):
-    value = self.map(lambda x: getattr(x, key))
-    if all(map(callable, value.__flat__())):
-        return (lambda *a, **kw: value.map(lambda fn: fn(*a, **kw)))
-    return value
-
 def is_list_of(value, types):
     return isinstance(value, list) and all(isinstance(x, types) for x in value)
 
@@ -44,7 +38,11 @@ def slice_to_list(key, stop=None):
     return list(range(*key.indices(key.stop if stop is None else stop)))
 
 class Vectorised:
-    pass
+    def __getattr__(self, key):
+        value = self.map(lambda x: getattr(x, key))
+        if all(map(callable, value.__flat__())):
+            return (lambda *a, **kw: value.map(lambda fn: fn(*a, **kw)))
+        return value
 
 class BaseTable(Vectorised):
     def __setattr__(self, key, value):
@@ -54,7 +52,7 @@ class BaseTable(Vectorised):
     def __getattr__(self, key):
         if to_bytes(key) in self.__headers__:
             return self[key]
-        return getattr_to_vec(self, key)
+        return super().__getattr__(key)
 
     def __len__(self):
         return len(self.__data__)
@@ -280,9 +278,6 @@ class Proxy(BaseTable):
 
 
 class Vec(Vectorised, list):
-    def __getattr__(self, key):
-        return getattr_to_vec(self, key)
-
     def __flat__(self):
         return self
 
