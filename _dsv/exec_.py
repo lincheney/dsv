@@ -1,5 +1,6 @@
 import sys
 import argparse
+import copy
 import linecache
 import itertools
 import operator
@@ -440,6 +441,7 @@ class exec_(_Base):
         if not self.opts.bytes:
             rows = [self.parse_value(row) for row in rows]
 
+        vars['H'] = copy.copy(self.header)
         table = vars[self.opts.var] = Table(rows, self.header_numbers)
 
         with self.exec_wrapper(vars):
