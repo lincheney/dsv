@@ -307,7 +307,7 @@ for arity, scalar, functions in [
 
         if isinstance(fn, str):
             if arity < 0:
-                fn = name.replace('__r', '__', count=1)
+                fn = name.replace('__r', '__', 1)
             if not (fn := getattr(operator, fn, None)):
                 def fn(x, *args, fn=fn, **kwargs):
                     return getattr(x, fn)(*args, **kwargs)
