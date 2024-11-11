@@ -1,7 +1,7 @@
 import argparse
 from ._base import _Base
 from ._column_slicer import _ColumnSlicer
-from .exec_ import exec_
+from .exec_ import exec_, BaseTable
 
 class exec_groupby(_ColumnSlicer, exec_):
     ''' aggregate rows using python '''
@@ -29,13 +29,7 @@ class exec_groupby(_ColumnSlicer, exec_):
         for key, group in self.groups.items():
 
             if header is None:
-                if self.header is None:
-                    header = []
-                else:
-                    header = self.header
-                    if not self.opts.bytes:
-                        header = self.parse_value(self.header)
-                header = self.slice(header, default=lambda i: str(i+1))
+                header = self.slice(self.header or [], default=lambda i: str(i+1))
 
             if not self.opts.bytes:
                 key = self.parse_value(key)
@@ -45,7 +39,7 @@ class exec_groupby(_ColumnSlicer, exec_):
         _Base.on_eof(self)
 
     def handle_exec_result(self, result, vars, table):
-        if self.expr and self.opts.var in vars:
+        if self.expr and self.opts.var in vars and not isinstance(result, BaseTable):
             if not isinstance(result, dict):
                 result = {self.opts.script[-1]: result}
             result = {**self.current_key, **result}

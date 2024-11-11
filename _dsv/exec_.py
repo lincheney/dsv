@@ -3,7 +3,6 @@ import argparse
 import linecache
 import itertools
 import operator
-from functools import partial
 import math
 import statistics
 from contextlib import contextmanager
@@ -11,6 +10,7 @@ from ._base import _Base
 from . import _utils
 
 FULL_SLICE = slice(None)
+MISSING = b''
 
 def to_bytes(x):
     if not isinstance(x, bytes):
@@ -18,10 +18,10 @@ def to_bytes(x):
     return x
 
 def getattr_to_vec(self, key):
-    value = [getattr(x, key) for x in self]
-    if all(map(callable, value)):
-        return (lambda *a, **kw: Vec(fn(*a, **kw) for fn in value))
-    return Vec(value)
+    value = self.map(lambda x: getattr(x, key))
+    if all(map(callable, value.__flat__())):
+        return (lambda *a, **kw: value.map(lambda fn: fn(*a, **kw)))
+    return value
 
 def is_list_of(value, types):
     return isinstance(value, list) and all(isinstance(x, types) for x in value)
@@ -37,21 +37,32 @@ def apply_slice(data, key, flat=False):
     else:
         while key and key[-1] >= len(data):
             key = key[:-1]
-        return [data[k] if k < len(data) else b'' for k in key]
+        return [data[k] if k < len(data) else MISSING for k in key]
 
-def slice_to_list(key):
-    return list(range(*key.indices(key.stop)))
+def slice_to_list(key, stop=None):
+    return list(range(*key.indices(key.stop if stop is None else stop)))
 
-class BaseTable:
+class Vectorised:
+    pass
+
+class BaseTable(Vectorised):
     def __setattr__(self, key, value):
         self[key] = value
     def __delattr__(self, key):
         del self[key]
     def __getattr__(self, key):
-        return self[key]
+        if to_bytes(key) in self.__headers__:
+            return self[key]
+        return getattr_to_vec(self, key)
 
     def __len__(self):
         return len(self.__data__)
+
+    def __numrows__(self):
+        return len(self)
+
+    def __numcols__(self):
+        return len(self.__headers__ or (self.__data__ and self.__data__[0]))
 
     def __add_col__(self, name):
         self.__headers__[name] = len(self.__headers__)
@@ -64,7 +75,7 @@ class BaseTable:
         return self.__headers__[col]
 
     def __parse_key__(self, key, new=False):
-        if isinstance(key, (int, slice)) or is_list_of(key, int) or (is_list_of(key, bool) and len(key) == len(self)):
+        if isinstance(key, (int, slice)) or is_list_of(key, int):
             k = (key, FULL_SLICE)
         elif isinstance(key, (str, bytes)) or is_list_of(key, (str, bytes, int)):
             k = (FULL_SLICE, key)
@@ -75,7 +86,7 @@ class BaseTable:
 
         real_rows, real_cols = k
 
-        length = len(self)
+        length = self.__numrows__()
         indices = range(length)
         if is_list_of(real_rows, bool) and len(real_rows) == length:
             real_rows = rows = [i for i, x in enumerate(real_rows) if x]
@@ -104,20 +115,10 @@ class BaseTable:
         return real_rows, real_cols, rows, cols
 
     def __flat__(self):
-        if self.__is_row__() or self.__is_column__():
-            return self
-        return itertools.chain.from_iterable(self)
+        return itertools.chain.from_iterable(self.__data__)
 
     def map(self, fn):
-        if self.__is_row__() or self.__is_column__():
-            return Vec(self).map(fn)
-        return Vec(Vec(row).map(fn) for row in self)
-
-    def as_float(self):
-        return self.map(_utils.as_float)
-
-    def sum(self):
-        return sum(self.__flat__())
+        return Table([Vec(row).map(fn) for row in self], self.__headers__.copy())
 
 
 class Table(BaseTable):
@@ -126,9 +127,6 @@ class Table(BaseTable):
             __headers__=headers,
             __data__=data,
         )
-
-    def __numcols__(self):
-        return len(self.__headers__ or (self.__data__ and self.__data__[0]))
 
     def __iter__(self):
         for i in range(len(self)):
@@ -139,8 +137,6 @@ class Table(BaseTable):
 
         # get a specific cell
         if isinstance(rows, int) and isinstance(cols, int):
-            if cols >= len(self.__data__[rows]):
-                return b''
             return self.__data__[rows][cols]
 
         return Proxy(self, rows, cols)
@@ -157,58 +153,48 @@ class Table(BaseTable):
                 row[:] = value if non_scalar else [value] * len(row)
             return
 
-        if isinstance(cols, int):
-            cols = (cols,)
-        elif isinstance(cols, slice):
-            cols = slice_to_list(cols)
-
-        if not non_scalar:
-            value = itertools.repeat(value)
-
+        value = iter(value) if non_scalar else itertools.repeat(value)
         for row in rows:
-            for col, v in zip(cols, value):
+            if isinstance(cols, int):
+                colindex = (cols,)
+            elif isinstance(cols, slice):
+                colindex = slice_to_list(cols, len(row))
+            else:
+                colindex = cols
+
+            for col in colindex:
                 if col >= len(row):
-                    row += [b''] * (col + 1 - len(row))
-                row[col] = v
+                    row += [MISSING] * (col + 1 - len(row))
+                row[col] = next(value, MISSING)
 
     def __delitem__(self, key):
         real_rows, real_cols, rows, cols = self.__parse_key__(key, new=True)
 
-        delete_cols = real_rows == FULL_SLICE
-        delete_rows = real_cols == FULL_SLICE
-        if not delete_cols and not delete_rows:
-            raise IndexError(key)
-
-        if delete_rows:
-            if isinstance(rows, (int, slice)):
-                rows = [rows]
-            else:
-                rows = set(rows)
-
-            for r in sorted(rows, reverse=True):
-                del self.__data__[r]
-
-        if delete_cols:
-            if isinstance(cols, (int, slice)):
-                cols = [cols]
-            else:
-                cols = set(cols)
+        # delete every row in specific columns
+        if real_rows == FULL_SLICE:
+            cols = [cols] if isinstance(cols, (int, slice)) else set(cols)
 
             header = list(self.__headers__.keys())
             for c in sorted(cols, reverse=True):
                 if isinstance(c, int):
                     c = slice(c, c+1)
-
                 for row in self.__data__:
                     del row[c]
                 del header[c]
 
             self.__dict__['__headers__'] = {k: i for i, k in enumerate(header)}
 
+        # delete every column in specific rows
+        elif real_cols == FULL_SLICE:
+            rows = [rows] if isinstance(rows, (int, slice)) else set(rows)
+            for r in sorted(rows, reverse=True):
+                del self.__data__[r]
+
+        else:
+            raise IndexError(key)
+
     def append(self, value):
-        if not isinstance(value, (list, tuple)):
-            value = [value] * self.__numcols__()
-        self.__data__.append(value)
+        self.insert(len(self), value)
 
     def insert(self, index, value):
         if not isinstance(value, (list, tuple)):
@@ -224,6 +210,11 @@ class Proxy(BaseTable):
             __headers__={k: i for i, k in enumerate(apply_slice(list(parent.__headers__), cols))},
         )
 
+    def __numrows__(self):
+        if self.__is_row__():
+            return 1
+        return super().__numrows__()
+
     def __is_row__(self):
         return isinstance(self.__rows__, int)
 
@@ -236,7 +227,7 @@ class Proxy(BaseTable):
         # add it to the parent as well
         num = self.__parent__.__add_col__(name)
         if isinstance(self.__cols__, slice):
-            self.__cols__ = slice_to_list(self.__cols__)
+            self.__dict__['__cols__'] = slice_to_list(self.__cols__)
         self.__cols__.append(num)
 
         return super().__add_col__(name)
@@ -257,27 +248,16 @@ class Proxy(BaseTable):
     def __repr__(self):
         return repr(self.__data__)
 
-    def __getattr__(self, key):
-        if self.__is_column__():
-            return getattr_to_vec(self, key)
-        return super().__getattr__(key)
-
     def __parse_key__(self, key, new=False):
-        real_rows, real_cols, rows, cols = super().__parse_key__(key, new)
-
-        if self.__is_column__():
-            if isinstance(key, tuple) or real_cols != FULL_SLICE:
-                raise IndexError(key)
-            return (apply_slice(self.__rows__, rows, flat=True), self.__cols__)
-
+        if isinstance(key, tuple) and (self.__is_row__() or self.__is_column__()):
+            raise IndexError(key)
         if self.__is_row__():
-            if isinstance(key, tuple):
-                raise IndexError(key)
-            elif real_rows != FULL_SLICE:
-                cols = rows
-            return (self.__rows__, apply_slice(self.__cols__, cols, flat=True))
+            key = (FULL_SLICE, key)
 
-        return (apply_slice(self.__rows__, rows), apply_slice(self.__cols__, cols))
+        _, _, rows, cols = super().__parse_key__(key, new)
+        rows = self.__rows__ if self.__is_row__()    else apply_slice(self.__rows__, rows, flat=True)
+        cols = self.__cols__ if self.__is_column__() else apply_slice(self.__cols__, cols, flat=True)
+        return (rows, cols)
 
     def __getitem__(self, key):
         key = self.__parse_key__(key)
@@ -287,57 +267,77 @@ class Proxy(BaseTable):
         key = self.__parse_key__(key, True)
         self.__parent__[key] = value
 
+    def __flat__(self):
+        if self.__is_row__() or self.__is_column__():
+            return self
+        return super().__flat__()
 
-class Vec(list):
+    def map(self, fn):
+        if self.__is_row__() or self.__is_column__():
+            return Vec(self).map(fn)
+        return super().map(fn)
+
+
+class Vec(Vectorised, list):
     def __getattr__(self, key):
         return getattr_to_vec(self, key)
+
+    def __flat__(self):
+        return self
 
     def map(self, fn):
         return Vec(map(fn, self))
 
-    def as_float(self):
-        return self.map(_utils.as_float)
 
-    def sum(self):
-        return sum(self)
+for arity, scalar, functions in [
+    (1, False, (
+        '__round__', '__floor__', '__ceil__', '__neg__', '__pos__', '__invert__', '__index__',
+        math.ceil, math.fabs, math.floor, math.isfinite, math.isinf, math.isnan, math.isqrt, math.prod, math.trunc, math.exp, math.log, math.log2, math.log10, math.sqrt,
+        _utils.as_float,
+    )),
+    (1, True, (
+        sum,
+        statistics.mean, statistics.fmean, statistics.geometric_mean, statistics.harmonic_mean, statistics.median, statistics.median_low, statistics.median_high, statistics.median_grouped, statistics.mode, statistics.multimode, statistics.quantiles, statistics.pstdev, statistics.pvariance, statistics.stdev, statistics.variance,
+    )),
+    (2, True, (
+        '__lt__', '__gt__', '__le__', '__ge__', '__eq__', '__ne__', '__add__', '__sub__', '__mul__', '__matmul__', '__truediv__', '__floordiv__', '__mod__', '__lshift__', '__rshift__', '__and__', '__xor__', '__or__', '__pow__', '__divmod__',
+    )),
+    (-2, True, (
+        '__rlt__', '__rgt__', '__rle__', '__rge__', '__req__', '__rne__', '__radd__', '__rsub__', '__rmul__', '__rmatmul__', '__rtruediv__', '__rfloordiv__', '__rmod__', '__rlshift__', '__rrshift__', '__rand__', '__rxor__', '__ror__', '__rpow__', '__rdivmod__',
+    )),
+]:
+    for fn in functions:
+        name = fn if isinstance(fn, str) else fn.__name__
 
-for fn in ('round', 'floor', 'ceil', 'lt', 'gt', 'le', 'ge', 'eq', 'ne', 'neg', 'pos', 'invert', 'add', 'sub', 'mul', 'matmul', 'truediv', 'floordiv', 'mod', 'divmod', 'lshift', 'rshift', 'and', 'xor', 'or', 'pow', 'index'):
-    key = f'__{fn}__'
+        if isinstance(fn, str):
+            if arity < 0:
+                fn = name.replace('__r', '__', count=1)
+            if not (fn := getattr(operator, fn, None)):
+                def fn(x, *args, fn=fn, **kwargs):
+                    return getattr(x, fn)(*args, **kwargs)
 
-    if op := getattr(operator, key, None):
-        def fn(self, *args, op=op):
-            if args and isinstance(args[0], (Vec, Proxy)):
-                return Vec(map(op, self, args[0]))
-            return Vec(op(x, *args) for x in self)
-    else:
-        def fn(self, *args, key=key):
-            return getattr_to_vec(self, key)(*args)
+        if arity == 1 and scalar:
+            def method(self, *args, fn=fn, **kwargs):
+                return fn(self.__flat__(), *args, **kwargs)
 
-    setattr(Proxy, key, fn)
-    setattr(Vec, key, fn)
+        elif arity == 1:
+            def method(self, *args, fn=fn, **kwargs):
+                return self.map(lambda x: fn(x, *args, **kwargs))
 
-for fn in ('truediv', 'floordiv', 'add', 'sub', 'mul', 'mod', 'divmod', 'pow', 'lshift', 'rshift', 'and', 'xor', 'or'):
-    key = f'__r{fn}__'
-    def fn(self, other, key=f'__{fn}__'):
-        return getattr(Vec([other] * len(self)), key)(self)
-    setattr(Proxy, key, fn)
-    setattr(Vec, key, fn)
+        elif arity == 2:
+            def method(self, other, *args, fn=fn, **kwargs):
+                if isinstance(other, Vectorised):
+                    return Vec(fn(x, y, *args, **kwargs) for x, y in zip(self, other))
+                return self.map(lambda x: fn(x, other, *args, **kwargs))
 
-for key in ('mean', 'fmean', 'geometric_mean', 'harmonic_mean', 'median', 'median_low', 'median_high', 'median_grouped', 'mode', 'multimode', 'quantiles', 'pstdev', 'pvariance', 'stdev', 'variance'):
+        elif arity == -2:
+            def method(self, other, *args, fn=fn, **kwargs):
+                return self.map(lambda x: fn(other, x, *args, **kwargs))
 
-    def fn(self, *args, _fn=getattr(statistics, key), **kwargs):
-        return _fn(self.__flat__(), *args, **kwargs)
+        else:
+            raise NotImplementedError(arity, scalar)
 
-    setattr(Proxy, key, fn)
-    setattr(Vec, key, getattr(statistics, key))
-
-for key in ('ceil', 'fabs', 'floor', 'isfinite', 'isinf', 'isnan', 'isqrt', 'prod', 'trunc', 'exp', 'log', 'log2', 'log10', 'sqrt'):
-
-    def fn(self, *args, _fn=getattr(math, key), **kwargs):
-        return self.map(partial(_fn, *args, **kwargs))
-
-    setattr(Proxy, key, fn)
-    setattr(Vec, key, fn)
+        setattr(Vectorised, name, method)
 
 
 class exec_(_Base):
@@ -451,9 +451,7 @@ class exec_(_Base):
 
     def convert_to_table(self, value):
         if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
-            data = list(value)
-            headers = apply_slice(list(value.__parent__.__headers__), value.__cols__)
-            return Table(data, headers)
+            return Table(list(value), value.__headers__)
 
         if isinstance(value, Table):
             return value
@@ -463,14 +461,16 @@ class exec_(_Base):
             max_rows = max(len(col) for col in columns)
             if any(col and max_rows % len(col) != 0 for col in columns):
                 raise ValueError(f'mismatched rows: {value}')
-            columns = [col * (max_rows // len(col)) if col else [b''] * max_rows for col in columns]
+            columns = [col * (max_rows // len(col)) if col else [MISSING] * max_rows for col in columns]
             data = list(zip(*columns))
             headers = value.keys()
             return Table(data, headers)
 
     def handle_exec_result(self, result, vars, table):
-        table = self.convert_to_table(result)
+        if result is None:
+            return
 
+        table = self.convert_to_table(result)
         if table is not None:
             headers = table.__headers__
             rows = table.__data__
@@ -482,8 +482,6 @@ class exec_(_Base):
             for row in rows:
                 super().on_row([to_bytes(x) for x in row])
 
-        elif result is None:
-            return
         elif self.expr:
             print(result)
         else:
