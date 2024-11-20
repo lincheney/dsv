@@ -24,11 +24,14 @@ class uniq(_ColumnSlicer):
     def on_row(self, row, ofs=b'\x00'):
         key = tuple(self.slice(row, self.opts.complement))
         self.uniq.setdefault(key, row)
-        self.counts[key] = self.counts.get(key, 0) + 1
+        count = self.counts[key] = self.counts.get(key, 0) + 1
+        if self.opts.count_column is None and count == 1:
+            super().on_row(row)
 
     def on_eof(self):
-        for k, row in self.uniq.items():
-            if self.opts.count_column:
-                row = [b'%i' % self.counts[k]] + row
-            super().on_row(row)
+        if self.opts.count_column is not None:
+            for k, row in self.uniq.items():
+                if self.opts.count_column:
+                    row = [b'%i' % self.counts[k]] + row
+                super().on_row(row)
         super().on_eof()
