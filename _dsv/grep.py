@@ -41,6 +41,9 @@ class grep(_ColumnSlicer):
 
     def __init__(self, opts):
         super().__init__(opts)
+        if not opts.patterns:
+            self.parser.error('error: the following arguments are required: patterns')
+
         self.matched_count = 0
         # field overrides word
         opts.word_regexp = opts.word_regexp and not opts.field_regexp
