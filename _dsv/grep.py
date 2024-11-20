@@ -10,6 +10,7 @@ class grep(_ColumnSlicer):
     parent = argparse.ArgumentParser(add_help=False)
     parent.add_argument('-e', '--regexp', dest='patterns', action='append', help='pattern to search for')
     parent.add_argument('-F', '--fixed-strings', action='store_true', help='treat all patterns as literals instead of as regular expressions')
+    parent.add_argument('-f', '--file', action='append', help='obtain patterns from FILE, one per line')
     parent.add_argument('-w', '--word-regexp', action='store_true', help='select only those matches surrounded by word boundaries')
     parent.add_argument('-x', '--field-regexp', action='store_true', help='select only those matches that exactly match the column')
     parent.add_argument('-v', '--invert-match', action='store_true', help='select non-matching lines')
@@ -41,7 +42,7 @@ class grep(_ColumnSlicer):
 
     def __init__(self, opts):
         super().__init__(opts)
-        if not opts.patterns:
+        if not opts.patterns and not opts.file:
             self.parser.error('error: the following arguments are required: patterns')
 
         self.matched_count = 0
@@ -51,6 +52,9 @@ class grep(_ColumnSlicer):
         self.grep_colour = opts.colour and not (opts.invert_match and not opts.passthru)
 
         self.patterns = opts.patterns = [p.encode('utf8') for p in opts.patterns]
+        for file in opts.file:
+            with open(file, 'rb') as file:
+                self.patterns.extend(line.rstrip(b'\r\n') for line in file)
 
         # case sensitive if pattern is not lowercase
         opts.case_sensitive = opts.case_sensitive or any(p != p.lower() for p in opts.patterns)
