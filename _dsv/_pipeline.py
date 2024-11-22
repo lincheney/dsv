@@ -43,3 +43,7 @@ class _Pipeline(_Base):
         if kwargs:
             opts = argparse.Namespace(**{**vars(opts), **kwargs})
         return opts
+
+    def action(self, name, *args, **kwargs):
+        handler = getattr(__import__('_dsv.'+name, fromlist=[name]), name)
+        return handler.from_args(args, **kwargs)
