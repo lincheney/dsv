@@ -69,5 +69,6 @@ class pipeline(_Base):
         return opts
 
     def action(self, name, *args, **kwargs):
-        handler = next(h for h in get_all_handlers() if h.get_name() == name)
-        return handler.from_args(args, **kwargs)
+        if handler := next((h for h in get_all_handlers() if h.get_name() == name), None):
+            return handler.from_args(args, **kwargs)
+        raise ValueError(f'cannot find handler named {name}')
