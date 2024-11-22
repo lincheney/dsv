@@ -7,6 +7,7 @@ class sort(_ColumnSlicer):
     ''' sort the rows '''
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('fields', nargs='*', help='sort based only on these fields')
+    parser.add_argument('-k', '--fields', metavar='fields', type=lambda x: x.split(','), dest='old_style_fields', help='search only these fields')
     parser.add_argument('--help', action='help', help='show this help message and exit')
     parser.add_argument('--regex', action='store_true', help='treat fields as regexes')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
@@ -23,6 +24,7 @@ class sort(_ColumnSlicer):
     parser.add_argument('-V', '--version-sort', action='append_const', dest='sort_flags', const='-V', help='natural sort of version numbers within text')
 
     def __init__(self, opts):
+        opts.fields += opts.old_style_fields or ()
         super().__init__(opts)
         self.rows = []
 
