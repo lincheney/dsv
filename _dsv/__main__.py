@@ -18,7 +18,7 @@ def main():
         return
 
     opts.handler = opts.handler or _base._Base
-    handler = opts.handler.from_opts(opts, extras, parser)
+    handler = opts.handler.from_opts(opts, extras, sub_mapping.get(opts.handler, parser))
     try:
         list(handler.process_file(sys.stdin.buffer))
     finally:
