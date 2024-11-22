@@ -11,6 +11,7 @@ class pipe(_ColumnSlicer):
     parser = argparse.ArgumentParser(add_help=True)
     parser.add_argument('-k', '--fields', action='append', default=[], help='pipe only on these fields')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
+    parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
     parser.add_argument('-a', '--append-columns', action='append', default=[], type=utf8_type, help='append output as extra fields rather than replacing')
     parser.add_argument('-q', '--no-quote-input', action='store_true', help='do not do CSV quoting on the input')
     parser.add_argument('command', nargs='+', help='command to pipe rows through')

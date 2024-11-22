@@ -6,6 +6,7 @@ class cut(_ColumnSlicer):
     parser = argparse.ArgumentParser()
     parser.add_argument('fields', nargs='+', help='select only these fields')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
+    parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
 
     header_map = None
     def on_header(self, header):

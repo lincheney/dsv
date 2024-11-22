@@ -17,6 +17,7 @@ class grep(_ColumnSlicer):
     parent.add_argument('-s', '--case-sensitive', action='store_true', help='search case sensitively')
     parent.add_argument('-m', '--max-count', type=int, default=float('inf'), metavar='NUM', help='show only the first NUM matching rows')
     parent.add_argument('-k', '--fields', action='append', default=[], help='search only on these fields')
+    parent.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
     parent.add_argument('--complement', action='store_true', help='exclude, rather than include, field names')
     parent.set_defaults(
         replace=None,

@@ -7,6 +7,7 @@ class uniq(_ColumnSlicer):
     parser = argparse.ArgumentParser()
     parser.add_argument('fields', nargs='*', help='check these only fields for uniqueness')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
+    parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
     parser.add_argument('-c', '--count', action='store_true', help='prefix lines by the number of occurrences')
     parser.add_argument('-C', '--count-column', type=_utils.utf8_type, help='name of column to put the count in')
 

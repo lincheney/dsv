@@ -12,8 +12,10 @@ class _ColumnSlicer(_Base):
                 opts.fields[i] = (int(s)-1 if s else 0, int(e)-1 if e else float('inf'))
             elif f.isdigit():
                 opts.fields[i] = int(f) - 1
-            elif isinstance(f, str):
+            else:
                 opts.fields[i] = f.encode('utf8')
+                if opts.regex:
+                    opts.fields[i] = re.compile(opts.fields[i])
 
     def make_header_map(self, header):
         return {k: i for i, k in enumerate(header)}
@@ -36,6 +38,13 @@ class _ColumnSlicer(_Base):
                         newrow[i] = None
                     else:
                         newrow.append(row[i])
+            elif isinstance(f, re.Pattern):
+                for k, i in self.header_map.items():
+                    if f.search(k):
+                        if complement:
+                            newrow[i] = None
+                        else:
+                            newrow.append(row[i])
             else:
                 i = f if isinstance(f, int) else self.header_map.get(f)
                 if i is not None and i < len(row):
