@@ -5,6 +5,7 @@
 
 _shtab__dsv_commands() {
   local _commands=(
+    "\!:pipe multiple dsv commands together"
     "cat:concatenate files by row"
     "cut:select columns"
     "exec:run python on each row"
@@ -38,6 +39,31 @@ _shtab__dsv_commands() {
 }
 
 _shtab__dsv_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[treat first row as a header]"
+  {-N,--no-header}"[do not treat first row as header]"
+  "--drop-header[do not print the header]"
+  "--trailer[print a trailer]:trailer:(never always auto)"
+  "--numbered-columns[number the columns in the header]:numbered_columns:(never always auto)"
+  {-d,--ifs}"[input field separator]:ifs:"
+  "--plain-ifs[treat input field separator as a literal not a regex]"
+  {-D,--ofs}"[output field separator]:ofs:"
+  "--irs[input row separator]:irs:"
+  "--ors[output row separator]:ors:"
+  "--csv[treat input as csv]"
+  "--tsv[treat input as tsv]"
+  "--ssv[treat input as whitespace separated]"
+  "--combine-trailing-columns[if a row has more columns than the header, combine the last ones into one, useful with --ssv]"
+  {-P,--pretty}"[prettified output]"
+  "--page[show output in a pager (less)]"
+  {--colour,--color}"[enable colour]:colour:(never always auto)"
+  "--header-colour[ansi escape code for the header]:header_colour:"
+  "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
+  "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
+  {-Q,--no-quoting}"[do not handle quotes from input]"
+)
+
+_shtab__dsv___options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
@@ -269,6 +295,7 @@ _shtab__dsv_fromjson_options=(
 )
 
 _shtab__dsv_frommarkdown_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -696,6 +723,7 @@ _shtab__dsv_sqlite_options=(
 )
 
 _shtab__dsv_tac_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -796,6 +824,7 @@ _shtab__dsv_tojson_options=(
 )
 
 _shtab__dsv_tomarkdown_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -889,6 +918,7 @@ _shtab__dsv() {
       (( CURRENT += 1 ))
       curcontext="${curcontext%:*:*}:_shtab__dsv-$line[1]:"
       case $line[1] in
+        !) _arguments -C -s $_shtab__dsv___options ;;
         cat) _arguments -C -s $_shtab__dsv_cat_options ;;
         cut) _arguments -C -s $_shtab__dsv_cut_options ;;
         exec) _arguments -C -s $_shtab__dsv_exec_options ;;
