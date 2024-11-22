@@ -50,8 +50,8 @@ class sort(_ColumnSlicer):
         proc.stdin.close()
 
         for line in proc.stdout:
-            i = int(line)
-            super().on_row(self.rows[i])
+            if super().on_row(self.rows[int(line)]):
+                break
 
         super().on_eof()
         proc.wait()

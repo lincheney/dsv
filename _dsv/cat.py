@@ -35,14 +35,14 @@ class cat(_Base):
 
         if self.opts.number:
             header = [b'n'] + header
-        super().on_header(header)
         # drop all future headers
         self.on_header = lambda h: 0
+        return super().on_header(header)
 
     def on_row(self, row):
         if self.opts.number:
             row.insert(0, b'%i' % self.row_count)
-        super().on_row(row)
+        return super().on_row(row)
 
     def on_eof(self):
         pass

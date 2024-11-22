@@ -19,7 +19,7 @@ class flip(_Base):
         if self.opts.header == 'yes':
             header.append(b'key')
         header.append(b'value')
-        super().on_header(header)
+        return super().on_header(header)
 
     def on_row(self, row):
         if self.count == 0:
@@ -29,7 +29,8 @@ class flip(_Base):
                 self.header = []
 
         elif self.opts.row_sep:
-            super().on_row([b'---'])
+            if super().on_row([b'---']):
+                return True
 
         self.count += 1
 
@@ -38,7 +39,8 @@ class flip(_Base):
             if self.opts.header == 'yes':
                 row.append(self.header[i-1] if i <= len(self.header) else b'')
             row.append(value)
-            super().on_row(row)
+            if super().on_row(row):
+                return True
 
         if self.opts.lines and self.count >= self.opts.lines:
             return True

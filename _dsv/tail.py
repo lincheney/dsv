@@ -19,7 +19,7 @@ class tail(_Base):
             self.count += 1
             # print except for first n-1 lines
             if self.count >= self.lines:
-                super().on_row(row)
+                return super().on_row(row)
         else:
             # print last n lines
             self.ring.append(row)
@@ -27,5 +27,6 @@ class tail(_Base):
     def on_eof(self):
         if self.ring is not None:
             for row in self.ring:
-                super().on_row(row)
+                if super().on_row(row):
+                    break
         super().on_eof()

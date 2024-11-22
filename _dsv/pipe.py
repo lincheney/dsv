@@ -20,6 +20,7 @@ class pipe(_ColumnSlicer):
         super().__init__(opts)
         self.queue = deque()
 
+    thread = None
     proc = None
     proc_stdout = None
     def start_process(self):
@@ -28,6 +29,11 @@ class pipe(_ColumnSlicer):
             self.thread = threading.Thread(target=self.read_from_proc, args=(self.proc,), daemon=True)
             self.thread.start()
         return self.proc
+
+    def stop_process(self):
+        if self.proc:
+            self.proc.stdin.close()
+            self.proc.wait()
 
     def read_from_proc(self, proc):
         opts = argparse.Namespace(**vars(self.opts))
@@ -56,10 +62,14 @@ class pipe(_ColumnSlicer):
                 for k, v in zip(indices, stdout):
                     row[k] = v
 
-            super().on_row(row)
+            if super().on_row(row):
+                break
+
+        proc.terminate()
+        self.stop_process()
 
     def on_header(self, header):
-        super().on_header(header + self.opts.append_columns)
+        return super().on_header(header + self.opts.append_columns)
 
     def on_row(self, row):
         ofs = b'\t' if self.opts.ofs is self.PRETTY_OUTPUT else self.opts.ofs
@@ -68,13 +78,17 @@ class pipe(_ColumnSlicer):
         input = ofs.join(self.format_columns(input, ofs, self.opts.ors, not self.opts.no_quote_input))
 
         proc = self.start_process()
-        proc.stdin.write(input + self.opts.ors)
-        proc.stdin.flush()
+        try:
+            proc.stdin.write(input + self.opts.ors)
+            proc.stdin.flush()
+        except ValueError as e:
+            if e.args[0] == 'write to closed file':
+                return True
+            raise
         self.queue.append(row)
 
     def on_eof(self):
-        if self.proc:
-            self.proc.stdin.close()
-            self.proc.wait()
+        self.stop_process()
+        if self.thread:
             self.thread.join()
         super().on_eof()

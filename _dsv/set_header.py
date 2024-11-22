@@ -18,10 +18,11 @@ class set_header(_Base):
                 header = [self.opts.auto % (i+1) for i in range(len(row))]
             else:
                 header = []
-            self.on_header(header)
+            if self.on_header(header):
+                return True
 
         self.on_row = super().on_row
-        self.on_row(row)
+        return self.on_row(row)
 
     def on_header(self, header):
         self.set_header = True
@@ -48,4 +49,4 @@ class set_header(_Base):
 
         self.header = header or None
         if self.header:
-            super().on_header(header)
+            return super().on_header(header)

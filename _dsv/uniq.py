@@ -27,12 +27,13 @@ class uniq(_ColumnSlicer):
         self.uniq.setdefault(key, row)
         count = self.counts[key] = self.counts.get(key, 0) + 1
         if self.opts.count_column is None and count == 1:
-            super().on_row(row)
+            return super().on_row(row)
 
     def on_eof(self):
         if self.opts.count_column is not None:
             for k, row in self.uniq.items():
                 if self.opts.count_column:
                     row = [b'%i' % self.counts[k]] + row
-                super().on_row(row)
+                if super().on_row(row):
+                    break
         super().on_eof()

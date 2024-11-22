@@ -397,7 +397,7 @@ class exec_(_Base):
         if self.opts.slurp:
             self.rows.append(row)
         else:
-            self.exec_per_row(row)
+            return self.exec_per_row(row)
 
     def on_eof(self):
         if self.opts.slurp:
@@ -447,7 +447,7 @@ class exec_(_Base):
                 exec(self.code, vars)
 
         result = vars.get(self.opts.var)
-        self.handle_exec_result(result, vars, table)
+        return self.handle_exec_result(result, vars, table)
 
     def convert_to_table(self, value):
         if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
@@ -476,11 +476,13 @@ class exec_(_Base):
             rows = table.__data__
 
             if not self.have_printed_header and headers:
-                super().on_header([to_bytes(k) for k in headers])
+                if super().on_header([to_bytes(k) for k in headers]):
+                    return True
                 self.have_printed_header = True
 
             for row in rows:
-                super().on_row([to_bytes(x) for x in row])
+                if super().on_row([to_bytes(x) for x in row]):
+                    return True
 
         elif self.expr:
             print(result)
@@ -489,7 +491,7 @@ class exec_(_Base):
 
     def exec_per_row(self, row, **vars):
         self.count = self.count + 1
-        self.do_exec([row], N=self.count, **vars)
+        return self.do_exec([row], N=self.count, **vars)
 
     def exec_on_all_rows(self, rows, **vars):
-        self.do_exec(rows, N=len(rows), **vars)
+        return self.do_exec(rows, N=len(rows), **vars)

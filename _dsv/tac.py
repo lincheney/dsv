@@ -12,5 +12,6 @@ class tac(_Base):
 
     def on_eof(self):
         for row in reversed(self.rows):
-            super().on_row(row)
+            if super().on_row(row):
+                break
         super().on_eof()

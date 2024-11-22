@@ -309,7 +309,7 @@ class _Base:
         self.start_outfile()
         self.outfile.write(self.format_row(row, padding) + self.opts.ors)
 
-    def on_header(self, header, padding=None):
+    def on_header(self, header, padding=None) -> bool:
         if not self.opts.drop_header:
             self.out_header = header
             if self.opts.numbered_columns:
@@ -328,7 +328,7 @@ class _Base:
                 header[-1] += self.RESET_COLOUR
             return _Base.on_row(self, header, padding, is_header=True)
 
-    def on_row(self, row, padding=None, is_header=False):
+    def on_row(self, row, padding=None, is_header=False) -> bool:
         if self.__numcols is None:
             self.__numcols = len(row)
             self.__rgb_map = [self.get_rgb(i) for i in range(self.__numcols)]
@@ -377,9 +377,11 @@ class _Base:
             for i, (p, row) in enumerate(zip(padding, self.__gathered_rows)):
                 if i == 0 and self.out_header:
                     header_padding = p
-                    _Base.on_header(self, row, p)
+                    if _Base.on_header(self, row, p):
+                        break
                 else:
-                    _Base.on_row(self, row, p)
+                    if _Base.on_row(self, row, p):
+                        break
 
         # show a trailer if too much data
         if self.out_header and (self.opts.trailer == 'always' or (_utils.stdout_is_tty() and self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):

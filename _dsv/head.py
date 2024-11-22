@@ -20,12 +20,14 @@ class head(_Base):
                 return True
 
             # print first n lines
-            super().on_row(row)
+            if super().on_row(row):
+                return True
             self.count += 1
             if self.count >= self.lines:
                 return True
         else:
             # print except for last n lines
             if self.ring and len(self.ring) >= -self.lines:
-                super().on_row(self.ring.popleft())
+                if super().on_row(self.ring.popleft()):
+                    return True
             self.ring.append(row)

@@ -32,12 +32,14 @@ class tomarkdown(_Base):
         self.opts.ofs = self.ofs
         for i, (p, row) in enumerate(zip(padding, self.rows)):
             self.outfile.write(b'| ')
-            super().on_row(row, p)
+            if super().on_row(row, p):
+                break
 
             if i == 0:
                 self.outfile.write(b'| ')
                 row = [b'-'*len(col) for col in row]
-                super().on_row(row)
+                if super().on_row(row):
+                    break
 
     def start_outfile(self):
         if self.opts.page and self.outfile_proc is None:
