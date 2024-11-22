@@ -13,6 +13,8 @@ class join(_ColumnSlicer):
     parser.add_argument('-2', dest='right_fields', action='append', help='join on these fields from FILE')
     parser.add_argument('-e', dest='empty_value', type=_utils.utf8_type, default='', metavar='STRING', help='replace missing input fields with STRING')
     parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
+    parser.add_argument('--rename-1', type=_utils.utf8_type, help='rename header from stdin according to this %-format string')
+    parser.add_argument('--rename-2', type=_utils.utf8_type, help='rename header from FILE according to this %-format string')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-a', dest='show_all', choices=('1', '2'), action='append', help='also print unpairable lines from the given file')
     group.add_argument('--join', choices=('inner', 'left', 'right', 'outer'), default='inner', help='type of join to perform')
@@ -71,7 +73,16 @@ class join(_ColumnSlicer):
         if not self.header_lock.acquire(blocking=False):
             if no_join_fields:
                 self.opts.fields = self.collector.opts.fields = list(set(self.header) & set(self.collector.header))
-            header = self.paste_row(self.header, self.collector.header)
+
+            left = self.header
+            right = self.collector.header
+
+            if self.opts.rename_1:
+                left = [self.opts.rename_1 % h for h in left]
+            if self.opts.rename_2:
+                right = [self.opts.rename_2 % h for h in right]
+
+            header = self.paste_row(left, right)
             super().on_header(header)
             self.header_event.set()
 
