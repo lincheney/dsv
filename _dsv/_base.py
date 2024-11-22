@@ -6,6 +6,7 @@ import pkgutil
 import argparse
 import colorsys
 import subprocess
+from functools import cache
 from . import _utils
 import _dsv
 
@@ -13,6 +14,11 @@ UTF8_BOM = '\ufeff'.encode('utf8')
 
 def interpret_c_escapes(x: str):
     return x.encode('utf8').decode('unicode_escape').encode('utf8')
+
+@cache
+def get_all_handlers():
+    modules = [sub.name for sub in pkgutil.iter_modules(_dsv.__path__) if not sub.name.startswith('_')]
+    return [getattr(__import__('_dsv.'+name, fromlist=[name]), name) for name in modules]
 
 def make_parser(**kwargs):
     parser = argparse.ArgumentParser(allow_abbrev=False, **kwargs)
@@ -46,9 +52,8 @@ def make_main_parser(sub_mapping={}, handlers=None, help=None):
     parser = make_parser(formatter_class=argparse.RawTextHelpFormatter)
     parser.set_defaults(handler=None, quote_output=True)
 
-    modules = [sub.name for sub in pkgutil.iter_modules(_dsv.__path__) if not sub.name.startswith('_')]
     if handlers is None:
-        handlers = [getattr(__import__('_dsv.'+name, fromlist=[name]), name) for name in modules]
+        handlers = get_all_handlers()
 
     descr = '\n'.join(sorted(f'{h.get_name().ljust(20)}{h.__doc__ or ""}' for h in handlers))
     subparsers = parser.add_subparsers(dest='command', title='Commands', help=help, description=descr)

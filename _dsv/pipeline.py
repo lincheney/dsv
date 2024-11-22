@@ -1,6 +1,6 @@
 import argparse
 import copy
-from ._base import _Base
+from ._base import _Base, get_all_handlers
 
 class pipeline(_Base):
     ''' pipe multiple dsv commands together '''
@@ -60,5 +60,5 @@ class pipeline(_Base):
         return opts
 
     def action(self, name, *args, **kwargs):
-        handler = getattr(__import__('_dsv.'+name, fromlist=[name]), name)
+        handler = next(h for h in get_all_handlers() if h.get_name() == name)
         return handler.from_args(args, **kwargs)
