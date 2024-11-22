@@ -1,5 +1,4 @@
 import argparse
-import pkgutil
 import sys
 import os
 
