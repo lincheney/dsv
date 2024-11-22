@@ -46,3 +46,5 @@ class tomarkdown(_Base):
             cmd = ['less', '-RX', '--header=2']
             self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
             self.outfile = self.outfile_proc.stdin
+        else:
+            super().start_outfile()
