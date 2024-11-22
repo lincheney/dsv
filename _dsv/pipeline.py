@@ -8,7 +8,6 @@ class pipeline(_Base):
 
     def __init__(self, opts, pipeline=None):
         self.pipeline = pipeline
-
         if self.pipeline is None:
             self.pipeline = [[]]
             for arg in opts.extras:
@@ -17,16 +16,24 @@ class pipeline(_Base):
                 else:
                     self.pipeline[-1].append(arg)
             opts.extras = ()
-            self.pipeline = [self.action(*a, **vars(opts)) for a in self.pipeline]
+            kwargs = {k: v for k, v in vars(opts).items() if v is not None and k not in {'parser', 'extras', 'handler'}}
+            self.pipeline = [self.action(*a, **kwargs) for a in self.pipeline]
 
+        super().__init__(opts)
+
+        first = self.pipeline[0]
+        last = self.pipeline[-1]
         # input goes to first action
-        self.process_file = self.pipeline[0].process_file
+        self.process_file = first.process_file
 
         # apply guessed ofs on first action to last action
-        original = self.pipeline[0].determine_delimiters
+        original = first.determine_delimiters
         def determine_delimiters(*args, original=original, **kwargs):
             original(*args, **kwargs)
-            self.pipeline[-1].opts.ofs = self.pipeline[0].opts.ofs
+
+            if last.opts.ofs is None:
+                last.opts.ofs = first.opts.ofs
+
             # disable colour and stuff
             for p in self.pipeline[:-1]:
                 p.opts.ofs = b'\t'
@@ -34,7 +41,9 @@ class pipeline(_Base):
                 p.opts.colour = False
                 p.opts.numbered_columns = False
                 p.opts.rainbow_columns = False
-        self.pipeline[0].determine_delimiters = determine_delimiters
+                p.opts.drop_header = False
+                p.opts.page = False
+        first.determine_delimiters = determine_delimiters
 
         # pipe from left to right
         for src, dst in zip(self.pipeline[:-1], self.pipeline[1:]):
