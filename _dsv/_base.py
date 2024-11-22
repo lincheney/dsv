@@ -58,7 +58,7 @@ def make_main_parser(sub_mapping={}, handlers=None, help=None):
         if h.parser:
             parents.insert(0, h.parser)
             h.parser.prog = parser.prog + ' ' + h.get_name()
-        sub = subparsers.add_parser(h.get_name(), parents=parents, description=h.__doc__, add_help=False, help=None)
+        sub = subparsers.add_parser(h.get_name(), parents=parents, description=h.__doc__, add_help=not h.parser, help=None)
         sub.set_defaults(handler=h)
         sub_mapping[h] = sub
 
@@ -88,7 +88,7 @@ class _Base:
             self.outfile = sys.stdout.buffer
 
         if self.opts.extras:
-            self.parser.error('unrecognized arguments: ' + " ".join(self.opts.extras))
+            (self.parser or opts.parser).error('unrecognized arguments: ' + " ".join(self.opts.extras))
 
         # private variables
         self.__numcols = None
