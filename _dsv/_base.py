@@ -26,15 +26,9 @@ class _Base:
         self.opts = opts
         self.outfile = outfile
 
-        if not self.outfile:
-            if not _utils.stdout_is_tty():
-                self.outfile = sys.stdout.buffer
-            elif self.opts.page:
-                # setup the pager later
-                pass
-            else:
-                self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
-                self.outfile = self.outfile_proc.stdin
+        # setup subprocess outfiles later
+        if not self.outfile and not _utils.stdout_is_tty():
+            self.outfile = sys.stdout.buffer
 
         if self.opts.extras:
             self.opts.parser.error('unrecognized arguments: ' + " ".join(self.opts.extras))
@@ -299,16 +293,20 @@ class _Base:
 
         return ofs.join(row)
 
-    def start_pager(self):
-        if self.opts.page and self.outfile_proc is None:
-            cmd = ['less', '-RX']
-            if self.header is not None and not self.opts.drop_header:
-                cmd.append('--header=1')
-            self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
-            self.outfile = self.outfile_proc.stdin
+    def start_outfile(self):
+        if self.outfile_proc is None:
+            if self.opts.page:
+                cmd = ['less', '-RX']
+                if self.header is not None and not self.opts.drop_header:
+                    cmd.append('--header=1')
+                self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+                self.outfile = self.outfile_proc.stdin
+            else:
+                self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
+                self.outfile = self.outfile_proc.stdin
 
-    def print_row(self, row, padding=None):
-        self.start_pager()
+    def print_row(self, row, padding=None, is_header=False):
+        self.start_outfile()
         self.outfile.write(self.format_row(row, padding) + self.opts.ors)
 
     def on_header(self, header, padding=None):
@@ -328,9 +326,9 @@ class _Base:
             if self.opts.colour and self.opts.ofs is not self.PRETTY_OUTPUT and header:
                 header = [b''.join((self.opts.header_colour, self.opts.header_bg_colour, h, self.RESET_COLOUR, self.opts.header_bg_colour)) for h in header]
                 header[-1] += self.RESET_COLOUR
-            return _Base.on_row(self, header, padding)
+            return _Base.on_row(self, header, padding, is_header=True)
 
-    def on_row(self, row, padding=None):
+    def on_row(self, row, padding=None, is_header=False):
         if self.__numcols is None:
             self.__numcols = len(row)
             self.__rgb_map = [self.get_rgb(i) for i in range(self.__numcols)]
@@ -339,7 +337,7 @@ class _Base:
         if self.opts.ofs is self.PRETTY_OUTPUT:
             self.__gathered_rows.append(self.format_columns(row, self.PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
         else:
-            self.print_row(row, padding)
+            return self.print_row(row, padding, is_header)
 
     def justify(self, rows: list[bytes]):
         # get width of each column

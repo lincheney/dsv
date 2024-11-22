@@ -6,6 +6,7 @@ class frommarkdown(_Base):
     ''' convert from markdown table '''
 
     def __init__(self, opts):
+        opts.header = 'yes'
         super().__init__(opts)
         self.determine_delimiters(b'')
 

@@ -21,5 +21,5 @@ class tojson(_Base):
                 key = self.header[i].decode('utf8')
             values[key] = col.decode('utf8')
 
-        self.start_pager()
+        self.start_outfile()
         self.outfile.write(json.dumps(values).encode('utf8') + self.opts.ors)

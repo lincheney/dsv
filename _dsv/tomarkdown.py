@@ -27,7 +27,7 @@ class tomarkdown(_Base):
         # rows are already quoted
         self.opts.quote_output = False
 
-        self.start_pager()
+        self.start_outfile()
 
         self.opts.ofs = self.ofs
         for i, (p, row) in enumerate(zip(padding, self.rows)):
@@ -39,7 +39,7 @@ class tomarkdown(_Base):
                 row = [b'-'*len(col) for col in row]
                 super().on_row(row)
 
-    def start_pager(self):
+    def start_outfile(self):
         if self.opts.page and self.outfile_proc is None:
             cmd = ['less', '-RX', '--header=2']
             self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)

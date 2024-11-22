@@ -4,7 +4,7 @@ from ._base import _Base
 class _ColumnSlicer(_Base):
     def __init__(self, opts):
         super().__init__(opts)
-        self.header_map = None
+        self.header_map = {}
 
         for i, f in enumerate(opts.fields):
             if f != '-' and (match := re.fullmatch(r'(\d*)-(\d*)', f)):
@@ -37,7 +37,7 @@ class _ColumnSlicer(_Base):
                     else:
                         newrow.append(row[i])
             else:
-                i = f if isinstance(f, int) else (self.header_map and self.header_map.get(f))
+                i = f if isinstance(f, int) else self.header_map.get(f)
                 if i is not None and i < len(row):
                     if complement:
                         newrow[i] = None
