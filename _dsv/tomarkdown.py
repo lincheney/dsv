@@ -11,7 +11,7 @@ class tomarkdown(_Base):
         self.rows = []
 
     def on_header(self, header):
-        self.on_row(header)
+        return self.on_row(header)
 
     def on_row(self, row):
         row = [col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') for col in row]

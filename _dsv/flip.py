@@ -25,7 +25,8 @@ class flip(_Base):
         if self.count == 0:
             # first row
             if self.header is None:
-                self.on_header(None)
+                if self.on_header(None):
+                    return True
                 self.header = []
 
         elif self.opts.row_sep:

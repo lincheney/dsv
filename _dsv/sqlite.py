@@ -29,7 +29,7 @@ class sqlite(_Base):
             ], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
 
     def on_header(self, header):
-        self.on_row(header)
+        return self.on_row(header)
 
     def on_row(self, row):
         self.start_proc()
