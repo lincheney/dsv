@@ -21,6 +21,8 @@ _shtab__dsv_commands() {
     "pipe:pipe rows through a processs"
     "pretty:pretty prints the file"
     "replace:replace text"
+    "reshape-long:reshape to long format"
+    "reshape-wide:reshape to wide format"
     "set-header:sets the header labels"
     "sort:sort the rows"
     "sqlite:use sql on the data"
@@ -89,7 +91,9 @@ _shtab__dsv_cat_options=(
 
 _shtab__dsv_cut_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-f,--fields}"[select only these fields]:old_style_fields:"
   {-x,--complement}"[exclude, rather than include, field names]"
+  {-r,--regex}"[treat fields as regexes]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -111,7 +115,7 @@ _shtab__dsv_cut_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
-  "(*):select only these fields:"
+  "(*)::select only these fields:"
 )
 
 _shtab__dsv_exec_options=(
@@ -184,6 +188,7 @@ _shtab__dsv_exec_groupby_options=(
   {-b,--bytes}"[do not auto convert data to int, str etc, treat everything as bytes]"
   {-x,--complement}"[exclude, rather than include, field names]"
   "*"{-k,--fields}"[search only on these fields]:fields:"
+  {-r,--regex}"[treat fields as regexes]"
   {-I,--ignore-errors}"[do not abort on python errors]"
   {-E,--remove-errors}"[remove rows on python errors]"
   {-H,--header}"[treat first row as a header]"
@@ -298,6 +303,7 @@ _shtab__dsv_grep_options=(
   {-s,--case-sensitive}"[search case sensitively]"
   {-m,--max-count}"[show only the first NUM matching rows]:max_count:"
   "*"{-k,--fields}"[search only on these fields]:fields:"
+  {-r,--regex}"[treat fields as regexes]"
   "--complement[exclude, rather than include, field names]"
   "--replace[replaces every match with the given text]:replace:"
   {-n,--line-number}"[show line numbers]"
@@ -361,6 +367,9 @@ _shtab__dsv_join_options=(
   "*-1[join on these fields from stdin]:left_fields:"
   "*-2[join on these fields from FILE]:right_fields:"
   "-e[replace missing input fields with STRING]:empty_value:"
+  {-r,--regex}"[treat fields as regexes]"
+  "--rename-1[rename header from stdin according to this \%-format string]:rename_1:"
+  "--rename-2[rename header from FILE according to this \%-format string]:rename_2:"
   "*-a[also print unpairable lines from the given file]:show_all:(1 2)"
   "--join[type of join to perform]:join:(inner left right outer)"
   {-H,--header}"[treat first row as a header]"
@@ -443,6 +452,7 @@ _shtab__dsv_pipe_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "*"{-k,--fields}"[pipe only on these fields]:fields:"
   {-x,--complement}"[exclude, rather than include, field names]"
+  {-r,--regex}"[treat fields as regexes]"
   "*"{-a,--append-columns}"[append output as extra fields rather than replacing]:append_columns:"
   {-q,--no-quote-input}"[do not do CSV quoting on the input]"
   {-H,--header}"[treat first row as a header]"
@@ -505,6 +515,7 @@ _shtab__dsv_replace_options=(
   {-s,--case-sensitive}"[search case sensitively]"
   {-m,--max-count}"[show only the first NUM matching rows]:max_count:"
   "*"{-k,--fields}"[search only on these fields]:fields:"
+  {-r,--regex}"[treat fields as regexes]"
   "--complement[exclude, rather than include, field names]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
@@ -529,6 +540,63 @@ _shtab__dsv_replace_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   ":pattern to search for:"
   ":replaces every match with the given text:"
+)
+
+_shtab__dsv_reshape_long_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-x,--complement}"[exclude, rather than include, field names]"
+  {-r,--regex}"[treat fields as regexes]"
+  {-k,--key}"[name of the key field]:key:"
+  {-v,--value}"[name of the value field]:value:"
+  {-H,--header}"[treat first row as a header]"
+  {-N,--no-header}"[do not treat first row as header]"
+  "--drop-header[do not print the header]"
+  "--trailer[print a trailer]:trailer:(never always auto)"
+  "--numbered-columns[number the columns in the header]:numbered_columns:(never always auto)"
+  {-d,--ifs}"[input field separator]:ifs:"
+  "--plain-ifs[treat input field separator as a literal not a regex]"
+  {-D,--ofs}"[output field separator]:ofs:"
+  "--irs[input row separator]:irs:"
+  "--ors[output row separator]:ors:"
+  "--csv[treat input as csv]"
+  "--tsv[treat input as tsv]"
+  "--ssv[treat input as whitespace separated]"
+  "--combine-trailing-columns[if a row has more columns than the header, combine the last ones into one, useful with --ssv]"
+  {-P,--pretty}"[prettified output]"
+  "--page[show output in a pager (less)]"
+  {--colour,--color}"[enable colour]:colour:(never always auto)"
+  "--header-colour[ansi escape code for the header]:header_colour:"
+  "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
+  "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
+  {-Q,--no-quoting}"[do not handle quotes from input]"
+  "(*):reshape only these fields:"
+)
+
+_shtab__dsv_reshape_wide_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-H,--header}"[treat first row as a header]"
+  {-N,--no-header}"[do not treat first row as header]"
+  "--drop-header[do not print the header]"
+  "--trailer[print a trailer]:trailer:(never always auto)"
+  "--numbered-columns[number the columns in the header]:numbered_columns:(never always auto)"
+  {-d,--ifs}"[input field separator]:ifs:"
+  "--plain-ifs[treat input field separator as a literal not a regex]"
+  {-D,--ofs}"[output field separator]:ofs:"
+  "--irs[input row separator]:irs:"
+  "--ors[output row separator]:ors:"
+  "--csv[treat input as csv]"
+  "--tsv[treat input as tsv]"
+  "--ssv[treat input as whitespace separated]"
+  "--combine-trailing-columns[if a row has more columns than the header, combine the last ones into one, useful with --ssv]"
+  {-P,--pretty}"[prettified output]"
+  "--page[show output in a pager (less)]"
+  {--colour,--color}"[enable colour]:colour:(never always auto)"
+  "--header-colour[ansi escape code for the header]:header_colour:"
+  "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
+  "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
+  {-Q,--no-quoting}"[do not handle quotes from input]"
+  ":key field:"
+  ":value field:"
 )
 
 _shtab__dsv_set_header_options=(
@@ -561,7 +629,9 @@ _shtab__dsv_set_header_options=(
 )
 
 _shtab__dsv_sort_options=(
+  {-k,--fields}"[search only these fields]:old_style_fields:"
   "(- : *)--help[show this help message and exit]"
+  "--regex[treat fields as regexes]"
   {-x,--complement}"[exclude, rather than include, field names]"
   "*"{-b,--ignore-leading-blanks}"[ignore leading blanks]"
   "*--dictionary-order[consider only blanks and alphanumeric characters]"
@@ -777,6 +847,7 @@ _shtab__dsv_totsv_options=(
 _shtab__dsv_uniq_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-x,--complement}"[exclude, rather than include, field names]"
+  {-r,--regex}"[treat fields as regexes]"
   {-c,--count}"[prefix lines by the number of occurrences]"
   {-C,--count-column}"[name of column to put the count in]:count_column:"
   {-H,--header}"[treat first row as a header]"
@@ -834,6 +905,8 @@ _shtab__dsv() {
         pipe) _arguments -C -s $_shtab__dsv_pipe_options ;;
         pretty) _arguments -C -s $_shtab__dsv_pretty_options ;;
         replace) _arguments -C -s $_shtab__dsv_replace_options ;;
+        reshape-long) _arguments -C -s $_shtab__dsv_reshape_long_options ;;
+        reshape-wide) _arguments -C -s $_shtab__dsv_reshape_wide_options ;;
         set-header) _arguments -C -s $_shtab__dsv_set_header_options ;;
         sort) _arguments -C -s $_shtab__dsv_sort_options ;;
         sqlite) _arguments -C -s $_shtab__dsv_sqlite_options ;;
