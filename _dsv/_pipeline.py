@@ -15,6 +15,7 @@ class _Pipeline(_Base):
             self.pipeline[-1].opts.ofs = self.pipeline[0].opts.ofs
             # disable colour and stuff
             for p in self.pipeline[:-1]:
+                p.opts.ofs = b'\t'
                 p.opts.trailer = False
                 p.opts.colour = False
                 p.opts.numbered_columns = False
