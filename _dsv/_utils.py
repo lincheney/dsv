@@ -33,3 +33,9 @@ def as_float(value, warn=True):
         if warn:
             print(e, file=sys.stderr)
         return math.nan
+
+def remove_ansi_colour(value: bytes):
+    if b'\x1b[' in value:
+        # remove colour escapes
+        value = re.sub(br'\x1b\[[0-9;:]*[mK]', b'', value)
+    return value

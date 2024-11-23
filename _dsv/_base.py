@@ -118,10 +118,12 @@ class _Base:
         opts.args = args
         opts.extras = extras
         opts.parser = parser
-        opts.irs = opts.irs or b'\n'
-        opts.ors = opts.ors or opts.irs
+        if opts.irs is None:
+            opts.irs = b'\n'
+        if opts.ors is None:
+            opts.ors = opts.irs
         if not hasattr(opts, 'quote_output'):
-            opts.quote_output = False
+            opts.quote_output = True
 
         opts.trailer = opts.trailer or 'auto'
         opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
@@ -446,10 +448,7 @@ class _Base:
             for j, col in enumerate(row):
                 if not isinstance(col, bytes):
                     col = str(col).encode('utf8')
-
-                if b'\x1b[' in col:
-                    # remove colour escapes
-                    col = re.sub(br'\x1b\[[0-9;:]*[mK]', b'', col)
+                col = _utils.remove_ansi_colour(col)
 
                 widths.setdefault(j, {})[i] = len(col)
                 maxwidths[j] = max(maxwidths.get(j, 0), len(col))

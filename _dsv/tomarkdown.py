@@ -1,55 +1,47 @@
 import subprocess
 from ._base import _Base
+from . import _utils
 
 class tomarkdown(_Base):
     ''' convert to markdown table '''
 
+    PRETTY_OUTPUT_DELIM = b'|'
+
     def __init__(self, opts):
         opts.header_colour = b'\x1b[1m'
         opts.numbered_columns = False
-        # rows are already quoted
-        opts.quote_output = False
+        opts.ofs = self.PRETTY_OUTPUT
+        opts.trailer = 'never'
 
         super().__init__(opts)
         self.rows = []
 
-    def on_header(self, header):
-        return self.on_row(header)
+    def format_columns(self, row, ofs, ors, quote_output):
+        if quote_output:
+            row = [row[0]] + [(b' ' + col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') + b' ').ljust(3) for col in row[1:-1]] + [row[-1]]
+        return row
 
-    def prepare_row(self, row):
-        row = [b' ' + col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') + b' ' for col in row]
-        return [b''] + row + [b'']
+    def on_header(self, header):
+        return super().on_header([b''] + header + [b''])
 
     def on_row(self, row):
-        self.rows.append(self.prepare_row(row))
-
-    def on_eof(self):
-        if not self.rows:
-            return
-
-        if self.opts.drop_header:
+        if self.header is None or self.opts.drop_header:
+            self.header = [b''] * len(row)
             self.opts.drop_header = False
-            self.opts.header = 'no'
-            del self.rows[0]
+            if self.on_header(self.header):
+                return True
 
-        # set a blank header
-        if self.opts.header == 'no':
-            self.rows.insert(0, [b''] * len(self.rows[0]))
+        return super().on_row([b''] + row + [b''])
 
-        padding = self.justify(self.rows)
-        self.opts.ofs = b'|'
-        for i, (pad, row) in enumerate(zip(padding, self.rows)):
-            row = [col + b' ' * p for col, p in zip(row, pad + [0])]
+    def write_output(self, row, padding=None, is_header=False):
+        if super().write_output(row, padding, is_header):
+            return True
 
-            if i == 0:
-                if super().on_header(row):
-                    break
-                row = self.prepare_row(b'-' * (len(col) - 2) for col in row[1:-1])
-
-            if super().on_row(row):
-                break
-
-        super().on_eof()
+        # print the separator
+        if is_header:
+            row = [_utils.remove_ansi_colour(c) for c in row]
+            sep = self.format_columns([b'-' * (len(c) - 2) for c in row], None, None, True)
+            return super().write_output(sep)
 
     def start_outfile(self):
         if self.opts.page and self.outfile_proc is None:
