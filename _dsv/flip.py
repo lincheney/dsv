@@ -27,7 +27,6 @@ class flip(_Base):
             if self.header is None:
                 if self.on_header(None):
                     return True
-                self.header = []
 
         elif self.opts.row_sep:
             if super().on_row([b'---']):
