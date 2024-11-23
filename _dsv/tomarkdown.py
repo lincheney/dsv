@@ -18,11 +18,8 @@ class tomarkdown(_Base):
 
     def format_columns(self, row, ofs, ors, quote_output):
         if quote_output:
-            row = [row[0]] + [(b' ' + col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') + b' ').ljust(3) for col in row[1:-1]] + [row[-1]]
+            row = [b''] + [(b' ' + col.replace(b'\\', b'\\\\').replace(b'|', b'\\|').replace(b'`', b'\\`') + b' ').ljust(3) for col in row] + [b'']
         return row
-
-    def on_header(self, header):
-        return super().on_header([b''] + header + [b''])
 
     def on_row(self, row):
         if self.header is None or self.opts.drop_header:
@@ -31,7 +28,7 @@ class tomarkdown(_Base):
             if self.on_header(self.header):
                 return True
 
-        return super().on_row([b''] + row + [b''])
+        return super().on_row(row)
 
     def write_output(self, row, padding=None, is_header=False):
         if super().write_output(row, padding, is_header):
@@ -40,7 +37,7 @@ class tomarkdown(_Base):
         # print the separator
         if is_header:
             row = [_utils.remove_ansi_colour(c) for c in row]
-            sep = self.format_columns([b'-' * (len(c) - 2) for c in row], None, None, True)
+            sep = self.format_columns([b'-' * (len(c) - 2) for c in row[1:-1]], None, None, True)
             return super().write_output(sep)
 
     def start_outfile(self):
