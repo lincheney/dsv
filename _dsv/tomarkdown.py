@@ -12,9 +12,7 @@ class tomarkdown(_Base):
         opts.numbered_columns = False
         opts.ofs = self.PRETTY_OUTPUT
         opts.trailer = 'never'
-
         super().__init__(opts)
-        self.rows = []
 
     def format_columns(self, row, ofs, ors, quote_output):
         if quote_output:
