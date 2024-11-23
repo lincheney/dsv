@@ -5,7 +5,7 @@ from ._base import _Base
 class tojson(_Base):
     ''' convert to json '''
     parser = argparse.ArgumentParser()
-    parser.set_defaults(drop_header=True, ofs=b'')
+    parser.set_defaults(drop_header=True, ofs=b',')
 
     def on_header(self, header):
         pass
