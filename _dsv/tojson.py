@@ -20,6 +20,8 @@ class tojson(_Base):
             if self.header and i < len(self.header):
                 key = self.header[i].decode('utf8')
             values[key] = col.decode('utf8')
+        self.write_output(values)
 
+    def write_output(self, data):
         self.start_outfile()
-        self.outfile.write(json.dumps(values).encode('utf8') + self.opts.ors)
+        self.outfile.write(json.dumps(data).encode('utf8') + self.opts.ors)

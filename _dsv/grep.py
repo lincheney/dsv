@@ -87,7 +87,7 @@ class grep(_ColumnSlicer):
 
         if self.opts.count:
             # don't print any rows and disable the pretty formatting
-            self.print_row = lambda *a, **kwa: True
+            self.write_output = lambda *a, **kwa: True
             self.opts.ofs = ','
 
     def on_header(self, header):

@@ -9,7 +9,8 @@ make_main_parser = _base.make_main_parser
 def main():
     sub_mapping = {}
     parser = make_main_parser(sub_mapping, help=argparse.SUPPRESS)
-    opts, extras = parser.parse_known_args()
+    args = sys.argv[1:]
+    opts, extras = parser.parse_known_args(args)
 
     # print help if no input file
     if _utils.stdin_is_tty():
@@ -17,7 +18,7 @@ def main():
         return
 
     opts.handler = opts.handler or _base._Base
-    handler = opts.handler.from_opts(opts, extras, sub_mapping.get(opts.handler, parser))
+    handler = opts.handler.from_opts(args, opts, extras, sub_mapping.get(opts.handler, parser))
     try:
         list(handler.process_file(sys.stdin.buffer))
     finally:

@@ -12,6 +12,7 @@ def flatten(d, sep='.', parent_key=None):
     else:
         data[parent_key] = d
         return data
+
     for i, v in items:
         key = f"{parent_key}{sep}{i}" if parent_key else str(i)
         data.update(flatten(v, sep=sep, parent_key=key))
@@ -55,22 +56,27 @@ class fromjson(_Base):
 
     def process_file(self, file):
         self.determine_delimiters(b'')
-
         for row in self.iter_json(file):
-            if not isinstance(row, dict):
-                print('not a json object:', row, file=sys.stderr)
-                continue
-
-            if self.opts.flatten:
-                row = flatten(row, self.opts.flatten)
-            if self.header is None:
-                self.header = [x.encode('utf8') for x in row.keys()]
-                if self.on_header(self.header):
-                    break
-            row = [row.get(k.decode('utf8'), '') for k in self.header]
-            row = [(x if isinstance(x, str) else json.dumps(x)).encode('utf8') for x in row]
             if self.on_row(row):
                 break
-
         self.on_eof()
         return ()
+
+    def on_header(self, header):
+        return self.on_row(header)
+
+    def on_row(self, row):
+        if not isinstance(row, dict):
+            print('not a json object:', row, file=sys.stderr)
+            return
+
+        if self.opts.flatten:
+            row = flatten(row, self.opts.flatten)
+        if self.header is None:
+            self.header = [x.encode('utf8') for x in row.keys()]
+            if super().on_header(self.header):
+                return True
+
+        row = [row.get(k.decode('utf8'), '') for k in self.header]
+        row = [(x if isinstance(x, str) else json.dumps(x)).encode('utf8') for x in row]
+        return super().on_row(row)

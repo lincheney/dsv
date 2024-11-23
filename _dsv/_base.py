@@ -41,16 +41,16 @@ def make_parser(**kwargs):
     group.add_argument('-P', '--pretty', dest='ofs', action='store_const', const=_Base.PRETTY_OUTPUT, help='prettified output')
     group.add_argument('--page', action='store_true', help='show output in a pager (less)')
     group.add_argument('--colour', '--color', choices=('never', 'always', 'auto'), nargs='?', help='enable colour')
-    group.add_argument('--header-colour', type=_utils.utf8_type, default='\x1b[1;4m', help='ansi escape code for the header')
-    group.add_argument('--header-bg-colour', type=_utils.utf8_type, default='\x1b[48;5;237m', help='ansi escape code for the header background')
-    group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), default='auto', nargs='?', help='enable rainbow columns')
+    group.add_argument('--header-colour', type=_utils.utf8_type, help='ansi escape code for the header')
+    group.add_argument('--header-bg-colour', type=_utils.utf8_type, help='ansi escape code for the header background')
+    group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow columns')
     group.add_argument('-Q', '--no-quoting', action='store_true', help='do not handle quotes from input')
     return parser
 
-def make_main_parser(sub_mapping={}, handlers=None, help=None):
+def make_main_parser(sub_mapping={}, handlers=None, help=None, argument_default=None):
     parent = make_parser(add_help=False, argument_default=argparse.SUPPRESS)
-    parser = make_parser(formatter_class=argparse.RawTextHelpFormatter)
-    parser.set_defaults(handler=None, quote_output=True)
+    parser = make_parser(formatter_class=argparse.RawTextHelpFormatter, argument_default=argument_default)
+    parser.set_defaults(handler=None)
 
     if handlers is None:
         handlers = get_all_handlers()
@@ -107,24 +107,28 @@ class _Base:
     @classmethod
     def from_args(cls, args, **kwargs):
         parser = make_main_parser(handlers=[cls])
-        opts, extras = parser.parse_known_args([cls.get_name(), *args])
+        args = [cls.get_name(), *args]
+        opts, extras = parser.parse_known_args(args)
         kwargs.setdefault('extras', extras)
         kwargs.setdefault('parser', parser)
-        return cls.from_opts(opts, **kwargs)
+        return cls.from_opts(args, opts, **kwargs)
 
     @classmethod
-    def from_opts(cls, opts, extras, parser, **kwargs):
+    def from_opts(cls, args, opts, extras, parser, **kwargs):
+        opts.args = args
         opts.extras = extras
         opts.parser = parser
         opts.irs = opts.irs or b'\n'
         opts.ors = opts.ors or opts.irs
+        if not hasattr(opts, 'quote_output'):
+            opts.quote_output = False
 
         opts.trailer = opts.trailer or 'auto'
         opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
         opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'auto')
         opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'auto')
-        opts.header_colour = opts.header_colour or '\x1b[1;4m'
-        opts.header_bg_colour = opts.header_bg_colour or '\x1b[48;5;237m'
+        opts.header_colour = opts.header_colour or b'\x1b[1;4m'
+        opts.header_bg_colour = opts.header_bg_colour or b'\x1b[48;5;237m'
 
         for k, v in kwargs.items():
             setattr(opts, k, v)
@@ -158,6 +162,10 @@ class _Base:
             return best_delim
 
     def determine_delimiters(self, line):
+        self.determine_ifs(line)
+        self.determine_ofs(self.opts.ifs)
+
+    def determine_ifs(self, line):
         opts = self.opts
         if opts.ifs:
             if isinstance(opts.ifs, bytes) and re.escape(opts.ifs) != opts.ifs and not opts.plain_ifs:
@@ -169,17 +177,6 @@ class _Base:
             if opts.ifs == self.SPACE or opts.ifs == self.PPRINT:
                 opts.combine_trailing_columns = True
                 # opts.no_quoting = True
-
-        if not opts.ofs:
-            if opts.ifs == self.SPACE or opts.ifs == self.PPRINT:
-                if opts.colour:
-                    opts.ofs = self.PRETTY_OUTPUT
-                else:
-                    opts.ofs = b' '*4
-            elif isinstance(opts.ifs, bytes):
-                opts.ofs = opts.ifs
-            else:
-                opts.ofs = b'\t'
 
         if isinstance(opts.ifs, bytes):
             def next_ifs(line, start, ifs=opts.ifs):
@@ -193,6 +190,19 @@ class _Base:
                     return match.span()
                 return None, None
         self.next_ifs = next_ifs
+
+    def determine_ofs(self, ifs):
+        opts = self.opts
+        if not opts.ofs:
+            if ifs == self.SPACE or ifs == self.PPRINT:
+                if opts.colour:
+                    opts.ofs = self.PRETTY_OUTPUT
+                else:
+                    opts.ofs = b' '*4
+            elif isinstance(ifs, bytes):
+                opts.ofs = ifs
+            else:
+                opts.ofs = b'\t'
 
     def iter_lines(self, file, sep, chunk=8192):
         rest = b''
@@ -394,7 +404,7 @@ class _Base:
                 self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
                 self.outfile = self.outfile_proc.stdin
 
-    def print_row(self, row, padding=None, is_header=False):
+    def write_output(self, row, padding=None, is_header=False):
         self.start_outfile()
         self.outfile.write(self.format_row(row, padding) + self.opts.ors)
 
@@ -426,7 +436,7 @@ class _Base:
         if self.opts.ofs is self.PRETTY_OUTPUT:
             self.__gathered_rows.append(self.format_columns(row, self.PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
         else:
-            return self.print_row(row, padding, is_header)
+            return self.write_output(row, padding, is_header)
 
     def justify(self, rows: list[bytes]):
         # get width of each column

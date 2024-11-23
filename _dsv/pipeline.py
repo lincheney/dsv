@@ -1,6 +1,6 @@
 import argparse
 import copy
-from ._base import _Base, get_all_handlers
+from ._base import _Base, get_all_handlers, make_main_parser
 
 class pipeline(_Base):
     ''' pipe multiple dsv commands together '''
@@ -9,6 +9,13 @@ class pipeline(_Base):
     def __init__(self, opts, pipeline=None):
         self.pipeline = pipeline
         if self.pipeline is None:
+
+            # what options were actually set
+            parser = make_main_parser(argument_default=argparse.SUPPRESS)
+            kwargs = vars(parser.parse_known_args(opts.args)[0])
+            kwargs.pop('handler', None)
+            kwargs.pop('command', None)
+
             self.pipeline = [[]]
             for arg in opts.extras:
                 if arg == '!':
@@ -16,7 +23,6 @@ class pipeline(_Base):
                 else:
                     self.pipeline[-1].append(arg)
             opts.extras = ()
-            kwargs = {k: v for k, v in vars(opts).items() if v is not None and k not in {'parser', 'extras', 'handler'}}
             self.pipeline = [self.action(*a, **kwargs) for a in self.pipeline]
 
         super().__init__(opts)
@@ -48,13 +54,13 @@ class pipeline(_Base):
         # pipe from left to right
         for src, dst in zip(self.pipeline[:-1], self.pipeline[1:]):
 
-            def print_row(row, padding=None, is_header=False, dst=dst):
+            def write_output(row, padding=None, is_header=False, dst=dst):
                 if is_header:
                     dst.header = row.copy()
                     return dst.on_header(row)
                 else:
                     return dst.on_row(row)
-            src.print_row = print_row
+            src.write_output = write_output
 
             original = src.on_eof
             def on_eof(dst=dst, original=original):
