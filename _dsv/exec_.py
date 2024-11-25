@@ -64,6 +64,11 @@ class BaseTable(Vectorised):
         return len(self.__headers__ or (self.__data__ and self.__data__[0]))
 
     def __add_col__(self, name):
+        # add missing headers
+        if not self.__headers__ and (cols := self.__numcols__()):
+            for i in range(1, cols+1):
+                self.__headers__[str(i)] = i
+
         self.__headers__[name] = len(self.__headers__)
         return self.__headers__[name]
 
@@ -105,7 +110,7 @@ class BaseTable(Vectorised):
         elif isinstance(real_cols, (str, bytes)):
             real_cols = cols = self.__get_col__(real_cols, new)
         elif isinstance(real_cols, int):
-            real_cols = cols = indices[real_cols]
+            real_cols = cols = len(indices) if real_cols >= len(indices) and new else indices[real_cols]
         elif isinstance(real_cols, slice):
             cols = slice(*real_cols.indices(length))
         else:
