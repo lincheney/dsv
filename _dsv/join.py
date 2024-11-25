@@ -18,6 +18,10 @@ class join(_ColumnSlicer):
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-a', dest='show_all', choices=('1', '2'), action='append', help='also print unpairable lines from the given file')
     group.add_argument('--join', choices=('inner', 'left', 'right', 'outer'), default='inner', help='type of join to perform')
+    group.add_argument('--inner', action='store_const', dest='join', const='inner', help='do a inner join')
+    group.add_argument('--left', action='store_const', dest='join', const='left', help='do a left join')
+    group.add_argument('--right', action='store_const', dest='join', const='right', help='do a right join')
+    group.add_argument('--outer', action='store_const', dest='join', const='outer', help='do a outer join')
 
     def __init__(self, opts):
         opts.fields.extend(opts.extras)
