@@ -1,10 +1,19 @@
 import argparse
-import copy
 from ._base import _Base, get_all_handlers, make_main_parser
 
 class pipeline(_Base):
     ''' pipe multiple dsv commands together '''
     name = '!'
+
+    DEFAULTS = dict(
+        ofs = b'\t',
+        trailer = False,
+        colour = False,
+        numbered_columns = False,
+        rainbow_columns = False,
+        drop_header = False,
+        page = False,
+    )
 
     def __init__(self, opts, pipeline=None):
         self.pipeline = pipeline
@@ -23,7 +32,7 @@ class pipeline(_Base):
                 else:
                     self.pipeline[-1].append(arg)
             opts.extras = ()
-            self.pipeline = [self.action(*a, **kwargs) for a in self.pipeline]
+            self.pipeline = [self.action(i==len(self.pipeline)-1, *a, **kwargs) for i, a in enumerate(self.pipeline)]
 
         super().__init__(opts)
 
@@ -36,19 +45,9 @@ class pipeline(_Base):
         original = first.determine_delimiters
         def determine_delimiters(*args, original=original, **kwargs):
             original(*args, **kwargs)
-
             if last.opts.ofs is None:
                 last.opts.ofs = first.opts.ofs
 
-            # disable colour and stuff
-            for p in self.pipeline[:-1]:
-                p.opts.ofs = b'\t'
-                p.opts.trailer = False
-                p.opts.colour = False
-                p.opts.numbered_columns = False
-                p.opts.rainbow_columns = False
-                p.opts.drop_header = False
-                p.opts.page = False
         first.determine_delimiters = determine_delimiters
 
         # pipe from left to right
@@ -68,13 +67,11 @@ class pipeline(_Base):
                 dst.on_eof()
             src.on_eof = on_eof
 
-    def copy_opts(self, opts, **kwargs):
-        opts = copy.deepcopy(opts)
-        if kwargs:
-            opts = argparse.Namespace(**{**vars(opts), **kwargs})
-        return opts
-
-    def action(self, name, *args, **kwargs):
+    def action(self, last: bool, name, *args, **kwargs):
         if handler := next((h for h in get_all_handlers() if h.get_name() == name), None):
+            if not last:
+                if kwargs.get('ofs') == self.PRETTY_OUTPUT:
+                    del kwargs['ofs']
+                kwargs = {**self.DEFAULTS, **kwargs}
             return handler.from_args(args, **kwargs)
         raise ValueError(f'cannot find handler named {name}')
