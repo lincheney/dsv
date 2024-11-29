@@ -12,6 +12,9 @@ import _dsv
 
 UTF8_BOM = '\ufeff'.encode('utf8')
 
+class Separator(tuple[bytes]):
+    pass
+
 def interpret_c_escapes(x: str):
     return x.encode('utf8').decode('unicode_escape').encode('utf8')
 
@@ -75,9 +78,6 @@ class _Base:
     PRETTY_OUTPUT = object()
     PRETTY_OUTPUT_DELIM = b'  '
     RESET_COLOUR = b'\x1b[0m'
-
-    ROW_SEPARATOR = (b'---',)
-    PRETTY_ROW_SEPARATOR = (b'\x1b[100m\x1b[K---',)
 
     name = None
     parser = None
@@ -448,6 +448,9 @@ class _Base:
         widths = {}
         maxwidths = {}
         for i, row in enumerate(rows):
+            if isinstance(row, Separator):
+                continue
+
             for j, col in enumerate(row):
                 if not isinstance(col, bytes):
                     col = str(col).encode('utf8')
@@ -487,3 +490,9 @@ class _Base:
         # show a trailer if too much data
         if self.out_header and (self.opts.trailer == 'always' or (_utils.stdout_is_tty() and self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):
             _Base.on_header(self, self.out_header, header_padding)
+
+    def get_separator(self):
+        if _utils.stdout_is_tty():
+            return Separator((b'\x1b[2m' + b'-' * shutil.get_terminal_size().columns,))
+        else:
+            return Separator((b'---',))
