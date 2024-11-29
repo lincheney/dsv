@@ -85,7 +85,11 @@ class summary(_Base):
         non_blank = [x for x in col if x]
         counts = Counter(non_blank)
 
-        stats = {k: v for k, v in counts.most_common(n) if v > 1}
+        common = {k: v for k, v in counts.most_common(n) if v > 1}
+        if len(counts) <= n + 1:
+            common = counts
+
+        stats = common.copy()
         if len(non_blank) != len(col):
             stats['[empty string]'] = len(col) - len(non_blank)
 
@@ -97,8 +101,8 @@ class summary(_Base):
             stats['words'] = sum(len(x.split()) for x in col)
             stats['[example]'] = col[0]
 
-        elif len(col) != sum(stats.values()):
-            stats[f'[{len(counts) - len(stats)} other values]'] = len(col) - sum(stats.values())
+        elif len(non_blank) != sum(common.values()):
+            stats[f'[{len(counts) - len(common)} other values]'] = len(non_blank) - sum(common.values())
 
         return self.display_stats(header, type, stats)
 
