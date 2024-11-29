@@ -35,37 +35,36 @@ class summary(_Base):
 
         columns = list(itertools.zip_longest(*self.rows, fillvalue=missing))
 
-        if columns and not super().on_header([b'column', b'type', b'key', b'value']):
+        if not super().on_header([b'column', b'type', b'key', b'value']):
 
-            for header, col in zip(header, columns):
+            for h, col in zip(header, columns):
                 parsed = _utils.parse_value(col)
 
                 # what is it
 
                 if self.is_enum(col) >= cutoff:
-                    if self.display_enum(header, col):
+                    if self.display_enum(h, col):
                         break
 
                 elif self.is_date(dates := _utils.parse_datetime(col)) >= cutoff:
-                    if self.display_date(header, dates):
+                    if self.display_date(h, dates):
                         break
 
                 elif self.is_numeric(numbers := _utils.parse_value(col)) >= cutoff:
-                    if self.display_numeric(header, numbers):
+                    if self.display_numeric(h, numbers):
                         break
 
                 else:
-                    if self.display_enum(header, col):
+                    if self.display_enum(h, col):
                         break
 
                 if self.opts.col_sep:
                     if super().on_row(self.sep):
                         break
 
-        elif not columns and not super().on_header([b'column', b'type']):
-            for header in header:
+            for header in header[len(columns):]:
                 if super().on_row([header, b'(empty)']):
-                    return True
+                    break
 
         return super().on_eof()
 
