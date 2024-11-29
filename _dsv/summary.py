@@ -28,42 +28,44 @@ class summary(_Base):
     def on_eof(self, cutoff=0.8):
         missing = b''
         header = self.header or []
-        num_cols = max(len(header), max(map(len, self.rows)))
+        num_cols = max(len(header), max(map(len, self.rows), default=0))
 
         if len(header) < num_cols:
             header += [_utils.to_bytes(i+1) for i in range(len(header), num_cols)]
 
-        if super().on_header([b'column', b'type', b'key', b'value']):
-            return
-
         columns = list(itertools.zip_longest(*self.rows, fillvalue=missing))
-        for header, col in zip(header, columns):
-            parsed = _utils.parse_value(col)
 
-            # what is it
+        if columns and not super().on_header([b'column', b'type', b'key', b'value']):
 
-            if self.is_enum(col) >= cutoff:
-                if self.display_enum(header, col):
-                    break
+            for header, col in zip(header, columns):
+                parsed = _utils.parse_value(col)
 
-            elif self.is_date(dates := _utils.parse_datetime(col)) >= cutoff:
-                if self.display_date(header, dates):
-                    break
+                # what is it
 
-            elif self.is_numeric(numbers := _utils.parse_value(col)) >= cutoff:
-                if self.display_numeric(header, numbers):
-                    break
+                if self.is_enum(col) >= cutoff:
+                    if self.display_enum(header, col):
+                        break
 
-            else:
-                if self.display_enum(header, col):
-                    break
+                elif self.is_date(dates := _utils.parse_datetime(col)) >= cutoff:
+                    if self.display_date(header, dates):
+                        break
 
-            if self.opts.col_sep:
-                if super().on_row(self.sep):
-                    break
+                elif self.is_numeric(numbers := _utils.parse_value(col)) >= cutoff:
+                    if self.display_numeric(header, numbers):
+                        break
 
-            # import sys;print(f'''DEBUG(trauma)\t{header = }''', file=sys.__stderr__)
-            #  import sys;print(f'''DEBUG(unclog)\t{col = }''', file=sys.__stderr__)
+                else:
+                    if self.display_enum(header, col):
+                        break
+
+                if self.opts.col_sep:
+                    if super().on_row(self.sep):
+                        break
+
+        elif not columns and not super().on_header([b'column', b'type']):
+            for header in header:
+                if super().on_row([header, b'(empty)']):
+                    return True
 
         return super().on_eof()
 
