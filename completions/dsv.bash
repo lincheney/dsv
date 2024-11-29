@@ -32,7 +32,7 @@ _shtab__dsv_tocsv_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-heade
 _shtab__dsv_tojson_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_tomarkdown_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_totsv_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
-_shtab__dsv_uniq_option_strings=('-h' '--help' '-x' '--complement' '-r' '--regex' '-c' '--count' '-C' '--count-column' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
+_shtab__dsv_uniq_option_strings=('-h' '--help' '-x' '--complement' '-r' '--regex' '-c' '--count' '-C' '--count-column' '--group' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 
 
 
@@ -991,6 +991,7 @@ _shtab__dsv_uniq__r_nargs=0
 _shtab__dsv_uniq___regex_nargs=0
 _shtab__dsv_uniq__c_nargs=0
 _shtab__dsv_uniq___count_nargs=0
+_shtab__dsv_uniq___group_nargs=0
 _shtab__dsv_uniq__H_nargs=0
 _shtab__dsv_uniq___header_nargs=0
 _shtab__dsv_uniq__N_nargs=0

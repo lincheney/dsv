@@ -910,6 +910,7 @@ _shtab__dsv_uniq_options=(
   {-r,--regex}"[treat fields as regexes]"
   {-c,--count}"[prefix lines by the number of occurrences]"
   {-C,--count-column}"[name of column to put the count in]:count_column:"
+  "--group[show all items, separating groups with an empty line]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
