@@ -342,7 +342,7 @@ class _Base:
 
         return row, False
 
-    def get_rgb(self, i, step=0.53): # cycle every 17 columns
+    def get_rgb(self, i, step=0.647): # cycle every 17 columns
         r, g, b = colorsys.hsv_to_rgb(step * i % 1, 0.3, 1)
         return b'\x1b[38;2;%i;%i;%im' % (r*255, g*255, b*255)
 
