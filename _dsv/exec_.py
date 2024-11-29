@@ -13,11 +13,6 @@ from . import _utils
 FULL_SLICE = slice(None)
 MISSING = b''
 
-def to_bytes(x):
-    if not isinstance(x, bytes):
-        x = str(x).encode('utf8')
-    return x
-
 def is_list_of(value, types):
     return isinstance(value, list) and all(isinstance(x, types) for x in value)
 
@@ -67,7 +62,7 @@ class BaseTable(Vectorised):
     def __delattr__(self, key):
         del self[key]
     def __getattr__(self, key):
-        if to_bytes(key) in self.__headers__:
+        if _utils.to_bytes(key) in self.__headers__:
             return self[key]
         return super().__getattr__(key)
 
@@ -90,7 +85,7 @@ class BaseTable(Vectorised):
         return self.__headers__[name]
 
     def __get_col__(self, col, new=False):
-        col = to_bytes(col)
+        col = _utils.to_bytes(col)
         if new and col not in self.__headers__:
             self.__add_col__(col)
         return self.__headers__[col]
@@ -444,25 +439,9 @@ class exec_(_Base):
             if self.opts.remove_errors or (self.opts.ignore_errors and self.expr):
                 vars.pop(self.opts.var, None)
 
-    def parse_value(self, value):
-        if isinstance(value, (list, tuple)):
-            return [self.parse_value(x) for x in value]
-
-        if value.isdigit():
-            return int(value)
-
-        try:
-            try:
-                value = value.decode('utf8')
-            except UnicodeDecodeError:
-                return value
-            return float(value)
-        except ValueError:
-            return value
-
     def do_exec(self, rows, **vars):
         if not self.opts.bytes:
-            rows = [self.parse_value(row) for row in rows]
+            rows = [_utils.parse_value(row) for row in rows]
 
         vars['H'] = copy.copy(self.header)
         table = vars[self.opts.var] = Table(rows, self.header_numbers)
@@ -487,12 +466,12 @@ class exec_(_Base):
             rows = table.__data__
 
             if not self.have_printed_header and headers:
-                if super().on_header([to_bytes(k) for k in headers]):
+                if super().on_header([_utils.to_bytes(k) for k in headers]):
                     return True
                 self.have_printed_header = True
 
             for row in rows:
-                if super().on_row([to_bytes(x) for x in row]):
+                if super().on_row([_utils.to_bytes(x) for x in row]):
                     return True
 
         elif self.expr:

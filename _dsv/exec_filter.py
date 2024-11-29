@@ -1,5 +1,6 @@
 import argparse
-from .exec_ import exec_, to_bytes, Vec
+from . import _utils
+from .exec_ import exec_, Vec
 
 class exec_filter(exec_):
     ''' filter rows using python '''
@@ -23,7 +24,7 @@ class exec_filter(exec_):
         if self.opts.passthru:
             if self.opts.colour:
                 for row in table:
-                    row[:] = (b'\x1b[1m' if result else b'\x1b[2m') + row.map(to_bytes)
+                    row[:] = (b'\x1b[1m' if result else b'\x1b[2m') + row.map(_utils.to_bytes)
             result = table
         else:
             result = table if result else None

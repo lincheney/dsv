@@ -1,6 +1,7 @@
 import argparse
 from ._base import _Base
 from ._column_slicer import _ColumnSlicer
+from . import _utils
 from .exec_ import exec_, BaseTable, Proxy
 
 class exec_groupby(_ColumnSlicer, exec_):
@@ -33,7 +34,7 @@ class exec_groupby(_ColumnSlicer, exec_):
                 header = self.slice(self.header or [], default=lambda i: str(i+1))
 
             if not self.opts.bytes:
-                key = self.parse_value(key)
+                key = _utils.parse_value(key)
 
             self.current_key = dict(zip(header, key))
             self.exec_on_all_rows(group, K=self.current_key)
