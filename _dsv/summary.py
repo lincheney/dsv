@@ -138,7 +138,7 @@ class summary(_Base):
         if len(non_nan) != len(numeric):
             stats['nan'] = len(numeric) - len(non_nan)
         if len(numeric) != len(col):
-            stats['numeric'] = len(col) - len(numeric)
+            stats['non numeric'] = len(col) - len(numeric)
 
         return stats
 
