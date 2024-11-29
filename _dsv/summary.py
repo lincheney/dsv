@@ -65,6 +65,9 @@ class summary(_Base):
             for header in header[len(columns):]:
                 if super().on_row([header, b'(empty)']):
                     break
+                if self.opts.col_sep:
+                    if super().on_row(self.sep):
+                        break
 
         return super().on_eof()
 
