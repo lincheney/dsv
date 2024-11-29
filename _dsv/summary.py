@@ -101,7 +101,7 @@ class summary(_Base):
             stats['min length'] = min(map(len, col))
             stats['max length'] = max(map(len, col))
             stats['words'] = sum(len(x.split()) for x in col)
-            stats['[example]'] = col[0]
+            stats['[example]'] = next(x for x in col if x)
 
         elif len(non_blank) != sum(common.values()):
             stats[f'[{len(counts) - len(common)} other values]'] = len(non_blank) - sum(common.values())
