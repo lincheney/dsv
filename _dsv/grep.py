@@ -26,6 +26,7 @@ class grep(_ColumnSlicer):
         before_context=0,
         context=0,
         count=False,
+        invert_match=False,
     )
 
     parser = argparse.ArgumentParser(parents=[parent])
