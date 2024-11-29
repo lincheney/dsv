@@ -140,7 +140,6 @@ class BaseTable(Vectorised):
 
     def map(self, fn, col=False):
         if col:
-            rows = [row for row in self]
             cols = [fn(Vec(col)) for col in zip(*self)]
             return convert_to_table(dict(zip(self.__headers__, cols)))
         else:
