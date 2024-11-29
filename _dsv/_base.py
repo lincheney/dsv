@@ -76,6 +76,9 @@ class _Base:
     PRETTY_OUTPUT_DELIM = b'  '
     RESET_COLOUR = b'\x1b[0m'
 
+    ROW_SEPARATOR = (b'---',)
+    PRETTY_ROW_SEPARATOR = (b'\x1b[100m\x1b[K---',)
+
     name = None
     parser = None
     header = None

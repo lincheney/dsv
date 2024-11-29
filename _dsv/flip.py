@@ -12,6 +12,7 @@ class flip(_Base):
     def __init__(self, opts):
         super().__init__(opts)
         self.opts.row_sep = _utils.resolve_tty_auto(self.opts.row_sep)
+        self.sep = self.PRETTY_ROW_SEPARATOR if _utils.stdout_is_tty() else self.ROW_SEPARATOR
         self.count = 0
 
     def on_header(self, header):
@@ -29,7 +30,7 @@ class flip(_Base):
                     return True
 
         elif self.opts.row_sep:
-            if super().on_row([b'---']):
+            if super().on_row(self.sep):
                 return True
 
         self.count += 1

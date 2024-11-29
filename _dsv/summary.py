@@ -16,6 +16,7 @@ class summary(_Base):
     def __init__(self, opts):
         super().__init__(opts)
         self.opts.col_sep = _utils.resolve_tty_auto(self.opts.col_sep)
+        self.sep = self.PRETTY_ROW_SEPARATOR if _utils.stdout_is_tty() else self.ROW_SEPARATOR
         self.rows = []
 
     def on_header(self, header):
@@ -58,7 +59,7 @@ class summary(_Base):
                     break
 
             if self.opts.col_sep:
-                if super().on_row([b'---']):
+                if super().on_row(self.sep):
                     break
 
             # import sys;print(f'''DEBUG(trauma)\t{header = }''', file=sys.__stderr__)
