@@ -37,6 +37,23 @@ def apply_slice(data, key, flat=False):
 def slice_to_list(key, stop=None):
     return list(range(*key.indices(key.stop if stop is None else stop)))
 
+def convert_to_table(value):
+    if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
+        return Table(list(value), value.__headers__)
+
+    if isinstance(value, Table):
+        return value
+
+    if isinstance(value, dict):
+        columns = [list(v) if isinstance(v, (list, tuple, Proxy)) else [v] for v in value.values()]
+        max_rows = max(len(col) for col in columns)
+        if any(col and max_rows % len(col) != 0 for col in columns):
+            raise ValueError(f'mismatched rows: {value}')
+        columns = [col * (max_rows // len(col)) if col else [MISSING] * max_rows for col in columns]
+        data = list(zip(*columns))
+        headers = value.keys()
+        return Table(data, headers)
+
 class Vectorised:
     def __getattr__(self, key):
         value = self.map(lambda x: getattr(x, key))
@@ -121,8 +138,13 @@ class BaseTable(Vectorised):
     def __flat__(self):
         return itertools.chain.from_iterable(self.__data__)
 
-    def map(self, fn):
-        return Table([Vec(row).map(fn) for row in self], self.__headers__.copy())
+    def map(self, fn, col=False):
+        if col:
+            rows = [row for row in self]
+            cols = [fn(Vec(col)) for col in zip(*self)]
+            return convert_to_table(dict(zip(self.__headers__, cols)))
+        else:
+            return Table([Vec(row).map(fn) for row in self], self.__headers__.copy())
 
 
 class Table(BaseTable):
@@ -276,10 +298,12 @@ class Proxy(BaseTable):
             return self
         return super().__flat__()
 
-    def map(self, fn):
+    def map(self, fn, col=False):
+        if col and self.__is_column__():
+            return fn(self)
         if self.__is_row__() or self.__is_column__():
             return Vec(self).map(fn)
-        return super().map(fn)
+        return super().map(fn, col)
 
 
 class Vec(Vectorised, list):
@@ -454,28 +478,11 @@ class exec_(_Base):
         result = vars.get(self.opts.var)
         return self.handle_exec_result(result, vars, table)
 
-    def convert_to_table(self, value):
-        if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
-            return Table(list(value), value.__headers__)
-
-        if isinstance(value, Table):
-            return value
-
-        if isinstance(value, dict):
-            columns = [list(v) if isinstance(v, (list, tuple, Proxy)) else [v] for v in value.values()]
-            max_rows = max(len(col) for col in columns)
-            if any(col and max_rows % len(col) != 0 for col in columns):
-                raise ValueError(f'mismatched rows: {value}')
-            columns = [col * (max_rows // len(col)) if col else [MISSING] * max_rows for col in columns]
-            data = list(zip(*columns))
-            headers = value.keys()
-            return Table(data, headers)
-
     def handle_exec_result(self, result, vars, table):
         if result is None:
             return
 
-        table = self.convert_to_table(result)
+        table = convert_to_table(result)
         if table is not None:
             headers = table.__headers__
             rows = table.__data__
