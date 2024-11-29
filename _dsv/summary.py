@@ -43,23 +43,23 @@ class summary(_Base):
 
             if self.is_enum(col) >= cutoff:
                 if self.display_enum(header, col):
-                    return
+                    break
 
             elif self.is_date(dates := _utils.parse_datetime(col)) >= cutoff:
                 if self.display_date(header, dates):
-                    return
+                    break
 
             elif self.is_numeric(numbers := _utils.parse_value(col)) >= cutoff:
                 if self.display_numeric(header, numbers):
-                    return
+                    break
 
             else:
                 if self.display_enum(header, col):
-                    return
+                    break
 
             if self.opts.col_sep:
                 if super().on_row([b'---']):
-                    return
+                    break
 
             # import sys;print(f'''DEBUG(trauma)\t{header = }''', file=sys.__stderr__)
             #  import sys;print(f'''DEBUG(unclog)\t{col = }''', file=sys.__stderr__)
