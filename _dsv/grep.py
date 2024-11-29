@@ -13,7 +13,6 @@ class grep(_ColumnSlicer):
     parent.add_argument('-f', '--file', action='append', help='obtain patterns from FILE, one per line')
     parent.add_argument('-w', '--word-regexp', action='store_true', help='select only those matches surrounded by word boundaries')
     parent.add_argument('-x', '--field-regexp', action='store_true', help='select only those matches that exactly match the column')
-    parent.add_argument('-v', '--invert-match', action='store_true', help='select non-matching lines')
     parent.add_argument('-s', '--case-sensitive', action='store_true', help='search case sensitively')
     parent.add_argument('-m', '--max-count', type=int, default=float('inf'), metavar='NUM', help='show only the first NUM matching rows')
     parent.add_argument('-k', '--fields', action='append', default=[], help='search only on these fields')
@@ -38,6 +37,7 @@ class grep(_ColumnSlicer):
     parser.add_argument('-B', '--before-context', type=int, default=None, metavar='NUM', help='show NUM lines before each match')
     parser.add_argument('-C', '--context', type=int, default=None, metavar='NUM', help='show NUM lines before and after each match')
     parser.add_argument('-c', '--count', action='store_true', help='print only the count of matching rows')
+    parser.add_argument('-v', '--invert-match', action='store_true', help='select non-matching lines')
 
     MATCH_COLOUR = b'\x1b[1;31m'
 
