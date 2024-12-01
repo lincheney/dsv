@@ -95,16 +95,20 @@ class summary(_Base):
         if len(non_blank) != len(col):
             stats['[empty string]'] = len(col) - len(non_blank)
 
-        if not stats:
+        if stats:
+            if len(non_blank) != sum(common.values()):
+                stats[f'[{len(counts) - len(common)} other values]'] = len(non_blank) - sum(common.values())
+
+            for k, v in stats.items():
+                stats[k] = f'{v} ({v / len(col) * 100:.3g}%)'
+
+        else:
             # no common strings, do some word stats etc instead
             type = 'string'
             stats['min length'] = min(map(len, col))
             stats['max length'] = max(map(len, col))
             stats['words'] = sum(len(x.split()) for x in col)
             stats['[example]'] = next(x for x in col if x)
-
-        elif len(non_blank) != sum(common.values()):
-            stats[f'[{len(counts) - len(common)} other values]'] = len(non_blank) - sum(common.values())
 
         return self.display_stats(header, type, stats)
 
