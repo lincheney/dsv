@@ -412,6 +412,7 @@ class _Base:
     def write_output(self, row, padding=None, is_header=False):
         self.start_outfile()
         self.outfile.write(self.format_row(row, padding) + self.opts.ors)
+        self.outfile.flush()
 
     def on_header(self, header, padding=None) -> bool:
         if not self.opts.drop_header:
