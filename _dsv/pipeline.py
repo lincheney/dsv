@@ -6,7 +6,7 @@ class pipeline(_Base):
     name = '!'
 
     DEFAULTS = dict(
-        ofs = b'\t',
+        #  ofs = b'\t',
         trailer = False,
         colour = False,
         numbered_columns = False,
@@ -42,13 +42,7 @@ class pipeline(_Base):
         self.process_file = first.process_file
 
         # apply guessed ofs on first action to last action
-        original = first.determine_delimiters
-        def determine_delimiters(*args, original=original, **kwargs):
-            original(*args, **kwargs)
-            if last.opts.ofs is None:
-                last.opts.ofs = first.opts.ofs
-
-        first.determine_delimiters = determine_delimiters
+        first.determine_ofs = last.determine_ofs
 
         # pipe from left to right
         for src, dst in zip(self.pipeline[:-1], self.pipeline[1:]):

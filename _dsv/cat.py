@@ -9,25 +9,8 @@ class cat(_Base):
 
     def __init__(self, opts):
         self.original_opts = argparse.Namespace(**vars(opts))
+        self.original_opts.drop_header = True
         super().__init__(opts)
-
-    def process_file(self, file):
-        dummy = object()
-
-        for file in [file] + self.opts.files:
-            if self.opts.ofs:
-                child = _Base(self.original_opts, outfile=dummy)
-                child.on_row = self.on_row
-                child.on_header = self.on_header
-                got_row = yield from child.process_file(file)
-            else:
-                # if no ofs yet (file is empty), keep using this parser
-                got_row = yield from super().process_file(file)
-
-            if got_row:
-                self.original_opts.drop_header = True
-
-        super().on_eof()
 
     def on_header(self, header):
         if self.header is None:
@@ -45,4 +28,10 @@ class cat(_Base):
         return super().on_row(row)
 
     def on_eof(self):
-        pass
+        for file in self.opts.files:
+            child = _Base(self.original_opts)
+            child.on_row = self.on_row
+            child.on_header = self.on_header
+            list(child.process_file(file))
+
+        super().on_eof()
