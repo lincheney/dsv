@@ -47,6 +47,7 @@ class join(_ColumnSlicer):
         self.right = Queue()
         self.header_lock = threading.Semaphore(1)
         self.header_event = threading.Event()
+        self.joined_header = None
 
         self.collector = _ColumnSlicer(right_opts)
         self.collector.on_header = self.on_collector_header
@@ -86,9 +87,9 @@ class join(_ColumnSlicer):
             if self.opts.rename_2:
                 right = [self.opts.rename_2 % h for h in right]
 
-            header = self.paste_row(left, right)
+            self.joined_header = self.paste_row(left, right)
             try:
-                if super().on_header(header):
+                if super().on_header(self.joined_header):
                     return True
             finally:
                 self.header_event.set()
@@ -105,29 +106,54 @@ class join(_ColumnSlicer):
         self.left.setdefault(key, []).append(row)
 
     def join_left_with_right(self):
+        key_len = len(self.slice(self.header))
+        left_len = len(self.slice(self.header, True))
+        right_len = len(self.collector.slice(self.collector.header, True))
+
         matched = set()
 
         # left has finished, now read off the right
         while (right := self.right.get()) is not None:
             key = tuple(self.collector.slice(right, False))
-            right = self.collector.slice(right, True)
             matched.add(key)
-
             lefts = self.left.get(key, ())
+
+            key = list(key)
+            if len(key) < key_len:
+                key += [b''] * (key_len - len(key_len))
+
+            # inner joins
+            right = self.collector.slice(right, True)
             for left in lefts:
-                if super().on_row(list(key) + self.slice(left, True) + right):
+                row = self.slice(left, True)
+                if len(row) < left_len:
+                    row += [b''] * (left_len - len(row))
+
+                if super().on_row(key + row + right):
                     return True
 
+            # right joins
             if not lefts and self.opts.join in ('right', 'outer'):
-                padding = [self.opts.empty_value] * (len(self.header) - len(key))
-                if super().on_row(list(key) + padding + right):
+                padding = [self.opts.empty_value] * left_len
+                if super().on_row(key + padding + right):
                     return True
 
+        # left joins
         if self.opts.join in ('left', 'outer'):
             for key in self.left.keys() - matched:
-                padding = [self.opts.empty_value] * (len(self.collector.header) - len(key))
-                for left in self.left[key]:
-                    if super().on_row(list(key) + self.slice(left, True) + padding):
+                lefts = self.left[key]
+
+                key = list(key)
+                if len(key) < key_len:
+                    key += [b''] * (key_len - len(key_len))
+
+                padding = [self.opts.empty_value] * len(right_len)
+                for left in lefts:
+                    row = self.slice(left, True)
+                    if len(row) < left_len:
+                        row += [b''] * (left_len - len(row))
+
+                    if super().on_row(row + padding):
                         return True
 
     def on_eof(self):
