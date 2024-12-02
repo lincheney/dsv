@@ -13,34 +13,28 @@ class paste(_Base):
         self.original_opts = argparse.Namespace(**vars(opts))
         super().__init__(opts)
 
-    def process_file(self, file):
-        generators = []
-        generators.append(super().process_file(file, do_yield=True, do_callbacks=False))
-        for file in self.opts.files:
-            generators.append(_Base(self.original_opts).process_file(file, do_yield=True, do_callbacks=False))
+        default = (None, False)
+        generators = [_Base(self.original_opts).process_file(file, do_yield=True, do_callbacks=False) for file in self.opts.files]
+        self.generator = itertools.chain(itertools.zip_longest(*generators, fillvalue=default), itertools.repeat(default))
 
-        for values in itertools.zip_longest(*generators, fillvalue=(None, False)):
-            rows, is_header = zip(*values)
+    def on_header(self, header):
+        return super().on_header(self.paste_row(header))
 
-            if self.empty_rows is None:
-                rows = [r for r in rows if r is not None]
-                self.empty_rows = [[b''] * len(h) for h in rows]
+    def on_row(self, row):
+        return super().on_row(self.paste_row(row))
 
-            if None in rows:
-                rows = list(rows)
-                # pad rows that are missing
-                for i, r in enumerate(rows):
-                    if rows[i] is None:
-                        rows[i] = self.empty_rows[i]
+    def paste_row(self, row):
+        rows, is_header = zip((row, False), *next(self.generator))
 
-            row = sum(rows, start=[])
-            if is_header[0]:
-                self.header = row
-                if self.on_header(row):
-                    break
-            else:
-                if self.on_row(row):
-                    break
+        if self.empty_rows is None:
+            rows = [r for r in rows if r is not None]
+            self.empty_rows = [[b''] * len(r) for r in rows]
 
-        yield
-        self.on_eof()
+        if None in rows:
+            rows = list(rows)
+            # pad rows that are missing
+            for i, r in enumerate(rows):
+                if rows[i] is None:
+                    rows[i] = self.empty_rows[i]
+
+        return sum(rows, start=[])
