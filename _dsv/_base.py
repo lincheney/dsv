@@ -398,7 +398,7 @@ class _Base:
         return ofs.join(row)
 
     def start_outfile(self):
-        if self.outfile_proc is None:
+        if self.outfile is None and self.outfile_proc is None:
             if self.opts.page:
                 cmd = ['less', '-RX']
                 if self.header is not None and not self.opts.drop_header:
