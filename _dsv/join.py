@@ -106,14 +106,19 @@ class join(_ColumnSlicer):
         self.left.setdefault(key, []).append(row)
 
     def join_left_with_right(self):
-        key_len = len(self.slice(self.header))
-        left_len = len(self.slice(self.header, True))
-        right_len = len(self.collector.slice(self.collector.header, True))
+        first_left = self.header or list(self.left.values() or [[]])[0]
+        key_len = len(self.slice(first_left))
+        left_len = len(self.slice(first_left, True))
+        right_len = self.collector.header and len(self.collector.slice(self.collector.header, True))
 
         matched = set()
 
         # left has finished, now read off the right
         while (right := self.right.get()) is not None:
+
+            if right_len is None:
+                right_len = len(self.collector.slice(right, True))
+
             key = tuple(self.collector.slice(right, False))
             matched.add(key)
             lefts = self.left.get(key, ())
@@ -138,6 +143,9 @@ class join(_ColumnSlicer):
                 if super().on_row(key + padding + right):
                     return True
 
+        if right_len is None:
+            right_len = 0
+
         # left joins
         if self.opts.join in ('left', 'outer'):
             for key in self.left.keys() - matched:
@@ -147,9 +155,9 @@ class join(_ColumnSlicer):
                 if len(key) < key_len:
                     key += [b''] * (key_len - len(key_len))
 
-                padding = [self.opts.empty_value] * len(right_len)
+                padding = [self.opts.empty_value] * right_len
                 for left in lefts:
-                    row = self.slice(left, True)
+                    row = key + self.slice(left, True)
                     if len(row) < left_len:
                         row += [b''] * (left_len - len(row))
 
