@@ -12,6 +12,7 @@ _shtab__dsv_commands() {
     "exec-filter:filter rows using python"
     "exec-groupby:aggregate rows using python"
     "flip:prints each column on a separate line"
+    "fromhtml:convert from html table"
     "fromjson:convert from json"
     "frommarkdown:convert from markdown table"
     "grep:print lines that match patterns"
@@ -246,6 +247,31 @@ _shtab__dsv_flip_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--lines}"[print the first NUM lines]:lines:"
   "--row-sep[show a separator between the rows]:row_sep:(never always auto)"
+  {-H,--header}"[treat first row as a header]"
+  {-N,--no-header}"[do not treat first row as header]"
+  "--drop-header[do not print the header]"
+  "--trailer[print a trailer]:trailer:(never always auto)"
+  "--numbered-columns[number the columns in the header]:numbered_columns:(never always auto)"
+  {-d,--ifs}"[input field separator]:ifs:"
+  "--plain-ifs[treat input field separator as a literal not a regex]"
+  {-D,--ofs}"[output field separator]:ofs:"
+  "--irs[input row separator]:irs:"
+  "--ors[output row separator]:ors:"
+  "--csv[treat input as csv]"
+  "--tsv[treat input as tsv]"
+  "--ssv[treat input as whitespace separated]"
+  "--combine-trailing-columns[if a row has more columns than the header, combine the last ones into one, useful with --ssv]"
+  {-P,--pretty}"[prettified output]"
+  "--page[show output in a pager (less)]"
+  {--colour,--color}"[enable colour]:colour:(never always auto)"
+  "--header-colour[ansi escape code for the header]:header_colour:"
+  "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
+  "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
+  {-Q,--no-quoting}"[do not handle quotes from input]"
+)
+
+_shtab__dsv_fromhtml_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -956,6 +982,7 @@ _shtab__dsv() {
         exec-filter) _arguments -C -s $_shtab__dsv_exec_filter_options ;;
         exec-groupby) _arguments -C -s $_shtab__dsv_exec_groupby_options ;;
         flip) _arguments -C -s $_shtab__dsv_flip_options ;;
+        fromhtml) _arguments -C -s $_shtab__dsv_fromhtml_options ;;
         fromjson) _arguments -C -s $_shtab__dsv_fromjson_options ;;
         frommarkdown) _arguments -C -s $_shtab__dsv_frommarkdown_options ;;
         grep) _arguments -C -s $_shtab__dsv_grep_options ;;
