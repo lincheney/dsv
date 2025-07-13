@@ -2,6 +2,8 @@ import sys
 from html.parser import HTMLParser
 import threading
 from queue import Queue
+from concurrent.futures import Future
+from functools import partial
 from ._base import _Base
 
 class Parser(HTMLParser):
@@ -59,10 +61,11 @@ class fromhtml(_Base):
 
         got_row = False
         queue = Queue()
-        thread = threading.Thread(target=self.parse, args=[file, queue])
+        thread = threading.Thread(target=self.parse, args=[queue, file])
         thread.start()
 
-        while (item := queue.get()) is not None:
+        while (fut := queue.get()) is not None:
+            item = fut.result()
             got_row = True
             row, is_header = item
             row = [x.encode('utf8').strip() for x in row]
@@ -74,8 +77,23 @@ class fromhtml(_Base):
         thread.join()
         return got_row
 
-    def parse(self, file, queue, chunk=8192):
-        parser = Parser(queue.put_nowait)
+    def parse(self, queue, *args, **kwargs):
+        try:
+            self._parse(queue, *args, **kwargs)
+        except Exception as e:
+            fut = Future()
+            fut.set_exception(e)
+            queue.put_nowait(fut)
+        finally:
+            queue.put_nowait(None)
+
+    def parser_callback(self, queue, result):
+        fut = Future()
+        fut.set_result(result)
+        queue.put_nowait(fut)
+
+    def _parse(self, queue, file, chunk=8192):
+        parser = Parser(partial(self.parser_callback, queue))
         remainder = b''
         while buf := file.read1(chunk):
             buf = remainder + buf
