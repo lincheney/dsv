@@ -14,15 +14,24 @@ class Parser(HTMLParser):
         self.state = []
         self.got_header = False
         self.ignore_surrounding_html = ignore_surrounding_html
+        self.rowspans = {}
+
+    def apply_rowspans(self):
+        i = len(self.current_row) + 1
+        while value := self.rowspans.get(i):
+            self.current_row.append(value[1])
+            i += 1
+
+    def decrement_rowspans(self):
+        for k, v in list(self.rowspans.items()):
+            if v[0] <= 1:
+                self.rowspans.pop(k)
+            else:
+                v[0] -= 1
 
     def handle_starttag(self, tag, attrs):
         if self.state and self.state[-1] in {'th', 'td'}:
             return
-
-        if tag == 'tr' and tag not in self.state:
-            self.current_row = []
-        elif tag in {'td', 'th'} and tag not in self.state:
-            self.current_row.append('')
 
         self.state.append(tag)
         match self.state[-2:]:
@@ -32,7 +41,28 @@ class Parser(HTMLParser):
                 | ['thead' | 'tbody', 'tr'] \
                 | ['tr', 'th' | 'td']:
                 # good
-                pass
+
+                if tag == 'tr':
+                    # new row
+                    self.current_row = []
+                    self.decrement_rowspans()
+                    self.apply_rowspans()
+
+                elif tag in {'td', 'th'}:
+                    self.apply_rowspans()
+                    # new column
+                    self.current_row.append('')
+
+                    if rowspan := dict(attrs).get('rowspan'):
+                        if rowspan.isnumeric() and (rowspan := int(rowspan)) and rowspan > 0:
+                            self.rowspans[len(self.current_row)] = [rowspan, '']
+                        else:
+                            print(f'invalid rowspan {rowspan!r}', file=sys.stderr)
+
+                else:
+                    # new table
+                    self.rowspans.clear()
+
             case _:
                 # bad
                 if self.ignore_surrounding_html:
@@ -58,6 +88,9 @@ class Parser(HTMLParser):
     def handle_data(self, data):
         if self.state and self.state[-1] in {'td', 'th'}:
             self.current_row[-1] += data
+
+            if rowspan := self.rowspans.get(len(self.current_row)):
+                rowspan[1] = self.current_row[-1]
 
 class fromhtml(_Base):
     ''' convert from html table '''
