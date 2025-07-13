@@ -82,6 +82,7 @@ class Parser(HTMLParser):
             if is_header and self.got_header:
                 print('got duplicate html table header', file=sys.stderr)
             else:
+                self.apply_rowspans()
                 self.callback((self.current_row, is_header))
                 self.got_header = is_header
 
