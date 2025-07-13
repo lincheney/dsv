@@ -176,17 +176,24 @@ class grep(_ColumnSlicer):
 
                     # prefix
                     parts.append(row[i][start : best[0]])
-                    # start colour
-                    if self.grep_colour:
-                        parts.append(self.MATCH_COLOUR)
-                    # matched text / replacement
-                    parts.append(row[i][best[0] : best[1]])
-                    if self.opts.replace is not None:
-                        parts[-1] = self.do_replace(best[2], parts[-1])
-                    # end colour
-                    if self.grep_colour:
-                        parts.append(self.RESET_COLOUR)
-                    start = best[1]
+
+                    if best[0] == best[1]:
+                        # empty match
+                        parts.append(row[i][start : best[1] + 1])
+                        start = best[1] + 1
+
+                    else:
+                        # start colour
+                        if self.grep_colour:
+                            parts.append(self.MATCH_COLOUR)
+                        # matched text / replacement
+                        parts.append(row[i][best[0] : best[1]])
+                        if self.opts.replace is not None:
+                            parts[-1] = self.do_replace(best[2], parts[-1])
+                        # end colour
+                        if self.grep_colour:
+                            parts.append(self.RESET_COLOUR)
+                        start = best[1]
 
                     if start >= len(col):
                         break
