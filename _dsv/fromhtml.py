@@ -72,9 +72,15 @@ class fromhtml(_Base):
         thread = threading.Thread(target=self.parse, args=[queue, file])
         thread.start()
 
-        while (fut := queue.get()) is not None:
-            item = fut.result()
+        while True:
+            fut = queue.get()
+            if do_callbacks and (fut is None or fut.exception() is not None):
+                self.on_eof()
+            if fut is None:
+                break
+
             got_row = True
+            item = fut.result()
             row, is_header = item
             row = [x.encode('utf8').strip() for x in row]
             if do_callbacks and (self.on_header(row) if is_header else self.on_row(row)):
