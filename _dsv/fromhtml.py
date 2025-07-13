@@ -1,5 +1,6 @@
 import sys
 from html.parser import HTMLParser
+import argparse
 import threading
 from queue import Queue
 from concurrent.futures import Future
@@ -7,11 +8,12 @@ from functools import partial
 from ._base import _Base
 
 class Parser(HTMLParser):
-    def __init__(self, callback):
+    def __init__(self, callback, ignore_surrounding_html=False):
         super().__init__()
         self.callback = callback
         self.state = []
         self.got_header = False
+        self.ignore_surrounding_html = ignore_surrounding_html
 
     def handle_starttag(self, tag, attrs):
         if self.state and self.state[-1] in {'th', 'td'}:
@@ -23,16 +25,20 @@ class Parser(HTMLParser):
             self.current_row.append('')
 
         self.state.append(tag)
-        if self.state not in [
-            ['table'],
-            ['table', 'thead'],
-            ['table', 'thead', 'tr'],
-            ['table', 'thead', 'tr', 'th'],
-            ['table', 'tbody'],
-            ['table', 'tbody', 'tr'],
-            ['table', 'tbody', 'tr', 'td'],
-        ]:
-            raise ValueError(f'invalid tags {self.state}')
+        match self.state[-2:]:
+            case \
+                  ['table' | 'thead' | 'tbody'] \
+                | ['table', 'thead' | 'tbody' | 'tr'] \
+                | ['thead' | 'tbody', 'tr'] \
+                | ['tr', 'th' | 'td']:
+                # good
+                pass
+            case _:
+                # bad
+                if self.ignore_surrounding_html:
+                    self.state.pop()
+                else:
+                    raise ValueError(f'invalid tags {self.state}')
 
     def handle_endtag(self, tag):
         old_state = self.state
@@ -55,6 +61,8 @@ class Parser(HTMLParser):
 
 class fromhtml(_Base):
     ''' convert from html table '''
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--ignore-surrounding-html', action='store_true', help='ignore surrounding html')
 
     def process_file(self, file, do_callbacks=True, do_yield=False):
         self.determine_delimiters(b'')
@@ -93,7 +101,7 @@ class fromhtml(_Base):
         queue.put_nowait(fut)
 
     def _parse(self, queue, file, chunk=8192):
-        parser = Parser(partial(self.parser_callback, queue))
+        parser = Parser(partial(self.parser_callback, queue), self.opts.ignore_surrounding_html)
         remainder = b''
         while buf := file.read1(chunk):
             buf = remainder + buf
