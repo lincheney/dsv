@@ -10,7 +10,7 @@ _shtab__dsv_exec_option_strings=('-h' '--help' '-q' '--quiet' '--var' '-b' '--by
 _shtab__dsv_exec_filter_option_strings=('-h' '--help' '-q' '--quiet' '--var' '-b' '--bytes' '-I' '--ignore-errors' '--passthru' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_exec_groupby_option_strings=('-h' '--help' '-q' '--quiet' '--var' '-b' '--bytes' '-x' '--complement' '-k' '--fields' '-r' '--regex' '-I' '--ignore-errors' '-E' '--remove-errors' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_flip_option_strings=('-h' '--help' '-n' '--lines' '--row-sep' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
-_shtab__dsv_fromhtml_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
+_shtab__dsv_fromhtml_option_strings=('-h' '--help' '--ignore-surrounding-html' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_fromjson_option_strings=('-h' '--help' '-f' '--flatten' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_frommarkdown_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
 _shtab__dsv_grep_option_strings=('-h' '--help' '-e' '--regexp' '-F' '--fixed-strings' '-f' '--file' '-w' '--word-regexp' '-x' '--field-regexp' '-s' '--case-sensitive' '-m' '--max-count' '-k' '--fields' '-r' '--regex' '--complement' '--replace' '-n' '--line-number' '--passthru' '-A' '--after-context' '-B' '--before-context' '-C' '--context' '-c' '--count' '-v' '--invert-match' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting')
@@ -422,6 +422,7 @@ _shtab__dsv_flip__Q_nargs=0
 _shtab__dsv_flip___no_quoting_nargs=0
 _shtab__dsv_fromhtml__h_nargs=0
 _shtab__dsv_fromhtml___help_nargs=0
+_shtab__dsv_fromhtml___ignore_surrounding_html_nargs=0
 _shtab__dsv_fromhtml__H_nargs=0
 _shtab__dsv_fromhtml___header_nargs=0
 _shtab__dsv_fromhtml__N_nargs=0
@@ -1101,6 +1102,7 @@ _set_new_action() {
 #     ${!x} -> ${hello} -> "world"
 _shtab__dsv() {
   local completing_word="${COMP_WORDS[COMP_CWORD]}"
+  local previous_word="${COMP_WORDS[COMP_CWORD-1]}"
   local completed_positional_actions
   local current_action
   local current_action_args_start_index
@@ -1157,6 +1159,10 @@ _shtab__dsv() {
   if [[ $pos_only = 0 && "${completing_word}" == -* ]]; then
     # optional argument started: use option strings
     COMPREPLY=( $(compgen -W "${current_option_strings[*]}" -- "${completing_word}") )
+  elif [[ "${previous_word}" == ">" || "${previous_word}" == ">>" ||
+          "${previous_word}" =~ ^[12]">" || "${previous_word}" =~ ^[12]">>" ]]; then
+    # handle redirection operators
+    COMPREPLY=( $(compgen -f -- "${completing_word}") )
   else
     # use choices & compgen
     local IFS=$'\n' # items may contain spaces, so delimit using newline
