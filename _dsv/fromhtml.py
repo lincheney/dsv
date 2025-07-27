@@ -1,5 +1,6 @@
 import sys
 from html.parser import HTMLParser
+import html
 import argparse
 import threading
 from queue import Queue
@@ -8,12 +9,13 @@ from functools import partial
 from ._base import _Base
 
 class Parser(HTMLParser):
-    def __init__(self, callback, ignore_surrounding_html=False):
+    def __init__(self, callback, ignore_surrounding_html=False, inner_html=False):
         super().__init__()
         self.callback = callback
         self.state = []
         self.got_header = False
         self.ignore_surrounding_html = ignore_surrounding_html
+        self.inner_html = inner_html
         self.rowspans = {}
 
     def apply_rowspans(self):
@@ -31,6 +33,8 @@ class Parser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         if self.state and self.state[-1] in {'th', 'td'}:
+            if self.inner_html:
+                self.current_row[-1] += f'<{tag} {' '.join(f'{k}="{html.escape(v)}"' for k, v in attrs)}>'
             return
 
         self.state.append(tag)
@@ -73,6 +77,10 @@ class Parser(HTMLParser):
     def handle_endtag(self, tag):
         old_state = self.state
 
+        if self.state and self.state[-1] in {'th', 'td'} and tag != self.state[-1]:
+            if self.inner_html:
+                self.current_row[-1] += f'</{tag}>'
+
         if tag in self.state:
             ix = list(reversed(self.state)).index(tag) + 1
             self.state = self.state[:-ix]
@@ -97,6 +105,7 @@ class fromhtml(_Base):
     ''' convert from html table '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--ignore-surrounding-html', action='store_true', help='ignore surrounding html')
+    parser.add_argument('--inner-html', action='store_true', help='output the innerHTML of table cells, not the innerText')
 
     def process_file(self, file, do_callbacks=True, do_yield=False):
         self.determine_delimiters(b'')
@@ -141,7 +150,7 @@ class fromhtml(_Base):
         queue.put_nowait(fut)
 
     def _parse(self, queue, file, chunk=8192):
-        parser = Parser(partial(self.parser_callback, queue), self.opts.ignore_surrounding_html)
+        parser = Parser(partial(self.parser_callback, queue), self.opts.ignore_surrounding_html, self.opts.inner_html)
         remainder = b''
         while buf := file.read1(chunk):
             buf = remainder + buf
