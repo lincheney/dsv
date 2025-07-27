@@ -1,3 +1,4 @@
+import re
 import argparse
 import itertools
 import datetime
@@ -12,6 +13,27 @@ class summary(_Base):
     parser = argparse.ArgumentParser()
     parser.add_argument('--col-sep', choices=('never', 'always', 'auto'), default='auto', help='show a separator between the columns')
     parser.set_defaults(ofs=_Base.PRETTY_OUTPUT)
+
+    SIZE_SUFFIXES = {
+        '': 1,
+        'b': 1,
+        'k': 10**3,
+        'kb': 10**3,
+        'kib': 2**10,
+        'm': 10**6,
+        'mb': 10**6,
+        'mib': 2**20,
+        'g': 10**9,
+        'gb': 10**9,
+        'gib': 2**30,
+        't': 10**12,
+        'tb': 10**12,
+        'tib': 2**40,
+        'p': 10**15,
+        'pb': 10**15,
+        'pib': 2**50,
+    }
+    SIZE_REGEX = re.compile(fr'(?i)(\d+(?:\.\d+)?)\s?((?:{'|'.join(SIZE_SUFFIXES)})?)'.encode('utf8'))
 
     def __init__(self, opts):
         super().__init__(opts)
@@ -52,6 +74,14 @@ class summary(_Base):
 
                 elif self.is_numeric(numbers := _utils.parse_value(col)) >= cutoff:
                     if self.display_numeric(h, numbers):
+                        break
+
+                elif self.is_numeric(numbers := _utils.parse_value([c.strip().removesuffix(b'%') for c in col])) >= cutoff:
+                    if self.display_numeric(h, numbers, formatter=self.format_percentage):
+                        break
+
+                elif self.is_size(col) >= cutoff:
+                    if self.display_size(h, col):
                         break
 
                 else:
@@ -117,16 +147,17 @@ class summary(_Base):
         return num_dates / len(col)
 
     def display_date(self, header, col):
-        stats = self.get_numeric_stats([x.timestamp() if isinstance(x, datetime.datetime) else None for x in col])
-        for k, v in stats.items():
-            stats[k] = datetime.datetime.fromtimestamp(v)
+        stats = self.get_numeric_stats(
+            [x.timestamp() if isinstance(x, datetime.datetime) else None for x in col],
+            formatter=datetime.datetime.formatter
+        )
         return self.display_stats(header, 'date', stats)
 
     def is_numeric(self, col):
         num_floats = sum(isinstance(x, (float, int)) for x in col)
         return num_floats / len(col)
 
-    def get_numeric_stats(self, col):
+    def get_numeric_stats(self, col, formatter=None):
         numeric = [x for x in col if isinstance(x, (float, int))]
         non_nan = [x for x in numeric if x is not math.isnan(x)]
         finite = [x for x in non_nan if not math.isinf(x)]
@@ -141,6 +172,9 @@ class summary(_Base):
             'third quartile': third_quartile,
             'max': max(non_nan),
         }
+        if formatter is not None:
+            for k, v in stats.items():
+                stats[k] = formatter(v)
         if len(non_nan) != len(numeric):
             stats['nan'] = len(numeric) - len(non_nan)
         if len(numeric) != len(col):
@@ -148,5 +182,25 @@ class summary(_Base):
 
         return stats
 
-    def display_numeric(self, header, col):
-        return self.display_stats(header, 'numeric', self.get_numeric_stats(col))
+    def display_numeric(self, header, col, formatter=None):
+        return self.display_stats(header, 'numeric', self.get_numeric_stats(col, formatter))
+
+    def format_percentage(self, value):
+        return f'{value:.3g}%'
+
+    def is_size(self, col):
+        num_sizes = sum(bool(self.SIZE_REGEX.fullmatch(c)) for c in col)
+        return num_sizes / len(col)
+
+    def format_size(self, size):
+        suffixes = ('b', 'kb', 'mb', 'gb', 'tb', 'pb')
+        for exp, suffix in enumerate(suffixes, 1):
+            if exp == len(suffixes) or size < 1_000**exp:
+                return '{:.3g} {}'.format(size / 1_000**(exp-1), suffix)
+        raise Exception()
+
+    def display_size(self, header, col):
+        matches = [self.SIZE_REGEX.fullmatch(c) for c in col]
+        values = [float(m.group(1)) * self.SIZE_SUFFIXES[m.group(2).lower().decode('utf8')] for m in matches]
+        stats = self.get_numeric_stats(values, formatter=self.format_size)
+        return self.display_stats(header, 'size', stats)
