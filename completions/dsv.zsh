@@ -272,7 +272,8 @@ _shtab__dsv_flip_options=(
 
 _shtab__dsv_fromhtml_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
-  "--ignore-surrounding-html[ignore surrounding html]"
+  "--strict[only allow valid table]"
+  "--inner-html[output the innerHTML of table cells, not the innerText]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
