@@ -9,12 +9,12 @@ from functools import partial
 from ._base import _Base
 
 class Parser(HTMLParser):
-    def __init__(self, callback, ignore_surrounding_html=False, inner_html=False):
+    def __init__(self, callback, strict=False, inner_html=False):
         super().__init__()
         self.callback = callback
         self.state = []
         self.got_header = False
-        self.ignore_surrounding_html = ignore_surrounding_html
+        self.strict = strict
         self.inner_html = inner_html
         self.rowspans = {}
 
@@ -69,10 +69,10 @@ class Parser(HTMLParser):
 
             case _:
                 # bad
-                if self.ignore_surrounding_html:
-                    self.state.pop()
-                else:
+                if self.strict:
                     raise ValueError(f'invalid tags {self.state}')
+                else:
+                    self.state.pop()
 
     def handle_endtag(self, tag):
         old_state = self.state
@@ -104,7 +104,7 @@ class Parser(HTMLParser):
 class fromhtml(_Base):
     ''' convert from html table '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('--ignore-surrounding-html', action='store_true', help='ignore surrounding html')
+    parser.add_argument('--strict', action='store_true', help='only allow valid table')
     parser.add_argument('--inner-html', action='store_true', help='output the innerHTML of table cells, not the innerText')
 
     def process_file(self, file, do_callbacks=True, do_yield=False):
@@ -150,7 +150,7 @@ class fromhtml(_Base):
         queue.put_nowait(fut)
 
     def _parse(self, queue, file, chunk=8192):
-        parser = Parser(partial(self.parser_callback, queue), self.opts.ignore_surrounding_html, self.opts.inner_html)
+        parser = Parser(partial(self.parser_callback, queue), self.opts.strict, self.opts.inner_html)
         remainder = b''
         while buf := file.read1(chunk):
             buf = remainder + buf
