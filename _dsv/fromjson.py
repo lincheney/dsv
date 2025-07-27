@@ -33,6 +33,7 @@ class fromjson(_Base):
             remainder = buffer[e.start:]
         else:
             remainder = b''
+        utf8_buf = utf8_buf.lstrip()
 
         value, index = json_decoder.raw_decode(utf8_buf)
         return value, utf8_buf[index:].lstrip().encode('utf8') + remainder
