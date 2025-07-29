@@ -69,6 +69,7 @@ def parse_datetime(
         '%Y-%m-%d %H:%M:%S.%f',
         '%Y-%m-%dT%H:%M:%S%z',
         '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%d %H:%M:%S',
         '%d/%m/%y %H:%M:%S',
     ),
     date_yardstick=datetime.datetime(2000, 1, 1),

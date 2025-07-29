@@ -149,7 +149,7 @@ class summary(_Base):
     def display_date(self, header, col):
         stats = self.get_numeric_stats(
             [x.timestamp() if isinstance(x, datetime.datetime) else None for x in col],
-            formatter=datetime.datetime.formatter
+            formatter=datetime.datetime.fromtimestamp,
         )
         return self.display_stats(header, 'date', stats)
 
