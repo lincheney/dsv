@@ -125,7 +125,7 @@ class join(_ColumnSlicer):
 
             key = list(key)
             if len(key) < key_len:
-                key += [b''] * (key_len - len(key_len))
+                key += [b''] * (key_len - len(key))
 
             # inner joins
             right = self.collector.slice(right, True)
