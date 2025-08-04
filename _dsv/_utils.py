@@ -35,6 +35,14 @@ def as_float(value, warn=True):
             print(e, file=sys.stderr)
         return math.nan
 
+def diff(value):
+    result = []
+    prev = 0
+    for v in value:
+        result.append(v - prev)
+        prev = v
+    return result[1:]
+
 def remove_ansi_colour(value: bytes):
     if b'\x1b[' in value or b'\x1b]' in value:
         # remove colour escapes

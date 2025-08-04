@@ -317,6 +317,7 @@ for arity, scalar, functions in [
     (1, True, (
         sum,
         statistics.mean, statistics.fmean, statistics.geometric_mean, statistics.harmonic_mean, statistics.median, statistics.median_low, statistics.median_high, statistics.median_grouped, statistics.mode, statistics.multimode, statistics.quantiles, statistics.pstdev, statistics.pvariance, statistics.stdev, statistics.variance,
+        _utils.diff,
     )),
     (2, True, (
         '__lt__', '__gt__', '__le__', '__ge__', '__eq__', '__ne__', '__add__', '__sub__', '__mul__', '__matmul__', '__truediv__', '__floordiv__', '__mod__', '__lshift__', '__rshift__', '__and__', '__xor__', '__or__', '__pow__', '__divmod__',
@@ -445,6 +446,7 @@ class exec_(_Base):
             rows = [_utils.parse_value(row) for row in rows]
 
         vars['H'] = copy.copy(self.header)
+        vars['Vec'] = Vec
         table = vars[self.opts.var] = Table(rows, self.header_numbers)
 
         with self.exec_wrapper(vars):
