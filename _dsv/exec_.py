@@ -329,10 +329,11 @@ for arity, scalar, functions in [
         name = fn if isinstance(fn, str) else fn.__name__
 
         if isinstance(fn, str):
+            fnname = name
             if arity < 0:
-                fn = name.replace('__r', '__', 1)
-            if not (fn := getattr(operator, fn, None)):
-                def fn(x, *args, fn=fn, **kwargs):
+               fnname = fnname.replace('__r', '__', 1)
+            if not (fn := getattr(operator, fnname, None)):
+                def fn(x, *args, fn=fnname, **kwargs):
                     return getattr(x, fn)(*args, **kwargs)
 
         if arity == 1 and scalar:
