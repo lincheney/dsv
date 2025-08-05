@@ -78,6 +78,7 @@ def parse_datetime(
         '%Y-%m-%dT%H:%M:%S%z',
         '%Y-%m-%dT%H:%M:%S',
         '%Y-%m-%d %H:%M:%S',
+        '%Y/%m/%d %H:%M:%S',
         '%d/%m/%y %H:%M:%S',
     ),
     date_yardstick=datetime.datetime(2000, 1, 1),
@@ -88,16 +89,19 @@ def parse_datetime(
     if isinstance(value, datetime.datetime):
         return value
 
-    elif isinstance(value, bytes) and value:
-        value = re.sub(b'(\\.[0-9]{6})[0-9]*', b'\\1', value)
+    elif isinstance(value, (str, bytes)) and value:
+        val = value
+        if isinstance(val, bytes):
+            val = val.decode('utf8')
+        val = re.sub('(\\.[0-9]{6})[0-9]*', '\\1', val)
         for fmt in formats:
             try:
-                return datetime.datetime.strptime(value.decode('utf8'), fmt)
+                return datetime.datetime.strptime(val, fmt)
             except ValueError:
                 pass
 
-    elif isinstance(value, (int, float)) and value >= date_yardstick:
-        if value > date_yardstick.value() * 1000:
+    elif isinstance(value, (int, float)) and value >= date_yardstick.timestamp():
+        if value > date_yardstick.timestamp() * 1000:
             # this is in milliseconds
             value /= 1000.0
         return datetime.datetime.fromtimestamp(value)
