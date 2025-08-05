@@ -312,7 +312,7 @@ for arity, scalar, functions in [
     (1, False, (
         '__round__', '__floor__', '__ceil__', '__neg__', '__pos__', '__invert__', '__index__',
         math.ceil, math.fabs, math.floor, math.isfinite, math.isinf, math.isnan, math.isqrt, math.prod, math.trunc, math.exp, math.log, math.log2, math.log10, math.sqrt,
-        _utils.as_float,
+        _utils.as_float, _utils.parse_datetime,
     )),
     (1, True, (
         sum,
