@@ -12,6 +12,13 @@ const RESET_COLOUR: &[u8] = b"\x1b[0m";
 static SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
 static PPRINT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s\s+").unwrap());
 
+fn get_rgb(i: usize, step: f32) -> BString {
+    let hue = (step * i as f32) % 1.0;
+    let hsv = Hsv{ h: hue * 360.0, s: 0.3, v: 1.0 };
+    let rgb = hsv.to_rgb8();
+    format!("\x1b[38;2;{};{};{}m", rgb.r, rgb.g, rgb.b).as_bytes().into()
+}
+
 #[derive(Debug)]
 enum Ifs {
     Regex(Regex),
@@ -50,6 +57,14 @@ impl AutoChoices {
             Self::Auto => is_tty,
         }
     }
+
+    fn is_on_if<F: Fn() -> bool>(&self, is_tty: F) -> bool {
+        match self {
+            Self::Always => true,
+            Self::Never => false,
+            Self::Auto => is_tty(),
+        }
+    }
 }
 
 #[derive(Debug, Parser, Clone)]
@@ -58,45 +73,45 @@ pub struct BaseOptions {
     #[arg(short = 'H', long = "header", action = ArgAction::SetTrue)]
     #[arg(short = 'N', long = "no-header", action = ArgAction::SetFalse)]
     header: Option<bool>,
-    #[arg(long = "drop-header", help = "Do not print the header")]
+    #[arg(long, help = "Do (or not) print the header")]
     drop_header: bool,
-    #[arg(long = "trailer", value_enum, default_value_t = AutoChoices::Auto, help = "Print a trailer")]
+    #[arg(value_enum, default_value_t = AutoChoices::Auto, help = "Print a trailer")]
     trailer: AutoChoices,
-    #[arg(long = "numbered-columns", value_enum, default_value_t = AutoChoices::Auto, help = "Number the columns in the header")]
+    #[arg(long, value_enum, default_value_t = AutoChoices::Auto, help = "Number the columns in the header")]
     numbered_columns: AutoChoices,
-    #[arg(short = 'd', long = "ifs", help = "Input field separator")]
+    #[arg(short = 'd', long, help = "Input field separator")]
     ifs: Option<String>,
-    #[arg(long = "plain-ifs", help = "Treat input field separator as a literal not a regex")]
+    #[arg(long, help = "Treat input field separator as a literal not a regex")]
     plain_ifs: bool,
-    #[arg(short = 'D', long = "ofs", help = "Output field separator")]
+    #[arg(short = 'D', long, help = "Output field separator")]
     ofs: Option<String>,
-    #[arg(long = "irs", help = "Input row separator")]
+    #[arg(long, help = "Input row separator")]
     irs: Option<String>,
-    #[arg(long = "ors", help = "Output row separator")]
+    #[arg(long, help = "Output row separator")]
     ors: Option<String>,
-    #[arg(long = "csv", help = "Treat input as CSV")]
+    #[arg(long, help = "Treat input as CSV")]
     csv: bool,
-    #[arg(long = "tsv", help = "Treat input as TSV")]
+    #[arg(long, help = "Treat input as TSV")]
     tsv: bool,
-    #[arg(long = "ssv", help = "Treat input as whitespace-separated")]
+    #[arg(long, help = "Treat input as whitespace-separated")]
     ssv: bool,
-    #[arg(long = "combine-trailing-columns", help = "Combine trailing columns")]
+    #[arg(long, help = "Combine trailing columns")]
     combine_trailing_columns: bool,
-    #[arg(short = 'P', long = "pretty", help = "Prettified output")]
+    #[arg(short = 'P', long, help = "Prettified output")]
     pretty: bool,
-    #[arg(long = "page", help = "Show output in a pager")]
+    #[arg(long, help = "Show output in a pager")]
     page: bool,
-    #[arg(long = "colour", value_enum, default_value_t = AutoChoices::Auto, help = "Enable colour")]
+    #[arg(long, value_enum, default_value_t = AutoChoices::Auto, help = "Enable colour")]
     colour: AutoChoices,
-    #[arg(long = "header-colour", help = "ANSI escape code for the header")]
+    #[arg(long, help = "ANSI escape code for the header")]
     header_colour: Option<String>,
-    #[arg(long = "header-bg-colour", help = "ANSI escape code for the header background")]
+    #[arg(long, help = "ANSI escape code for the header background")]
     header_bg_colour: Option<String>,
-    #[arg(long = "rainbow-columns", value_enum, default_value_t = AutoChoices::Auto, help = "Enable rainbow columns")]
+    #[arg(long, value_enum, default_value_t = AutoChoices::Auto, help = "Enable rainbow columns")]
     rainbow_columns: AutoChoices,
-    #[arg(short = 'Q', long = "no-quoting", help = "Do not handle quotes from input")]
+    #[arg(short = 'Q', long, help = "Do not handle quotes from input")]
     no_quoting: bool,
-    #[arg(long = "quote-output", help = "Enable quoting for output")]
+    #[arg(long, help = "Enable quoting for output")]
     quote_output: bool,
 }
 
@@ -188,7 +203,7 @@ impl Writer {
             // colour each column differently
             if row.len() > self.rgb_map.len() {
                 for i in self.rgb_map.len() .. row.len() {
-                    self.rgb_map.push(Base::get_rgb(i, 0.647))
+                    self.rgb_map.push(get_rgb(i, 0.647))
                 }
             }
         }
@@ -211,7 +226,9 @@ impl Writer {
 
         for (i, ((col, rgb), &pad)) in row.iter().zip(rgb).zip(padding).enumerate() {
             if i != 0 {
-                parts.extend_from_slice(b"\x1b[39m");
+                if colour {
+                    parts.extend_from_slice(b"\x1b[39m");
+                }
                 parts.extend_from_slice(ofs);
             }
             if let Some(header_colour) = header_colour {
@@ -220,7 +237,9 @@ impl Writer {
             if let Some(header_bg_colour) = header_bg_colour {
                 parts.extend_from_slice(header_bg_colour);
             }
-            parts.extend_from_slice(rgb);
+            if colour {
+                parts.extend_from_slice(rgb);
+            }
             parts.extend_from_slice(col);
             if header_bg_colour.or(header_colour).is_some() {
                 parts.extend_from_slice(RESET_COLOUR);
@@ -232,8 +251,8 @@ impl Writer {
                 parts.push(b' ');
             }
         }
-        // drop the last ofs and reset colour instead
-        if !parts.is_empty() {
+        // reset colour
+        if colour && !parts.is_empty() {
             parts.extend_from_slice(RESET_COLOUR);
         }
 
@@ -247,10 +266,16 @@ impl Writer {
             let ofs = ofs.as_bstr();
 
             for i in 0 .. row.len() {
-                if (pretty_output && row[i].is_empty()) || Self::needs_quoting(&row[i], ofs, ors) {
-                    let mut quoted_col = Vec::new();
+                let col = &row[i];
+                if (pretty_output && col.is_empty()) || Self::needs_quoting(&col, ofs, ors) {
+                    let mut quoted_col = vec![];
                     quoted_col.push(b'"');
-                    quoted_col.extend(row[i].iter().flat_map(|&b| if b == b'"' { vec![b'"', b'"'] } else { vec![b] }));
+                    for (i, part) in col.split_str(b"\"").enumerate() {
+                        if i != 0 {
+                            quoted_col.extend_from_slice(b"\"\"");
+                        }
+                        quoted_col.extend_from_slice(part);
+                    }
                     quoted_col.push(b'"');
                     row.to_mut()[i] = quoted_col.into();
                 }
@@ -316,6 +341,12 @@ impl Processor {
             } else {
                 Ifs::Plain(BString::new(ifs.as_str().into()))
             }
+        } else if self.opts.csv {
+            Ifs::Plain(b",".into())
+        } else if self.opts.tsv {
+            Ifs::Plain(b"\t".into())
+        } else if self.opts.ssv {
+            Ifs::Space
         } else {
             Self::guess_delimiter(line, b"\t".into())
         }
@@ -324,6 +355,9 @@ impl Processor {
     fn determine_ofs(&mut self, ifs: &Ifs) -> Ofs {
         if let Some(ofs) = &self.opts.ofs {
             return Ofs::Plain(ofs.as_bytes().into())
+        }
+        if self.opts.pretty {
+            return Ofs::Pretty
         }
 
         match ifs {
@@ -487,7 +521,7 @@ impl Base {
         let mut header_padding = None;
 
         if !self.gathered_rows.is_empty() {
-            let padding = self.justify(&self.gathered_rows[..]);
+            let padding = self.justify(&self.gathered_rows);
             for (i, (p, row)) in padding.iter().zip(&self.gathered_rows).enumerate() {
                 if i == 0 && self.out_header.is_some() {
                     header_padding = Some(p.clone());
@@ -498,11 +532,8 @@ impl Base {
             }
         }
 
-        if self.out_header.is_some() && (self.opts.trailer == AutoChoices::Always || (self.opts.trailer == AutoChoices::Auto && self.row_count > termsize::get().map_or(0, |size| size.rows as usize)))
-        {
-            if let Some(header) = &self.out_header {
-                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs, self.ors.as_ref());
-            }
+        if let Some(header) = &self.out_header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count > size.rows as usize)) {
+            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs, self.ors.as_ref());
         }
     }
 
@@ -528,7 +559,7 @@ impl Base {
             self.col_count = Some(row.len());
             self.writer.rgb_map.clear();
             for i in 0 .. row.len() {
-                self.writer.rgb_map.push(Self::get_rgb(i, 0.647));
+                self.writer.rgb_map.push(get_rgb(i, 0.647));
             }
         }
 
@@ -563,13 +594,6 @@ impl Base {
         }
     }
 
-
-    fn get_rgb(i: usize, step: f32) -> BString {
-        let hue = (step * i as f32) % 1.0;
-        let hsv = Hsv{ h: hue * 360.0, s: 0.3, v: 1.0 };
-        let rgb = hsv.to_rgb8();
-        format!("\x1b[38;2;{};{};{}m", rgb.r, rgb.g, rgb.b).as_bytes().into()
-    }
 
     fn next_ifs(&self, line: &BStr, start: usize, ifs: &Ifs) -> Option<(usize, usize)> {
         match ifs {
@@ -652,6 +676,7 @@ impl Base {
 
         (row, false)
     }
+
     fn extract_column(line: &BStr, mut start: usize, line_len: usize, quote: u8) -> (BString, usize) {
         let mut value = BString::new(vec![]);
         let mut i = line[start..].find_byte(quote).map(|pos| start + pos);
