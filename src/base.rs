@@ -167,7 +167,7 @@ impl Writer {
         let formatted_row = self.format_row(row, padding, is_header, opts, ofs, ors);
         let file = self.start(opts, is_header);
         file.write_all(&formatted_row).expect("Failed to write row");
-        file.write_all(ors.as_ref()).expect("Failed to write row separator");
+        file.write_all(ors).expect("Failed to write row separator");
         file.flush().expect("Failed to flush output");
     }
 
@@ -182,7 +182,7 @@ impl Writer {
     ) -> BString {
         let colour = opts.colour == AutoChoices::Always;
         let row = Cow::Borrowed(row);
-        let row = self.format_columns(row, ofs, ors.as_ref(), opts.quote_output);
+        let row = self.format_columns(row, ofs, ors, opts.quote_output);
 
         if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
@@ -220,8 +220,8 @@ impl Writer {
             if let Some(header_bg_colour) = header_bg_colour {
                 parts.extend_from_slice(header_bg_colour);
             }
-            parts.extend_from_slice(rgb.as_ref());
-            parts.extend_from_slice(col.as_ref());
+            parts.extend_from_slice(rgb);
+            parts.extend_from_slice(col);
             if header_bg_colour.or(header_colour).is_some() {
                 parts.extend_from_slice(RESET_COLOUR);
                 if let Some(header_bg_colour) = header_bg_colour {
