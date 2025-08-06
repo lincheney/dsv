@@ -2,7 +2,6 @@ use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::io::{IsTerminal, Read, BufRead, BufReader, Write, BufWriter};
 use bstr::{BStr, BString, ByteSlice};
 use std::process::{Command as ProcessCommand, Stdio};
@@ -53,7 +52,7 @@ impl AutoChoices {
     }
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Parser, Clone)]
 #[command(name = "base")]
 pub struct BaseOptions {
     #[arg(short = 'H', long = "header", action = ArgAction::SetTrue)]
@@ -101,164 +100,95 @@ pub struct BaseOptions {
     quote_output: bool,
 }
 
-struct InnerBase {
+struct Writer {
     rgb_map: Vec<BString>,
-    outfile: Option<Box<dyn Write>>,
-    outfile_proc: Option<std::process::Child>,
+    inner: Option<Box<dyn Write>>,
+    proc: Option<std::process::Child>,
 }
 
-pub struct Base {
-    inner: RefCell<InnerBase>,
-    opts: BaseOptions,
-    header: Option<Vec<BString>>,
-    row_count: usize,
-    col_count: Option<usize>,
-    gathered_rows: Vec<Vec<BString>>,
-    out_header: Option<Vec<BString>>,
-    started_outfile: bool,
-    ofs: Ofs,
-    ifs: Ifs,
-    ors: BString,
-}
-
-impl Base {
-
-    fn on_eof(&mut self) {
-        let mut header_padding = None;
-
-        if !self.gathered_rows.is_empty() {
-            let padding = self.justify(&self.gathered_rows[..]);
-            for (i, (p, row)) in padding.iter().zip(&self.gathered_rows).enumerate() {
-                if i == 0 && self.out_header.is_some() {
-                    header_padding = Some(p.clone());
-                    self.write_header(row, Some(p));
-                } else {
-                    self.write_row(row, Some(p));
-                }
-            }
-        }
-
-        if self.out_header.is_some() && (self.opts.trailer == AutoChoices::Always || (self.opts.trailer == AutoChoices::Auto && self.row_count > termsize::get().map_or(0, |size| size.rows as usize)))
-        {
-            if let Some(header) = &self.out_header {
-                self.write_header(header, header_padding.as_ref());
-            }
-        }
-    }
-
-    fn justify(&self, rows: &[Vec<BString>]) -> Vec<Vec<usize>> {
-        let widths: Vec<Vec<_>> = rows.iter().map(|row|
-            row.iter().map(|col| col.len()).collect()
-        ).collect();
-
-        let max_col = rows.iter().map(|row| row.len()).max().unwrap_or(0);
-
-        let max_widths: Vec<_> = (0 .. max_col).map(|i|
-            widths.iter().flat_map(|w| w.get(i)).max().cloned().unwrap_or(0)
-        ).collect();
-
-        // don't pad the last column
-        widths.iter().map(|w|
-            w.iter().zip(&max_widths).take(w.len() - 1).map(|(w, m)| m - w).collect()
-        ).collect()
-    }
-
-    fn on_row(&mut self, row: &[BString], padding: Option<&Vec<usize>>, is_header: bool) -> bool {
-        if self.col_count.is_none() {
-            self.col_count = Some(row.len());
-            let rgb_map = &mut self.inner.borrow_mut().rgb_map;
-            rgb_map.clear();
-            for i in 0 .. row.len() {
-                rgb_map.push(Self::get_rgb(i, 0.647));
-            }
-        }
-
-        self.row_count += 1;
-
-        if matches!(self.ofs, Ofs::Pretty) {
-            self.gathered_rows.push(row.to_vec());
-        } else if is_header {
-            self.write_header(row, padding);
-        } else {
-            self.write_row(row, padding);
-        }
-
-        false
-    }
-
-    fn on_header(&mut self, header: &Vec<BString>) -> bool {
-        if self.opts.drop_header {
-            false
-        } else {
-            self.out_header = Some(header.clone());
-            let mut header = Cow::Borrowed(header);
-
-            if self.opts.numbered_columns == AutoChoices::Always {
-                for (i, col) in header.to_mut().iter_mut().enumerate() {
-                    let prefix = format!("{} ", i + 1);
-                    let leading_space = col.iter().take(prefix.len()).take_while(|&&x| x == b' ').count();
-                    col.splice(0 .. leading_space, prefix.into_bytes());
-                }
-            }
-
-            self.on_row(&header, None, true)
-        }
-    }
-
-    fn write_header(&self, header: &[BString], padding: Option<&Vec<usize>>) {
-        if !self.opts.drop_header {
-            self.write_output(header, padding, true);
-        }
-    }
-
-    fn write_row(&self, row: &[BString], padding: Option<&Vec<usize>>) {
-        self.write_output(row, padding, false);
-    }
-
-    fn write_output(&self, row: &[BString], padding: Option<&Vec<usize>>, is_header: bool) {
-        self.start_outfile();
-        let formatted_row = self.format_row(row, padding, is_header);
-        let outfile = &mut self.inner.borrow_mut().outfile;
-        let outfile = outfile.as_mut().unwrap();
-        outfile.write_all(&formatted_row).expect("Failed to write row");
-        outfile.write_all(self.ors.as_ref()).expect("Failed to write row separator");
-        outfile.flush().expect("Failed to flush output");
-    }
-
-    fn start_outfile(&self) {
-        if !self.started_outfile {
-            let mut inner = self.inner.borrow_mut();
-            if self.opts.page {
+impl Writer {
+    fn start(&mut self, opts: &BaseOptions, has_header: bool) -> &mut Box<dyn Write> {
+        self.inner.get_or_insert_with(|| {
+            if opts.page {
                 let mut cmd = ProcessCommand::new("less");
                 cmd.args(["-RX"]);
-                if self.header.is_some() && !self.opts.drop_header {
+                if has_header && !opts.drop_header {
                     cmd.arg("--header=1");
                 }
                 let mut proc = cmd.stdin(Stdio::piped()).spawn().expect("Failed to start pager");
-                inner.outfile = Some(Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get pager stdin"))));
-                inner.outfile_proc = Some(proc);
+                let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get pager stdin")));
+                self.proc = Some(proc);
+                inner
             } else {
                 let mut proc = ProcessCommand::new("cat")
                     .stdin(Stdio::piped())
                     .spawn()
                     .expect("Failed to start output process");
-                inner.outfile = Some(Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get output process stdin"))));
-                inner.outfile_proc = Some(proc);
+                let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get output process stdin")));
+                self.proc = Some(proc);
+                inner
             }
+        })
+    }
+
+    fn write_header(
+        &mut self,
+        header: &[BString],
+        padding: Option<&Vec<usize>>,
+        opts: &BaseOptions,
+        ofs: &Ofs,
+        ors: &BStr,
+    ) {
+        if !opts.drop_header {
+            self.write_output(header, padding, true, opts, ofs, ors);
         }
     }
 
-    fn format_row(&self, row: &[BString], padding: Option<&Vec<usize>>, is_header: bool) -> BString {
-        let colour = self.opts.colour == AutoChoices::Always;
-        let row = Cow::Borrowed(row);
-        let row = self.format_columns(row, &self.ofs, self.ors.as_ref(), self.opts.quote_output);
+    fn write_row(
+        &mut self,
+        row: &[BString],
+        padding: Option<&Vec<usize>>,
+        opts: &BaseOptions,
+        ofs: &Ofs,
+        ors: &BStr,
+    ) {
+        self.write_output(row, padding, false, opts, ofs, ors);
+    }
 
-        if colour && self.opts.rainbow_columns == AutoChoices::Always {
+    fn write_output(
+        &mut self,
+        row: &[BString],
+        padding: Option<&Vec<usize>>,
+        is_header: bool,
+        opts: &BaseOptions,
+        ofs: &Ofs,
+        ors: &BStr,
+    ) {
+        let formatted_row = self.format_row(row, padding, is_header, opts, ofs, ors);
+        let file = self.start(opts, is_header);
+        file.write_all(&formatted_row).expect("Failed to write row");
+        file.write_all(ors.as_ref()).expect("Failed to write row separator");
+        file.flush().expect("Failed to flush output");
+    }
+
+    fn format_row(
+        &mut self,
+        row: &[BString],
+        padding: Option<&Vec<usize>>,
+        is_header: bool,
+        opts: &BaseOptions,
+        ofs: &Ofs,
+        ors: &BStr,
+    ) -> BString {
+        let colour = opts.colour == AutoChoices::Always;
+        let row = Cow::Borrowed(row);
+        let row = self.format_columns(row, ofs, ors.as_ref(), opts.quote_output);
+
+        if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
-            let rgb_map = &mut self.inner.borrow_mut().rgb_map;
-            if row.len() > rgb_map.len() {
-                for i in rgb_map.len() .. row.len() {
-                    rgb_map.push(Self::get_rgb(i, 0.647))
+            if row.len() > self.rgb_map.len() {
+                for i in self.rgb_map.len() .. row.len() {
+                    self.rgb_map.push(Base::get_rgb(i, 0.647))
                 }
             }
         }
@@ -266,16 +196,15 @@ impl Base {
         let mut parts = BString::new(vec![]);
         let tmp_padding = vec![];
         let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
-        let rgb = &self.inner.borrow().rgb_map;
-        let rgb = rgb.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
-        let ofs = self.ofs.as_bstr();
+        let rgb = self.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
+        let ofs = ofs.as_bstr();
         let header_colour = if is_header && colour {
-            self.opts.header_colour.as_deref().map(|x| x.as_bytes())
+            opts.header_colour.as_deref().map(|x| x.as_bytes())
         } else {
             None
         };
         let header_bg_colour = if is_header && colour {
-            self.opts.header_bg_colour.as_deref().map(|x| x.as_bytes())
+            opts.header_bg_colour.as_deref().map(|x| x.as_bytes())
         } else {
             None
         };
@@ -334,6 +263,306 @@ impl Base {
     fn needs_quoting(value: &[u8], ofs: &[u8], ors: &[u8]) -> bool {
         value.contains(&b'"') || value.windows(ofs.len()).any(|window| window == ofs) || value.windows(ors.len()).any(|window| window == ors)
     }
+}
+
+pub struct Base {
+    writer: Writer,
+    opts: BaseOptions,
+    header: Option<Vec<BString>>,
+    row_count: usize,
+    col_count: Option<usize>,
+    gathered_rows: Vec<Vec<BString>>,
+    out_header: Option<Vec<BString>>,
+    ofs: Ofs,
+    ifs: Ifs,
+    ors: BString,
+}
+
+pub struct Processor {
+    opts: BaseOptions,
+}
+
+impl Processor {
+
+    pub fn new(mut opts: BaseOptions) -> Self {
+        let is_tty = std::io::stdout().is_terminal();
+
+        if opts.irs.is_none() {
+            opts.irs = Some("\n".into());
+        }
+        if opts.ors.is_none() {
+            opts.irs = opts.irs.clone();
+        }
+        opts.colour = if opts.colour.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
+        if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
+            opts.colour = AutoChoices::Never;
+        }
+        opts.numbered_columns = if opts.numbered_columns.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
+        if opts.header_colour.is_none() {
+            opts.header_colour = Some("\x1b[1;4m".into());
+        }
+        if opts.header_bg_colour.is_none() {
+            opts.header_bg_colour = Some("\x1b[48;5;237m".into());
+        }
+        // let ors = opts.ors.as_deref().unwrap_or("\n").into();
+
+        Self{ opts }
+    }
+
+    fn determine_ifs(&mut self, line: &BStr) -> Ifs {
+        if let Some(ifs) = &self.opts.ifs {
+            if regex::escape(ifs) != *ifs && !self.opts.plain_ifs {
+                Ifs::Regex(Regex::new(ifs).unwrap())
+            } else {
+                Ifs::Plain(BString::new(ifs.as_str().into()))
+            }
+        } else {
+            Self::guess_delimiter(line, b"\t".into())
+        }
+    }
+
+    fn determine_ofs(&mut self, ifs: &Ifs) -> Ofs {
+        if let Some(ofs) = &self.opts.ofs {
+            return Ofs::Plain(ofs.as_bytes().into())
+        }
+
+        match ifs {
+            Ifs::Space | Ifs::Pretty => {
+                if self.opts.colour == AutoChoices::Always {
+                    Ofs::Pretty
+                } else {
+                    Ofs::Plain(b"    ".into())
+                }
+            },
+            Ifs::Plain(ifs) => {
+                Ofs::Plain(ifs.clone())
+            }
+            Ifs::Regex(_) => {
+                Ofs::Plain(b"\t".into())
+            },
+        }
+    }
+
+    fn guess_delimiter(line: &BStr, default: &BStr) -> Ifs {
+        let good_delims = [b'\t', b','];
+        let mut other_delims = [b"  ".to_vec(), b" ".to_vec(), b"|".to_vec(), b";".to_vec()];
+
+        let mut delims: [usize; 6] = [0; 6];
+
+        for (i, delim) in good_delims.iter().enumerate() {
+            delims[i] = line.split(|x| x == delim).count() - 1;
+        }
+
+        if !delims.iter().any(|&count| count > 0) {
+            for (i, delim) in other_delims.iter().enumerate() {
+                delims[i+good_delims.len()] = line.split_str(delim).count() - 1;
+            }
+
+            if !delims.iter().any(|&count| count > 0) {
+                // no idea
+                return Ifs::Plain(default.into());
+            }
+        }
+
+        let best_delim = delims.iter().enumerate().max_by_key(|&(_, count)| count).map(|(i, _)| i).unwrap();
+        if let Some(&delim) = good_delims.get(best_delim) {
+            return Ifs::Plain(BStr::new(&[delim]).into());
+        }
+
+        if best_delim == good_delims.len() + 1 && 2 * delims[good_delims.len()] >= delims[good_delims.len() + 1] {
+            Ifs::Plain(b"  ".into())
+        } else if best_delim == good_delims.len() + 1 {
+            if Regex::new(r"\S \S").unwrap().is_match(line) {
+                Ifs::Space
+            } else {
+                Ifs::Pretty
+            }
+        } else if best_delim == good_delims.len() {
+            Ifs::Pretty
+        } else {
+            let delim = std::mem::take(&mut other_delims[best_delim - good_delims.len()]);
+            Ifs::Plain(delim.into())
+        }
+    }
+
+    fn determine_delimiters(&mut self, line: &BStr) -> (Ifs, Ofs) {
+        let ifs = self.determine_ifs(line);
+        let ofs = self.determine_ofs(&ifs);
+        if matches!(ifs, Ifs::Space | Ifs::Pretty) {
+            self.opts.combine_trailing_columns = true;
+        }
+        (ifs, ofs)
+    }
+
+    pub fn process_file<R: Read>(&mut self, file: R, do_callbacks: bool) -> bool {
+        let mut reader = BufReader::new(file);
+        let mut buffer = BString::new(vec![]);
+        let mut row = vec![];
+        let mut got_row = false;
+
+        let mut base: Option<Base> = None;
+        let irs: BString = self.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
+        let mut eof = false;
+        while !eof {
+            let mut line = if irs.len() == 1 {
+                reader.read_until(irs[0], &mut buffer).unwrap();
+                eof = !buffer.ends_with(&irs);
+                &buffer[.. buffer.len() - if eof { 0 } else { 1 }]
+            } else if let Some((left, _)) = buffer.split_once_str::<BString>(&irs) {
+                left
+            } else {
+                // read some more
+                let buf = reader.fill_buf().unwrap();
+                buffer.extend_from_slice(buf);
+                eof = buf.is_empty();
+                if !eof {
+                    continue
+                }
+                &buffer[..]
+            };
+
+            if eof && row.is_empty() && line.is_empty() {
+                break
+            }
+
+            let line_len = line.len() + irs.len();
+
+            let base = if let Some(base) = base.as_mut() {
+                base
+            } else {
+                if line.starts_with(UTF8_BOM) {
+                    line = &line[UTF8_BOM.len()..]; // Remove UTF-8 BOM
+                }
+                let (ifs, ofs) = self.determine_delimiters(line.into());
+                base.insert(Base::new(self.opts.clone(), ifs, ofs))
+            };
+
+            let incomplete;
+            (row, incomplete) = base.parse_line(line.into(), row, b'"');
+            if !incomplete || eof {
+                got_row = true;
+
+                if base.header.is_none() && self.opts.header.is_none() {
+                    self.opts.header = Some(row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))));
+                }
+
+                let is_header = base.header.is_none() && self.opts.header == Some(true);
+
+                if is_header {
+                    let header = row.clone();
+                    base.header = Some(row);
+                    if do_callbacks && base.on_header(&header) {
+                        break
+                    }
+                } else if do_callbacks && base.on_row(&row, None, false) {
+                    break
+                }
+
+                // if do_yield {
+                    // yield (row, is_header)
+                // }
+
+                row = vec![];
+            }
+
+            if !eof {
+                buffer.drain(..line_len);
+            }
+        }
+
+        if do_callbacks {
+            let mut base = base.unwrap_or_else(|| Base::new(self.opts.clone(), Ifs::Pretty, Ofs::Pretty));
+            base.on_eof();
+        }
+
+        got_row
+    }
+
+}
+
+
+impl Base {
+
+    fn on_eof(&mut self) {
+        let mut header_padding = None;
+
+        if !self.gathered_rows.is_empty() {
+            let padding = self.justify(&self.gathered_rows[..]);
+            for (i, (p, row)) in padding.iter().zip(&self.gathered_rows).enumerate() {
+                if i == 0 && self.out_header.is_some() {
+                    header_padding = Some(p.clone());
+                    self.writer.write_header(row, Some(p), &self.opts, &self.ofs, self.ors.as_ref());
+                } else {
+                    self.writer.write_row(row, Some(p), &self.opts, &self.ofs, self.ors.as_ref());
+                }
+            }
+        }
+
+        if self.out_header.is_some() && (self.opts.trailer == AutoChoices::Always || (self.opts.trailer == AutoChoices::Auto && self.row_count > termsize::get().map_or(0, |size| size.rows as usize)))
+        {
+            if let Some(header) = &self.out_header {
+                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs, self.ors.as_ref());
+            }
+        }
+    }
+
+    fn justify(&self, rows: &[Vec<BString>]) -> Vec<Vec<usize>> {
+        let widths: Vec<Vec<_>> = rows.iter().map(|row|
+            row.iter().map(|col| col.len()).collect()
+        ).collect();
+
+        let max_col = rows.iter().map(|row| row.len()).max().unwrap_or(0);
+
+        let max_widths: Vec<_> = (0 .. max_col).map(|i|
+            widths.iter().flat_map(|w| w.get(i)).max().cloned().unwrap_or(0)
+        ).collect();
+
+        // don't pad the last column
+        widths.iter().map(|w|
+            w.iter().zip(&max_widths).take(w.len() - 1).map(|(w, m)| m - w).collect()
+        ).collect()
+    }
+
+    fn on_row(&mut self, row: &[BString], padding: Option<&Vec<usize>>, is_header: bool) -> bool {
+        if self.col_count.is_none() {
+            self.col_count = Some(row.len());
+            self.writer.rgb_map.clear();
+            for i in 0 .. row.len() {
+                self.writer.rgb_map.push(Self::get_rgb(i, 0.647));
+            }
+        }
+
+        self.row_count += 1;
+
+        if matches!(self.ofs, Ofs::Pretty) {
+            self.gathered_rows.push(row.to_vec());
+        } else if is_header {
+            self.writer.write_header(row, padding, &self.opts, &self.ofs, self.ors.as_ref());
+        } else {
+            self.writer.write_row(row, padding, &self.opts, &self.ofs, self.ors.as_ref());
+        }
+
+        false
+    }
+
+    fn on_header(&mut self, header: &Vec<BString>) -> bool {
+        if self.opts.drop_header {
+            false
+        } else {
+            let mut header = Cow::Borrowed(header);
+            if self.opts.numbered_columns == AutoChoices::Always {
+                for (i, col) in header.to_mut().iter_mut().enumerate() {
+                    let prefix = format!("{} ", i + 1);
+                    let leading_space = col.iter().take(prefix.len()).take_while(|&&x| x == b' ').count();
+                    col.splice(0 .. leading_space, prefix.into_bytes());
+                }
+            }
+            self.out_header = Some(header.to_vec());
+
+            self.on_row(&header, None, true)
+        }
+    }
+
 
     fn get_rgb(i: usize, step: f32) -> BString {
         let hue = (step * i as f32) % 1.0;
@@ -441,212 +670,24 @@ impl Base {
         (value, usize::MAX)
     }
 
-    fn determine_delimiters(&mut self, line: &BStr) {
-        let ifs = self.determine_ifs(line);
-        self.determine_ofs(&ifs);
-        self.ifs = ifs;
-        if matches!(self.ifs, Ifs::Space | Ifs::Pretty) {
-            self.opts.combine_trailing_columns = true;
-        }
-    }
-
-    fn determine_ofs(&mut self, ifs: &Ifs) {
-        if let Some(ofs) = &self.opts.ofs {
-            self.ofs = Ofs::Plain(ofs.as_bytes().into());
-            return
-        }
-
-        match ifs {
-            Ifs::Space | Ifs::Pretty => {
-                if self.opts.colour == AutoChoices::Always {
-                    self.ofs = Ofs::Pretty;
-                } else {
-                    self.ofs = Ofs::Plain(b"    ".into());
-                }
-            },
-            Ifs::Plain(ifs) => {
-                self.ofs = Ofs::Plain(ifs.clone());
-            }
-            Ifs::Regex(_) => {
-                self.ofs = Ofs::Plain(b"\t".into());
-            },
-        }
-    }
-
-    fn determine_ifs(&mut self, line: &BStr) -> Ifs {
-        if let Some(ifs) = &self.opts.ifs {
-            if regex::escape(ifs) != *ifs && !self.opts.plain_ifs {
-                Ifs::Regex(Regex::new(ifs).unwrap())
-            } else {
-                Ifs::Plain(BString::new(ifs.as_str().into()))
-            }
-        } else {
-            Self::guess_delimiter(line, b"\t".into())
-        }
-    }
-
-    fn guess_delimiter(line: &BStr, default: &BStr) -> Ifs {
-        let good_delims = [b'\t', b','];
-        let mut other_delims = [b"  ".to_vec(), b" ".to_vec(), b"|".to_vec(), b";".to_vec()];
-
-        let mut delims: [usize; 6] = [0; 6];
-
-        for (i, delim) in good_delims.iter().enumerate() {
-            delims[i] = line.split(|x| x == delim).count() - 1;
-        }
-
-        if !delims.iter().any(|&count| count > 0) {
-            for (i, delim) in other_delims.iter().enumerate() {
-                delims[i+good_delims.len()] = line.split_str(delim).count() - 1;
-            }
-
-            if !delims.iter().any(|&count| count > 0) {
-                // no idea
-                return Ifs::Plain(default.into());
-            }
-        }
-
-        let best_delim = delims.iter().enumerate().max_by_key(|&(_, count)| count).map(|(i, _)| i).unwrap();
-        if let Some(&delim) = good_delims.get(best_delim) {
-            return Ifs::Plain(BStr::new(&[delim]).into());
-        }
-
-        if best_delim == good_delims.len() + 1 && 2 * delims[good_delims.len()] >= delims[good_delims.len() + 1] {
-            Ifs::Plain(b"  ".into())
-        } else if best_delim == good_delims.len() + 1 {
-            if Regex::new(r"\S \S").unwrap().is_match(line) {
-                Ifs::Space
-            } else {
-                Ifs::Pretty
-            }
-        } else if best_delim == good_delims.len() {
-            Ifs::Pretty
-        } else {
-            let delim = std::mem::take(&mut other_delims[best_delim - good_delims.len()]);
-            Ifs::Plain(delim.into())
-        }
-    }
-
-    pub fn new(mut opts: BaseOptions) -> Self {
-        let is_tty = std::io::stdout().is_terminal();
-
-        if opts.irs.is_none() {
-            opts.irs = Some("\n".into());
-        }
-        if opts.ors.is_none() {
-            opts.irs = opts.irs.clone();
-        }
-        opts.colour = if opts.colour.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
-        if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
-            opts.colour = AutoChoices::Never;
-        }
-        opts.numbered_columns = if opts.numbered_columns.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
-        if opts.header_colour.is_none() {
-            opts.header_colour = Some("\x1b[1;4m".into());
-        }
-        if opts.header_bg_colour.is_none() {
-            opts.header_bg_colour = Some("\x1b[48;5;237m".into());
-        }
+    fn new(opts: BaseOptions, ifs: Ifs, ofs: Ofs) -> Self {
         let ors = opts.ors.as_deref().unwrap_or("\n").into();
-
         Self {
             opts,
             header: None,
             row_count: 0,
             col_count: None,
-            ifs: Ifs::Space,
-            ofs: Ofs::Plain(vec![].into()),
+            ifs,
+            ofs,
             ors,
             gathered_rows: vec![],
             out_header: None,
-            inner: RefCell::new(InnerBase{
-                outfile: None,
-                outfile_proc: None,
+            writer: Writer {
+                inner: None,
+                proc: None,
                 rgb_map: vec![],
-            }),
-            started_outfile: false,
+            },
         }
-    }
-
-    pub fn process_file<R: Read>(&mut self, file: R, do_callbacks: bool) -> bool {
-        let mut reader = BufReader::new(file);
-        let mut buffer = BString::new(vec![]);
-        let mut first = true;
-        let mut row = vec![];
-        let mut got_row = false;
-
-        let irs: BString = self.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
-        let mut eof = false;
-        while !eof {
-            let mut line = if irs.len() == 1 {
-                reader.read_until(irs[0], &mut buffer).unwrap();
-                eof = !buffer.ends_with(&irs);
-                &buffer[.. buffer.len() - if eof { 0 } else { 1 }]
-            } else if let Some((left, _)) = buffer.split_once_str::<BString>(&irs) {
-                left
-            } else {
-                // read some more
-                let buf = reader.fill_buf().unwrap();
-                buffer.extend_from_slice(buf);
-                eof = buf.is_empty();
-                if !eof {
-                    continue
-                }
-                &buffer[..]
-            };
-
-            if eof && row.is_empty() && line.is_empty() {
-                break
-            }
-
-            let line_len = line.len() + irs.len();
-            if first {
-                first = false;
-                if line.starts_with(UTF8_BOM) {
-                    line = &line[UTF8_BOM.len()..]; // Remove UTF-8 BOM
-                }
-                self.determine_delimiters(line.into());
-            }
-
-            let incomplete;
-            (row, incomplete) = self.parse_line(line.into(), row, b'"');
-
-            if !incomplete || eof {
-                got_row = true;
-
-                if self.header.is_none() && self.opts.header.is_none() {
-                    self.opts.header = Some(row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))));
-                }
-
-                let is_header = self.header.is_none() && self.opts.header == Some(true);
-
-                if is_header {
-                    let header = row.clone();
-                    self.header = Some(row);
-                    if do_callbacks && self.on_header(&header) {
-                        break
-                    }
-                } else if do_callbacks && self.on_row(&row, None, false) {
-                    break
-                }
-
-                // if do_yield {
-                    // yield (row, is_header)
-                // }
-
-                row = vec![];
-            }
-
-            if !eof {
-                buffer.drain(..line_len);
-            }
-        }
-
-        if do_callbacks {
-            self.on_eof();
-        }
-
-        got_row
     }
 
 }
