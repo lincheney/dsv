@@ -115,6 +115,31 @@ pub struct BaseOptions {
     quote_output: bool,
 }
 
+impl BaseOptions {
+    pub fn post_process(&mut self) {
+        let is_tty = std::io::stdout().is_terminal();
+
+        if self.irs.is_none() {
+            self.irs = Some("\n".into());
+        }
+        if self.ors.is_none() {
+            self.irs = self.irs.clone();
+        }
+        self.colour = if self.colour.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
+        if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
+            self.colour = AutoChoices::Never;
+        }
+        self.numbered_columns = if self.numbered_columns.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
+        if self.header_colour.is_none() {
+            self.header_colour = Some("\x1b[1;4m".into());
+        }
+        if self.header_bg_colour.is_none() {
+            self.header_bg_colour = Some("\x1b[48;5;237m".into());
+        }
+        // let ors = opts.ors.as_deref().unwrap_or("\n").into();
+    }
+}
+
 struct Writer {
     rgb_map: Vec<BString>,
     inner: Option<Box<dyn Write>>,
@@ -135,13 +160,14 @@ impl Writer {
                 self.proc = Some(proc);
                 inner
             } else {
-                let mut proc = ProcessCommand::new("cat")
-                    .stdin(Stdio::piped())
-                    .spawn()
-                    .expect("Failed to start output process");
-                let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get output process stdin")));
-                self.proc = Some(proc);
-                inner
+                // let mut proc = ProcessCommand::new("cat")
+                    // .stdin(Stdio::piped())
+                    // .spawn()
+                    // .expect("Failed to start output process");
+                // let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get output process stdin")));
+                // self.proc = Some(proc);
+                // inner
+                Box::new(std::io::stdout().lock())
             }
         })
     }
@@ -304,65 +330,39 @@ pub struct Base {
 }
 
 pub struct Processor {
-    opts: BaseOptions,
 }
 
 impl Processor {
 
-    pub fn new(mut opts: BaseOptions) -> Self {
-        let is_tty = std::io::stdout().is_terminal();
-
-        if opts.irs.is_none() {
-            opts.irs = Some("\n".into());
-        }
-        if opts.ors.is_none() {
-            opts.irs = opts.irs.clone();
-        }
-        opts.colour = if opts.colour.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
-        if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
-            opts.colour = AutoChoices::Never;
-        }
-        opts.numbered_columns = if opts.numbered_columns.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
-        if opts.header_colour.is_none() {
-            opts.header_colour = Some("\x1b[1;4m".into());
-        }
-        if opts.header_bg_colour.is_none() {
-            opts.header_bg_colour = Some("\x1b[48;5;237m".into());
-        }
-        // let ors = opts.ors.as_deref().unwrap_or("\n").into();
-
-        Self{ opts }
-    }
-
-    fn determine_ifs(&mut self, line: &BStr) -> Ifs {
-        if let Some(ifs) = &self.opts.ifs {
-            if regex::escape(ifs) != *ifs && !self.opts.plain_ifs {
+    fn determine_ifs(&mut self, line: &BStr, opts: &BaseOptions) -> Ifs {
+        if let Some(ifs) = &opts.ifs {
+            if regex::escape(ifs) != *ifs && !opts.plain_ifs {
                 Ifs::Regex(Regex::new(ifs).unwrap())
             } else {
                 Ifs::Plain(BString::new(ifs.as_str().into()))
             }
-        } else if self.opts.csv {
+        } else if opts.csv {
             Ifs::Plain(b",".into())
-        } else if self.opts.tsv {
+        } else if opts.tsv {
             Ifs::Plain(b"\t".into())
-        } else if self.opts.ssv {
+        } else if opts.ssv {
             Ifs::Space
         } else {
             Self::guess_delimiter(line, b"\t".into())
         }
     }
 
-    fn determine_ofs(&mut self, ifs: &Ifs) -> Ofs {
-        if let Some(ofs) = &self.opts.ofs {
+    fn determine_ofs(&mut self, ifs: &Ifs, opts: &BaseOptions) -> Ofs {
+        if let Some(ofs) = &opts.ofs {
             return Ofs::Plain(ofs.as_bytes().into())
         }
-        if self.opts.pretty {
+        if opts.pretty {
             return Ofs::Pretty
         }
 
         match ifs {
             Ifs::Space | Ifs::Pretty => {
-                if self.opts.colour == AutoChoices::Always {
+                if opts.colour == AutoChoices::Always {
                     Ofs::Pretty
                 } else {
                     Ofs::Plain(b"    ".into())
@@ -419,23 +419,22 @@ impl Processor {
         }
     }
 
-    fn determine_delimiters(&mut self, line: &BStr) -> (Ifs, Ofs) {
-        let ifs = self.determine_ifs(line);
-        let ofs = self.determine_ofs(&ifs);
-        if matches!(ifs, Ifs::Space | Ifs::Pretty) {
-            self.opts.combine_trailing_columns = true;
-        }
+    fn determine_delimiters(&mut self, line: &BStr, opts: &BaseOptions) -> (Ifs, Ofs) {
+        let ifs = self.determine_ifs(line, opts);
+        let ofs = self.determine_ofs(&ifs, opts);
         (ifs, ofs)
     }
 
-    pub fn process_file<R: Read>(&mut self, file: R, do_callbacks: bool) -> bool {
+    pub fn process_file<R: Read>(&mut self, file: R, opts: BaseOptions, do_callbacks: bool) -> bool {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
         let mut got_row = false;
 
         let mut base: Option<Base> = None;
-        let irs: BString = self.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
+        let irs: BString = opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
+        let mut opts = Some(opts);
+
         let mut eof = false;
         while !eof {
             let mut line = if irs.len() == 1 {
@@ -467,8 +466,12 @@ impl Processor {
                 if line.starts_with(UTF8_BOM) {
                     line = &line[UTF8_BOM.len()..]; // Remove UTF-8 BOM
                 }
-                let (ifs, ofs) = self.determine_delimiters(line.into());
-                base.insert(Base::new(self.opts.clone(), ifs, ofs))
+                let mut opts = opts.take().unwrap();
+                let (ifs, ofs) = self.determine_delimiters(line.into(), &opts);
+                if matches!(ifs, Ifs::Space | Ifs::Pretty) {
+                    opts.combine_trailing_columns = true;
+                }
+                base.insert(Base::new(opts, ifs, ofs))
             };
 
             let incomplete;
@@ -476,11 +479,11 @@ impl Processor {
             if !incomplete || eof {
                 got_row = true;
 
-                if base.header.is_none() && self.opts.header.is_none() {
-                    self.opts.header = Some(row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))));
+                if base.header.is_none() && base.opts.header.is_none() {
+                    base.opts.header = Some(row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))));
                 }
 
-                let is_header = base.header.is_none() && self.opts.header == Some(true);
+                let is_header = base.header.is_none() && base.opts.header == Some(true);
 
                 if is_header {
                     let header = row.clone();
@@ -505,7 +508,7 @@ impl Processor {
         }
 
         if do_callbacks {
-            let mut base = base.unwrap_or_else(|| Base::new(self.opts.clone(), Ifs::Pretty, Ofs::Pretty));
+            let mut base = base.unwrap_or_else(|| Base::new(opts.unwrap(), Ifs::Pretty, Ofs::Pretty));
             base.on_eof();
         }
 

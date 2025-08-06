@@ -2,7 +2,8 @@ mod base;
 use clap::Parser;
 
 fn main() {
-    let opts = base::BaseOptions::parse();
-    let mut base = base::Processor::new(opts);
-    base.process_file(std::io::stdin(), true);
+    let mut opts = base::BaseOptions::parse();
+    opts.post_process();
+    let mut base = base::Processor{};
+    base.process_file(std::io::stdin(), opts, true);
 }
