@@ -1,0 +1,12 @@
+[package]
+name = "dsv"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bstr = { version = "1.12.0", features = ["unicode"] }
+clap = { version = "4.5.42", features = ["derive"] }
+colorutils-rs = "0.7.5"
+once_cell = "1.21.3"
+regex = "1.11.1"
+termsize = "0.1.9"
