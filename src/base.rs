@@ -3,7 +3,8 @@ use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use std::io::{IsTerminal, Read, BufRead, BufReader, Write, BufWriter};
 use bstr::{BStr, BString, ByteSlice};
-use std::process::{Command as ProcessCommand, Stdio};
+use std::process::{Command, Stdio, ExitCode};
+use anyhow::Result;
 use colorutils_rs::Hsv;
 
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
@@ -165,7 +166,7 @@ impl Writer {
     fn start(&mut self, opts: &BaseOptions, has_header: bool) -> &mut Box<dyn Write> {
         self.inner.get_or_insert_with(|| {
             if opts.page {
-                let mut cmd = ProcessCommand::new("less");
+                let mut cmd = Command::new("less");
                 cmd.args(["-RX"]);
                 if has_header && !opts.drop_header {
                     cmd.arg("--header=1");
@@ -346,11 +347,11 @@ pub trait Processor<T> {
 
     fn new(opts: T) -> Self;
 
-    fn run(mut cli_opts: BaseOptions, opts: T) where Self: Sized {
+    fn run(mut cli_opts: BaseOptions, opts: T) -> Result<ExitCode> where Self: Sized {
         let mut handler = Self::new(opts);
         handler.process_opts(&mut cli_opts);
         let mut base = Base::new(cli_opts);
-        handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all());
+        handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
     }
 
     fn determine_ifs(&self, line: &BStr, opts: &BaseOptions) -> Ifs {
@@ -443,11 +444,11 @@ pub trait Processor<T> {
         (ifs, ofs)
     }
 
-    fn process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> bool {
+    fn process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
-        let mut got_row = false;
+        // let mut got_row = false;
         let mut got_line = false;
         let irs: BString = base.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
 
@@ -490,7 +491,7 @@ pub trait Processor<T> {
             let incomplete;
             (row, incomplete) = base.parse_line(line.into(), row, b'"');
             if !incomplete || eof {
-                got_row = true;
+                // got_row = true;
 
                 if base.header.is_none() && base.opts.header.is_none() {
                     base.opts.header = Some(row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))));
@@ -524,7 +525,7 @@ pub trait Processor<T> {
             self.on_eof(base);
         }
 
-        got_row
+        Ok(ExitCode::SUCCESS)
     }
 
     fn process_opts(&mut self, _opts: &mut BaseOptions) {

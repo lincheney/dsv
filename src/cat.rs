@@ -45,7 +45,7 @@ impl base::Processor<Opts> for Handler {
         for file in &files {
             let file = std::fs::File::open(file).unwrap();
             let file = std::io::BufReader::new(file);
-            self.process_file(file, base, base::Callbacks::ON_ROW);
+            let _ = self.process_file(file, base, base::Callbacks::ON_ROW);
         }
         base.on_eof();
     }
