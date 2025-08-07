@@ -79,48 +79,49 @@ impl AutoChoices {
 #[derive(Debug, Parser, Clone)]
 #[command(name = "base")]
 pub struct BaseOptions {
-    #[arg(global = true, short = 'H', long = "header", action = ArgAction::SetTrue)]
-    #[arg(global = true, short = 'N', long = "no-header", action = ArgAction::SetFalse)]
+    #[arg(global = true, short = 'H', long, action = ArgAction::SetTrue, help = "treat first row as a header")]
     header: Option<bool>,
-    #[arg(global = true, long, help = "Do or not print the header")]
+    #[arg(global = true, short = 'N', long, action = ArgAction::SetFalse, overrides_with = "header", help = "do not treat first row as header")]
+    no_header: (),
+    #[arg(global = true, long, help = "do or not print the header")]
     drop_header: bool,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "Print a trailer")]
+    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "print a trailer")]
     trailer: AutoChoices,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "Number the columns in the header")]
+    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "number the columns in the header")]
     numbered_columns: AutoChoices,
-    #[arg(global = true, short = 'd', long, help = "Input field separator")]
+    #[arg(global = true, short = 'd', long, help = "input field separator")]
     ifs: Option<String>,
-    #[arg(global = true, long, help = "Treat input field separator as a literal not a regex")]
+    #[arg(global = true, long, help = "treat input field separator as a literal not a regex")]
     plain_ifs: bool,
-    #[arg(global = true, short = 'D', long, help = "Output field separator")]
+    #[arg(global = true, short = 'D', long, help = "output field separator")]
     ofs: Option<String>,
-    #[arg(global = true, long, help = "Input row separator")]
+    #[arg(global = true, long, help = "input row separator")]
     irs: Option<String>,
-    #[arg(global = true, long, help = "Output row separator")]
+    #[arg(global = true, long, help = "output row separator")]
     ors: Option<String>,
-    #[arg(global = true, long, help = "Treat input as CSV")]
+    #[arg(global = true, long, help = "treat input as csv", overrides_with = "ifs")]
     csv: bool,
-    #[arg(global = true, long, help = "Treat input as TSV")]
+    #[arg(global = true, long, help = "treat input as tsv", overrides_with = "ifs")]
     tsv: bool,
-    #[arg(global = true, long, help = "Treat input as whitespace-separated")]
+    #[arg(global = true, long, help = "treat input as whitespace-separated", overrides_with = "ifs")]
     ssv: bool,
-    #[arg(global = true, long, help = "Combine trailing columns")]
+    #[arg(global = true, long, help = "if a row has more columns than the header, combine the last ones into one, useful with --ssv")]
     combine_trailing_columns: bool,
-    #[arg(global = true, short = 'P', long, help = "Prettified output")]
+    #[arg(global = true, short = 'P', long, help = "prettified output", overrides_with = "ofs")]
     pretty: bool,
-    #[arg(global = true, long, help = "Show output in a pager")]
+    #[arg(global = true, long, help = "show output in a pager (less)")]
     page: bool,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "Enable colour")]
+    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable colour")]
     colour: AutoChoices,
-    #[arg(global = true, long, help = "ANSI escape code for the header")]
+    #[arg(global = true, long, help = "ansi escape code for the header")]
     header_colour: Option<String>,
-    #[arg(global = true, long, help = "ANSI escape code for the header background")]
+    #[arg(global = true, long, help = "ansi escape code for the header background")]
     header_bg_colour: Option<String>,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "Enable rainbow columns")]
+    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable rainbow columns")]
     rainbow_columns: AutoChoices,
-    #[arg(global = true, short = 'Q', long, help = "Do not handle quotes from input")]
+    #[arg(global = true, short = 'Q', long, help = "do not handle quotes from input")]
     no_quoting: bool,
-    #[arg(global = true, long, help = "Enable quoting for output")]
+    #[arg(global = true, long = "no-quote-output", default_value_t = true, action = ArgAction::SetFalse, help = "don't quote output")]
     quote_output: bool,
 }
 
