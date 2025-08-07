@@ -1,6 +1,7 @@
 mod base;
 mod head;
 mod cat;
+mod tail;
 use base::Processor;
 use clap::{Parser, Subcommand};
 
@@ -18,6 +19,7 @@ pub struct Cli {
 enum Commands {
     Head(head::Opts),
     Cat(cat::Opts),
+    Tail(tail::Opts),
 }
 
 fn main() {
@@ -27,6 +29,7 @@ fn main() {
     match cli.command {
         Some(Commands::Head(opts)) => head::Handler::run(cli.opts, opts),
         Some(Commands::Cat(opts)) => cat::Handler::run(cli.opts, opts),
+        Some(Commands::Tail(opts)) => tail::Handler::run(cli.opts, opts),
         _ => todo!(),
     }
 }

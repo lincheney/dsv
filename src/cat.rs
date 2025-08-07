@@ -34,7 +34,7 @@ impl base::Processor<Opts> for Handler {
 
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         if self.opts.number {
-            self.row_count = self.row_count + 1;
+            self.row_count += 1;
             row.insert(0, format!("{}", self.row_count).into());
         }
         base.on_row(row)
