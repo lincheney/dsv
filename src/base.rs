@@ -579,7 +579,7 @@ impl Base {
 
         // don't pad the last column
         widths.iter().map(|w|
-            w.iter().zip(&max_widths).take(w.len() - 1).map(|(w, m)| m - w).collect()
+            w.iter().zip(&max_widths).take(w.len().saturating_sub(1)).map(|(w, m)| m - w).collect()
         ).collect()
     }
 
