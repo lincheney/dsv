@@ -556,7 +556,7 @@ impl Base {
             }
         }
 
-        if let Some(header) = self.out_header.take() && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count > size.rows as usize)) {
+        if let Some(header) = self.out_header.take() && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
             self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs, self.ors.as_ref());
         }
     }
