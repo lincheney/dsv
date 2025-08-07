@@ -18,6 +18,16 @@ fn get_rgb(i: usize, step: f32) -> BString {
     format!("\x1b[38;2;{};{};{}m", rgb.r, rgb.g, rgb.b).as_bytes().into()
 }
 
+bitflags::bitflags! {
+    #[derive(Debug)]
+    pub struct Callbacks: u8 {
+        const None = 0;
+        const ON_HEADER = 1;
+        const ON_ROW = 2;
+        const ON_EOF = 4;
+    }
+}
+
 #[derive(Debug)]
 pub enum Ifs {
     Regex(Regex),
@@ -74,7 +84,7 @@ pub struct BaseOptions {
     header: Option<bool>,
     #[arg(global = true, long, help = "Do or not print the header")]
     drop_header: bool,
-    #[arg(global = true, value_enum, default_value_t = AutoChoices::Auto, help = "Print a trailer")]
+    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "Print a trailer")]
     trailer: AutoChoices,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "Number the columns in the header")]
     numbered_columns: AutoChoices,
@@ -315,7 +325,7 @@ impl Writer {
 
 pub struct Base {
     writer: Writer,
-    opts: BaseOptions,
+    pub opts: BaseOptions,
     header: Option<Vec<BString>>,
     row_count: usize,
     col_count: Option<usize>,
@@ -329,6 +339,13 @@ pub struct Base {
 pub trait Processor<T> {
 
     fn new(opts: T) -> Self;
+
+    fn run(mut cli_opts: BaseOptions, opts: T) where Self: Sized {
+        let mut handler = Self::new(opts);
+        handler.process_opts(&mut cli_opts);
+        let mut base = Base::new(cli_opts);
+        handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all());
+    }
 
     fn determine_ifs(&self, line: &BStr, opts: &BaseOptions) -> Ifs {
         if let Some(ifs) = &opts.ifs {
@@ -421,15 +438,13 @@ pub trait Processor<T> {
         (ifs, ofs)
     }
 
-    fn process_file<R: Read>(&mut self, file: R, opts: BaseOptions, do_callbacks: bool) -> bool {
+    fn process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> bool {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
         let mut got_row = false;
-
-        let mut base: Option<Base> = None;
-        let irs: BString = opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
-        let mut opts = Some(opts);
+        let mut got_line = false;
+        let irs: BString = base.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
 
         let mut eof = false;
         while !eof {
@@ -456,19 +471,16 @@ pub trait Processor<T> {
 
             let line_len = line.len() + irs.len();
 
-            let base = if let Some(base) = base.as_mut() {
-                base
-            } else {
+            if ! got_line {
+                got_line = true;
                 if line.starts_with(UTF8_BOM) {
                     line = &line[UTF8_BOM.len()..]; // Remove UTF-8 BOM
                 }
-                let mut opts = opts.take().unwrap();
-                let (ifs, ofs) = self.determine_delimiters(line.into(), &opts);
-                if matches!(ifs, Ifs::Space | Ifs::Pretty) {
-                    opts.combine_trailing_columns = true;
+                (base.ifs, base.ofs) = self.determine_delimiters(line.into(), &base.opts);
+                if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
+                    base.opts.combine_trailing_columns = true;
                 }
-                base.insert(Base::new(opts, ifs, ofs))
-            };
+            }
 
             let incomplete;
             (row, incomplete) = base.parse_line(line.into(), row, b'"');
@@ -484,10 +496,10 @@ pub trait Processor<T> {
                 if is_header {
                     let header = row.clone();
                     base.header = Some(row);
-                    if do_callbacks && self.on_header(base, header) {
+                    if do_callbacks.contains(Callbacks::ON_HEADER) && self.on_header(base, header) {
                         break
                     }
-                } else if do_callbacks && self.on_row(base, row) {
+                } else if do_callbacks.contains(Callbacks::ON_ROW) && self.on_row(base, row) {
                     break
                 }
 
@@ -503,9 +515,8 @@ pub trait Processor<T> {
             }
         }
 
-        if do_callbacks {
-            let mut base = base.unwrap_or_else(|| Base::new(opts.unwrap(), Ifs::Pretty, Ofs::Pretty));
-            base.on_eof();
+        if do_callbacks.contains(Callbacks::ON_EOF) {
+            self.on_eof(base);
         }
 
         got_row
@@ -522,11 +533,15 @@ pub trait Processor<T> {
         base.on_header(header)
     }
 
+    fn on_eof(&mut self, base: &mut Base) {
+        base.on_eof()
+    }
+
 }
 
 impl Base {
 
-    fn on_eof(&mut self) {
+    pub fn on_eof(&mut self) {
         let mut header_padding = None;
 
         if !self.gathered_rows.is_empty() {
@@ -710,15 +725,15 @@ impl Base {
         (value, usize::MAX)
     }
 
-    fn new(opts: BaseOptions, ifs: Ifs, ofs: Ofs) -> Self {
+    fn new(opts: BaseOptions) -> Self {
         let ors = opts.ors.as_deref().unwrap_or("\n").into();
         Self {
             opts,
             header: None,
             row_count: 0,
             col_count: None,
-            ifs,
-            ofs,
+            ifs: Ifs::Pretty,
+            ofs: Ofs::Pretty,
             ors,
             gathered_rows: vec![],
             out_header: None,
