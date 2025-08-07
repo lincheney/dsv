@@ -3,6 +3,7 @@ mod head;
 mod cat;
 mod tail;
 mod cut;
+mod tocsv;
 mod column_slicer;
 use std::io::IsTerminal;
 use anyhow::Result;
@@ -25,6 +26,7 @@ enum Commands {
     Cat(cat::Opts),
     Tail(tail::Opts),
     Cut(cut::Opts),
+    Tocsv(tocsv::Opts),
 }
 
 fn main() -> Result<std::process::ExitCode> {
@@ -36,6 +38,7 @@ fn main() -> Result<std::process::ExitCode> {
         Some(Commands::Cat(opts)) => cat::Handler::run(cli.opts, opts),
         Some(Commands::Tail(opts)) => tail::Handler::run(cli.opts, opts),
         Some(Commands::Cut(opts)) => cut::Handler::run(cli.opts, opts),
+        Some(Commands::Tocsv(opts)) => tocsv::Handler::run(cli.opts, opts),
         None => {
             if std::io::stdin().is_terminal() {
                 Cli::command().print_help()?;

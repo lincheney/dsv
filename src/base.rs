@@ -52,7 +52,7 @@ impl Ofs {
 }
 
 #[derive(Clone, PartialEq, Debug, clap::ValueEnum)]
-enum AutoChoices {
+pub enum AutoChoices {
     Never,
     Auto,
     Always,
@@ -80,49 +80,49 @@ impl AutoChoices {
 #[command(name = "base")]
 pub struct BaseOptions {
     #[arg(global = true, short = 'H', long, action = ArgAction::SetTrue, help = "treat first row as a header")]
-    header: Option<bool>,
+    pub header: Option<bool>,
     #[arg(global = true, short = 'N', long, action = ArgAction::SetTrue, overrides_with = "header", help = "do not treat first row as header")]
-    no_header: bool,
+    pub no_header: bool,
     #[arg(global = true, long, help = "do or not print the header")]
-    drop_header: bool,
+    pub drop_header: bool,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "print a trailer")]
-    trailer: AutoChoices,
+    pub trailer: AutoChoices,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "number the columns in the header")]
-    numbered_columns: AutoChoices,
+    pub numbered_columns: AutoChoices,
     #[arg(global = true, short = 'd', long, help = "input field separator")]
-    ifs: Option<String>,
+    pub ifs: Option<String>,
     #[arg(global = true, long, help = "treat input field separator as a literal not a regex")]
-    plain_ifs: bool,
+    pub plain_ifs: bool,
     #[arg(global = true, short = 'D', long, help = "output field separator")]
-    ofs: Option<String>,
+    pub ofs: Option<String>,
     #[arg(global = true, long, help = "input row separator")]
-    irs: Option<String>,
+    pub irs: Option<String>,
     #[arg(global = true, long, help = "output row separator")]
-    ors: Option<String>,
+    pub ors: Option<String>,
     #[arg(global = true, long, help = "treat input as csv", overrides_with = "ifs")]
-    csv: bool,
+    pub csv: bool,
     #[arg(global = true, long, help = "treat input as tsv", overrides_with = "ifs")]
-    tsv: bool,
+    pub tsv: bool,
     #[arg(global = true, long, help = "treat input as whitespace-separated", overrides_with = "ifs")]
-    ssv: bool,
+    pub ssv: bool,
     #[arg(global = true, long, help = "if a row has more columns than the header, combine the last ones into one, useful with --ssv")]
-    combine_trailing_columns: bool,
+    pub combine_trailing_columns: bool,
     #[arg(global = true, short = 'P', long, help = "prettified output", overrides_with = "ofs")]
-    pretty: bool,
+    pub pretty: bool,
     #[arg(global = true, long, help = "show output in a pager (less)")]
-    page: bool,
+    pub page: bool,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable colour")]
-    colour: AutoChoices,
+    pub colour: AutoChoices,
     #[arg(global = true, long, help = "ansi escape code for the header")]
-    header_colour: Option<String>,
+    pub header_colour: Option<String>,
     #[arg(global = true, long, help = "ansi escape code for the header background")]
-    header_bg_colour: Option<String>,
+    pub header_bg_colour: Option<String>,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable rainbow columns")]
-    rainbow_columns: AutoChoices,
+    pub rainbow_columns: AutoChoices,
     #[arg(global = true, short = 'Q', long, help = "do not handle quotes from input")]
-    no_quoting: bool,
+    pub no_quoting: bool,
     #[arg(global = true, long = "no-quote-output", default_value_t = true, action = ArgAction::SetFalse, help = "don't quote output")]
-    quote_output: bool,
+    pub quote_output: bool,
 }
 
 impl BaseOptions {
