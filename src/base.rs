@@ -391,45 +391,44 @@ pub trait Processor<T> {
     }
 
     fn guess_delimiter(line: &BStr, default: &BStr) -> Ifs {
-        let good_delims = [b'\t', b','];
-        let mut other_delims = [b"  ".to_vec(), b" ".to_vec(), b"|".to_vec(), b";".to_vec()];
+        const GOOD_DELIMS: [u8; 2] = [b'\t', b','];
+        const OTHER_DELIMS: [(&[u8; 2], usize); 4] = [(b"  ", 2), (b"  ", 1), (b"| ", 1), (b"; ", 1)];
 
-        let mut delims: [usize; 6] = [0; 6];
-
-        for (i, delim) in good_delims.iter().enumerate() {
-            delims[i] = line.split(|x| x == delim).count() - 1;
+        let mut counts: [usize; GOOD_DELIMS.len()] = [0; GOOD_DELIMS.len()];
+        for (delim, counts) in GOOD_DELIMS.iter().zip(counts.iter_mut()) {
+            *counts = line.split(|x| x == delim).count() - 1;
         }
 
-        if !delims.iter().any(|&count| count > 0) {
-            for (i, delim) in other_delims.iter().enumerate() {
-                delims[i+good_delims.len()] = line.split_str(delim).count() - 1;
-            }
-
-            if !delims.iter().any(|&count| count > 0) {
-                // no idea
-                return Ifs::Plain(default.into());
-            }
-        }
-
-        let best_delim = delims.iter().enumerate().max_by_key(|&(_, count)| count).map(|(i, _)| i).unwrap();
-        if let Some(&delim) = good_delims.get(best_delim) {
+        if let Some((best, &count)) = counts.iter().enumerate().max_by_key(|&(_, count)| count) && count > 0 {
+            let delim = GOOD_DELIMS[best];
             return Ifs::Plain(BStr::new(&[delim]).into());
         }
 
-        if best_delim == good_delims.len() + 1 && 2 * delims[good_delims.len()] >= delims[good_delims.len() + 1] {
-            Ifs::Plain(b"  ".into())
-        } else if best_delim == good_delims.len() + 1 {
-            if Regex::new(r"\S \S").unwrap().is_match(line) {
-                Ifs::Space
-            } else {
-                Ifs::Pretty
-            }
-        } else if best_delim == good_delims.len() {
-            Ifs::Pretty
-        } else {
-            let delim = std::mem::take(&mut other_delims[best_delim - good_delims.len()]);
-            Ifs::Plain(delim.into())
+        let mut counts: [usize; OTHER_DELIMS.len()] = [0; OTHER_DELIMS.len()];
+        for ((delim, len), counts) in OTHER_DELIMS.iter().zip(counts.iter_mut()) {
+            let delim = &delim[..*len];
+            *counts = line.split_str(delim).count() - 1;
         }
+
+        if let Some((best, &count)) = counts.iter().enumerate().max_by_key(|&(_, count)| count) && count > 0 {
+            return if best == 1 && 2 * counts[0] >= counts[1] {
+                Ifs::Pretty
+            } else if best == 1 {
+                if Regex::new(r"\S \S").unwrap().is_match(line) {
+                    Ifs::Space
+                } else {
+                    Ifs::Pretty
+                }
+            } else if best == 0 {
+                Ifs::Pretty
+            } else {
+                let delim = OTHER_DELIMS[best].0;
+                Ifs::Plain(delim.into())
+            };
+        }
+
+        // no idea
+        Ifs::Plain(default.into())
     }
 
     fn determine_delimiters(&self, line: &BStr, opts: &BaseOptions) -> (Ifs, Ofs) {
