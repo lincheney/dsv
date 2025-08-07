@@ -7,7 +7,7 @@ edition = "2024"
 anyhow = "1.0.98"
 bitflags = "2.9.1"
 bstr = { version = "1.12.0", features = ["unicode"] }
-clap = { version = "4.5.42", features = ["derive"] }
+clap = { version = "4.5.42", features = ["derive", "wrap_help"] }
 colorutils-rs = "0.7.5"
 once_cell = "1.21.3"
 regex = "1.11.1"
