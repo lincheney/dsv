@@ -15,17 +15,16 @@ pub struct Handler {
     count: usize,
 }
 
-impl Handler {
-    pub fn new(opts: Opts) -> Self {
+impl base::Processor<Opts> for Handler {
+
+    fn new(opts: Opts) -> Self {
         Self {
             ring: if opts.lines >= 0 { None } else { Some(std::collections::VecDeque::new()) },
             lines: opts.lines.unsigned_abs(),
             count: 0,
         }
     }
-}
 
-impl base::Processor for Handler {
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if let Some(ring) = self.ring.as_mut() {
             // print except for last n lines

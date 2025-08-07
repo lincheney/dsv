@@ -326,7 +326,9 @@ pub struct Base {
     ors: BString,
 }
 
-pub trait Processor {
+pub trait Processor<T> {
+
+    fn new(opts: T) -> Self;
 
     fn determine_ifs(&self, line: &BStr, opts: &BaseOptions) -> Ifs {
         if let Some(ifs) = &opts.ifs {
