@@ -2,8 +2,10 @@ mod base;
 mod head;
 mod cat;
 mod tail;
+use std::io::IsTerminal;
+use anyhow::Result;
 use base::Processor;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, CommandFactory};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -22,7 +24,7 @@ enum Commands {
     Tail(tail::Opts),
 }
 
-fn main() {
+fn main() -> Result<std::process::ExitCode> {
     let mut cli = Cli::parse();
     cli.opts.post_process();
 
@@ -30,6 +32,14 @@ fn main() {
         Some(Commands::Head(opts)) => head::Handler::run(cli.opts, opts),
         Some(Commands::Cat(opts)) => cat::Handler::run(cli.opts, opts),
         Some(Commands::Tail(opts)) => tail::Handler::run(cli.opts, opts),
-        _ => todo!(),
+        None => {
+            if std::io::stdin().is_terminal() {
+                Cli::command().print_help()?;
+            } else {
+                // run as if cat
+                cat::Handler::run(cli.opts, std::default::Default::default());
+            }
+        },
     }
+    Ok(std::process::ExitCode::SUCCESS)
 }

@@ -2,7 +2,7 @@ use crate::base;
 use bstr::BString;
 use clap::{Parser, ArgAction};
 
-#[derive(Parser)]
+#[derive(Parser, Default)]
 #[command(about = "concatenate files by row")]
 pub struct Opts {
     #[arg(short = 'n', long, action = ArgAction::SetTrue, help = "number all output lines")]
