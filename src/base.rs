@@ -81,8 +81,8 @@ impl AutoChoices {
 pub struct BaseOptions {
     #[arg(global = true, short = 'H', long, action = ArgAction::SetTrue, help = "treat first row as a header")]
     header: Option<bool>,
-    #[arg(global = true, short = 'N', long, action = ArgAction::SetFalse, overrides_with = "header", help = "do not treat first row as header")]
-    no_header: (),
+    #[arg(global = true, short = 'N', long, action = ArgAction::SetTrue, overrides_with = "header", help = "do not treat first row as header")]
+    no_header: bool,
     #[arg(global = true, long, help = "do or not print the header")]
     drop_header: bool,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "print a trailer")]
@@ -129,6 +129,11 @@ impl BaseOptions {
     pub fn post_process(&mut self) {
         let is_tty = std::io::stdout().is_terminal();
 
+        if self.no_header {
+            self.header = Some(false);
+        } else if self.header == Some(false) {
+            self.header = None;
+        }
         if self.irs.is_none() {
             self.irs = Some("\n".into());
         }
