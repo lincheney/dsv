@@ -44,4 +44,5 @@ add_subcommands!(
     flip,
     totsv,
     sqlite,
+    page,
 );
