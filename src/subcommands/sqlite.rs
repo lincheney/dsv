@@ -46,13 +46,15 @@ impl base::Processor<Opts> for Handler {
     }
 
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+        const ORS: &[u8] = b"\n";
+
         if !self.got_header {
             panic!("cannot use sqlite without a header");
         }
         let proc = self.start_proc();
-        let row = base.writer.format_columns(row, &base.ofs, true);
+        let row = base.writer.format_columns(row, &base.ofs, ORS.into(), true);
         proc.stdin.write_all(&row.join(DELIM.as_bytes())).unwrap();
-        proc.stdin.write_all(b"\n").unwrap();
+        proc.stdin.write_all(ORS).unwrap();
         false
     }
 
@@ -66,6 +68,7 @@ impl base::Processor<Opts> for Handler {
 
             proc.child.wait().unwrap();
         }
+        base.on_eof()
     }
 }
 

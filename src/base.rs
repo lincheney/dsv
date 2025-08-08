@@ -45,7 +45,7 @@ pub enum Ofs {
 }
 
 impl Ofs {
-    fn as_bstr(&self) -> &BStr {
+    pub fn as_bstr(&self) -> &BStr {
         match self {
             Ofs::Pretty => b"  ".as_bstr(),
             Ofs::Plain(ofs) => ofs.as_ref(),
@@ -265,7 +265,7 @@ impl Writer {
         ofs: &Ofs,
     ) -> BString {
         let colour = opts.colour == AutoChoices::Always;
-        let row = self.format_columns(row, ofs, opts.quote_output);
+        let row = self.format_columns(row, ofs, self.ors.as_ref(), opts.quote_output);
 
         if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
@@ -327,14 +327,14 @@ impl Writer {
         parts
     }
 
-    pub fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, quote_output: bool) -> Vec<BString> {
+    pub fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> Vec<BString> {
         if quote_output {
             // if pretty output, don't allow >1 space, no matter how long the ofs is
             let pretty_output = matches!(ofs, Ofs::Pretty);
             let ofs = ofs.as_bstr();
 
             for col in row.iter_mut() {
-                if (pretty_output && col.is_empty()) || Self::needs_quoting(col, ofs, &self.ors) {
+                if (pretty_output && col.is_empty()) || Self::needs_quoting(col, ofs, ors) {
                     let mut quoted_col = vec![];
                     quoted_col.push(b'"');
                     for (i, part) in col.split_str(b"\"").enumerate() {

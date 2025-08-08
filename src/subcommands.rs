@@ -47,4 +47,5 @@ add_subcommands!(
     page,
     tac,
     pretty,
+    sort,
 );

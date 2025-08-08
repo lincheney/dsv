@@ -1,5 +1,6 @@
 use crate::base;
 use bstr::BString;
+use crate::column_slicer::ColumnSlicer;
 use clap::{Parser, ArgAction};
 
 #[derive(Parser)]
@@ -17,7 +18,7 @@ pub struct Opts {
 
 pub struct Handler {
     complement: bool,
-    column_slicer: crate::column_slicer::ColumnSlicer,
+    column_slicer: ColumnSlicer,
 }
 
 impl base::Processor<Opts> for Handler {
@@ -26,7 +27,7 @@ impl base::Processor<Opts> for Handler {
 
         Self {
             complement: opts.complement,
-            column_slicer: crate::column_slicer::ColumnSlicer::new(&opts.fields, opts.regex),
+            column_slicer: ColumnSlicer::new(&opts.fields, opts.regex),
         }
     }
 
