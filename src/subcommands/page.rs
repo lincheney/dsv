@@ -1,6 +1,4 @@
 use crate::base;
-use super::grep;
-use bstr::{BString};
 use clap::{Parser};
 
 #[derive(Parser)]

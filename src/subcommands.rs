@@ -45,4 +45,5 @@ add_subcommands!(
     totsv,
     sqlite,
     page,
+    tac,
 );
