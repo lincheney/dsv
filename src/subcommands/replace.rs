@@ -18,8 +18,8 @@ pub struct Handler {
     inner: super::grep::Handler,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(opts: Opts) -> Self {
+impl Handler {
+    pub fn new(opts: Opts) -> Self {
         let mut grep_opts = grep::Opts::default();
         grep_opts.patterns = vec![opts.patterns];
         grep_opts.replace = Some(opts.replace);
@@ -28,7 +28,9 @@ impl base::Processor<Opts> for Handler {
             inner: grep::Handler::new(grep_opts),
         }
     }
+}
 
+impl base::Processor for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
         self.inner.process_opts(opts, is_tty)
     }

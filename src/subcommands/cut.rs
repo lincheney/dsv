@@ -21,8 +21,8 @@ pub struct Handler {
     column_slicer: ColumnSlicer,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(mut opts: Opts) -> Self {
+impl Handler {
+    pub fn new(mut opts: Opts) -> Self {
         opts.fields.extend(opts.old_style_fields.iter().flat_map(|x| x.split(",")).map(|x| x.into()));
 
         Self {
@@ -30,7 +30,9 @@ impl base::Processor<Opts> for Handler {
             column_slicer: ColumnSlicer::new(&opts.fields, opts.regex),
         }
     }
+}
 
+impl base::Processor for Handler {
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         let header = self.column_slicer.slice(&header, self.complement, true);

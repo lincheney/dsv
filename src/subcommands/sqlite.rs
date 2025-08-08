@@ -27,15 +27,17 @@ pub struct Handler {
     got_header: bool,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(opts: Opts) -> Self {
+impl Handler {
+    pub fn new(opts: Opts) -> Self {
         Self {
             proc: None,
             got_header: false,
             opts,
         }
     }
+}
 
+impl base::Processor for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         opts.ofs = Some("\t".into());
     }

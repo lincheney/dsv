@@ -11,13 +11,15 @@ pub struct Handler {
     rows: Vec<Vec<BString>>,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(_: Opts) -> Self {
+impl Handler {
+    pub fn new(_: Opts) -> Self {
         Self {
             rows: vec![],
         }
     }
+}
 
+impl base::Processor for Handler {
     fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
         self.rows.push(row);
         false

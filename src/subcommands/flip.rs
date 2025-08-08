@@ -17,15 +17,17 @@ pub struct Handler {
     header: Option<Vec<BString>>,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(opts: Opts) -> Self {
+impl Handler {
+    pub fn new(opts: Opts) -> Self {
         Self{
             opts,
             count: 0,
             header: None,
         }
     }
+}
 
+impl base::Processor for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
         self.opts.row_sep = self.opts.row_sep.resolve(is_tty);
         if opts.ofs.is_none() {

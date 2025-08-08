@@ -21,7 +21,7 @@ fn get_rgb(i: usize, step: f32) -> BString {
 }
 
 bitflags::bitflags! {
-    #[derive(Debug)]
+    #[derive(Debug, Copy, Clone)]
     pub struct Callbacks: u8 {
         const None = 0;
         const ON_HEADER = 1;
@@ -38,7 +38,7 @@ pub enum Ifs {
     Pretty,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Ofs {
     Plain(BString),
     Pretty,
@@ -375,15 +375,12 @@ pub struct Base {
     pub ifs: Ifs,
 }
 
-pub trait Processor<T> {
+pub trait Processor {
 
-    fn new(opts: T) -> Self;
-
-    fn run(mut cli_opts: BaseOptions, opts: T, is_tty: bool) -> Result<ExitCode> where Self: Sized {
-        let mut handler = Self::new(opts);
-        handler.process_opts(&mut cli_opts, is_tty);
+    fn run(&mut self, mut cli_opts: BaseOptions, is_tty: bool) -> Result<ExitCode> {
+        self.process_opts(&mut cli_opts, is_tty);
         let mut base = Base::new(cli_opts);
-        handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
+        self.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
     }
 
     fn determine_ifs(&self, line: &BStr, opts: &BaseOptions) -> Ifs {
@@ -477,6 +474,10 @@ pub trait Processor<T> {
     }
 
     fn process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
+        self._process_file(file, base, do_callbacks)
+    }
+
+    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
@@ -800,7 +801,7 @@ impl Base {
         (value, usize::MAX)
     }
 
-    fn new(opts: BaseOptions) -> Self {
+    pub fn new(opts: BaseOptions) -> Self {
         let ors = opts.ors.as_deref().unwrap_or("\n").into();
         Self {
             opts,

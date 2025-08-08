@@ -16,14 +16,16 @@ pub struct Handler {
     row_count: usize,
 }
 
-impl base::Processor<Opts> for Handler {
-
-    fn new(opts: Opts) -> Self {
+impl Handler {
+    pub fn new(opts: Opts) -> Self {
         Self {
             row_count: 0,
             opts,
         }
     }
+}
+
+impl base::Processor for Handler {
 
     fn on_header(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         if self.opts.number {

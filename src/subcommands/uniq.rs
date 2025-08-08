@@ -13,11 +13,11 @@ pub struct Opts {
     complement: bool,
     #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(short = 'c', long, action = ArgAction::SetTrue, help = "prefix lines by the number of occurrences")]
+    #[arg(short = 'c', long, overrides_with_all = ["count_column", "group"], action = ArgAction::SetTrue, help = "prefix lines by the number of occurrences")]
     count: bool,
-    #[arg(short = 'C', long, overrides_with_all = ["count", "group"], help = "name of column to put the count in")]
+    #[arg(short = 'C', long, help = "name of column to put the count in")]
     count_column: Option<String>,
-    #[arg(long, action = ArgAction::SetTrue, overrides_with_all = ["count", "count_column"], help = "show all items, separating groups with an empty line")]
+    #[arg(long, action = ArgAction::SetTrue, help = "show all items, separating groups with an empty line")]
     group: bool,
 }
 
@@ -27,8 +27,8 @@ pub struct Handler {
     groups: HashMap<Vec<BString>, (usize, Vec<Vec<BString>>)>,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(mut opts: Opts) -> Self {
+impl Handler {
+    pub fn new(mut opts: Opts) -> Self {
         let column_slicer = ColumnSlicer::new(&opts.fields, opts.regex);
         if opts.count && opts.count_column.is_none() {
             opts.count_column = Some("count".into());
@@ -39,7 +39,9 @@ impl base::Processor<Opts> for Handler {
             groups: HashMap::new(),
         }
     }
+}
 
+impl base::Processor for Handler {
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         if let Some(count_column) = &self.opts.count_column {

@@ -69,8 +69,8 @@ pub struct Handler {
     allowed_fields: (HashSet<usize>, usize),
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(mut opts: Opts) -> Self {
+impl Handler {
+    pub fn new(mut opts: Opts) -> Self {
         let patterns = std::mem::take(&mut opts.patterns);
         let pattern = patterns.into_iter()
             .chain(
@@ -126,7 +126,9 @@ impl base::Processor<Opts> for Handler {
             allowed_fields: (HashSet::new(), 0),
         }
     }
+}
 
+impl base::Processor for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         // no need to replace if invert and not passthru
         #[allow(clippy::nonminimal_bool)]

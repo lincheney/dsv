@@ -25,7 +25,7 @@ macro_rules! add_subcommands {
         ) -> Result<ExitCode> {
             match subcommand {
                 $(
-                    Some(Command::$name(opts)) => $name::Handler::run(cli_opts, opts, is_tty),
+                    Some(Command::$name(opts)) => $name::Handler::new(opts).run(cli_opts, is_tty),
                 )*
                 None => default(cli_opts),
             }
@@ -49,4 +49,5 @@ add_subcommands!(
     pretty,
     sort,
     uniq,
+    join,
 );

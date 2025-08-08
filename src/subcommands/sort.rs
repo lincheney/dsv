@@ -56,8 +56,8 @@ pub struct Handler {
     rows: Vec<Option<Vec<BString>>>,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(mut opts: Opts) -> Self {
+impl Handler {
+    pub fn new(mut opts: Opts) -> Self {
         opts.fields.extend(opts.old_style_fields.iter().flat_map(|x| x.split(",")).map(|x| x.into()));
         let column_slicer = ColumnSlicer::new(&opts.fields, opts.regex);
         Self {
@@ -68,7 +68,9 @@ impl base::Processor<Opts> for Handler {
             rows: vec![],
         }
     }
+}
 
+impl base::Processor for Handler {
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         base.on_header(header)

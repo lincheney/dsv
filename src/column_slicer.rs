@@ -19,6 +19,13 @@ enum Field {
 }
 
 impl ColumnSlicer {
+    pub fn from_names<'a, F: Iterator<Item=&'a BString>>(fields: F) -> Self {
+        Self {
+            fields: fields.cloned().map(Field::Name).collect(),
+            headers: HashMap::new(),
+        }
+    }
+
     pub fn new(fields: &Vec<String>, is_regex: bool) -> Self {
         let mut new_fields = vec![];
 

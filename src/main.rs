@@ -28,7 +28,7 @@ fn main() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         } else {
             // run as if cat
-            subcommands::cat::Handler::run(opts, std::default::Default::default(), is_tty)
+            subcommands::cat::Handler::new(std::default::Default::default()).run(opts, is_tty)
         }
     })
 }

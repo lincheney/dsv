@@ -16,8 +16,8 @@ pub struct Handler {
     count: usize,
 }
 
-impl base::Processor<Opts> for Handler {
-    fn new(opts: Opts) -> Self {
+impl Handler {
+    pub fn new(opts: Opts) -> Self {
         let lines = opts.lines.parse::<usize>().unwrap();
         let ring = if opts.lines.starts_with('+') { None } else { Some(VecDeque::with_capacity(lines)) };
 
@@ -27,7 +27,9 @@ impl base::Processor<Opts> for Handler {
             count: 0,
         }
     }
+}
 
+impl base::Processor for Handler {
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if let Some(ring) = self.ring.as_mut() {
             // Store the last n lines
