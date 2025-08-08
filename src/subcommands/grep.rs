@@ -7,7 +7,7 @@ use clap::{Parser, ArgAction};
 
 const MATCH_COLOUR: &str = "\x1b[1;31m";
 
-#[derive(Parser)]
+#[derive(Parser, Default)]
 pub struct CommonOpts {
     #[arg(short = 'e', long, action = ArgAction::Append, help = "pattern to search for")]
     regexp: Vec<String>,
@@ -31,17 +31,17 @@ pub struct CommonOpts {
     complement: bool,
 }
 
-#[derive(Parser)]
+#[derive(Parser, Default)]
 #[command(about = "print lines that match patterns")]
 pub struct Opts {
     #[arg(action = ArgAction::Append, required_unless_present_any = ["regexp", "file"], help = "pattern to search for")]
-    patterns: Vec<String>,
+    pub patterns: Vec<String>,
     #[arg(long, help = "replaces every match with the given text")]
-    replace: Option<String>,
+    pub replace: Option<String>,
     #[arg(short = 'n', long, help = "show line numbers")]
     line_number: bool,
     #[arg(long, help = "print both matching and non-matching lines")]
-    passthru: bool,
+    pub passthru: bool,
     #[arg(short = 'A', long, value_name = "NUM", help = "show NUM lines after each match")]
     after_context: Option<usize>,
     #[arg(short = 'B', long, value_name = "NUM", help = "show NUM lines before each match")]
@@ -53,7 +53,7 @@ pub struct Opts {
     #[arg(short = 'v', long, help = "select non-matching lines")]
     invert_match: bool,
     #[command(flatten)]
-    inner: CommonOpts,
+    pub common: CommonOpts,
 }
 
 pub struct Handler {
@@ -73,25 +73,25 @@ impl base::Processor<Opts> for Handler {
         let patterns = std::mem::take(&mut opts.patterns);
         let pattern = patterns.into_iter()
             .chain(
-                opts.inner.file.iter()
+                opts.common.file.iter()
                     .flat_map(|file| {
                         let file = std::fs::File::open(file).unwrap();
                         let file = BufReader::new(file);
                         file.lines().map(|l| l.unwrap())
                     })
             ).map(|pat| {
-                if opts.inner.fixed_strings {
+                if opts.common.fixed_strings {
                     regex::escape(&pat)
                 } else {
                     pat
                 }
             }).collect::<Vec<_>>().join("|");
-        opts.inner.case_sensitive = opts.inner.case_sensitive || pattern.chars().any(|c| c.is_ascii_uppercase());
+        opts.common.case_sensitive = opts.common.case_sensitive || pattern.chars().any(|c| c.is_ascii_uppercase());
 
         // field overrides word
-        let pattern = if opts.inner.field_regexp {
+        let pattern = if opts.common.field_regexp {
             format!("^({})$", pattern)
-        } else if opts.inner.word_regexp {
+        } else if opts.common.word_regexp {
             format!("\\b({})\\b", pattern)
         } else {
             format!("({})", pattern)
@@ -107,7 +107,7 @@ impl base::Processor<Opts> for Handler {
         let after = opts.after_context.or(opts.context).unwrap_or(0);
         let before = opts.before_context.or(opts.context);
         let before = before.map(|b| VecDeque::with_capacity(b));
-        let column_slicer = crate::column_slicer::ColumnSlicer::new(&opts.inner.fields, opts.inner.regex);
+        let column_slicer = crate::column_slicer::ColumnSlicer::new(&opts.common.fields, opts.common.regex);
 
         Self {
             opts,
@@ -160,7 +160,7 @@ impl base::Processor<Opts> for Handler {
         let matched = self.grep(&mut row);
         if matched {
             // matched this line
-            if self.matched_count < self.opts.inner.max_count {
+            if self.matched_count < self.opts.common.max_count {
                 self.last_matched = Some(self.row_num);
             }
             self.matched_count += 1;
@@ -200,7 +200,7 @@ impl base::Processor<Opts> for Handler {
         }
 
         // quit if reached max count
-        self.matched_count >= self.opts.inner.max_count && self.last_matched.is_some_and(|lm| lm + self.after <= self.row_num)
+        self.matched_count >= self.opts.common.max_count && self.last_matched.is_some_and(|lm| lm + self.after <= self.row_num)
     }
 }
 
@@ -208,11 +208,11 @@ impl Handler {
     fn grep(&self, row: &mut Vec<BString>) -> bool {
         let mut matched = false;
 
-        let allowed_fields = if self.opts.inner.fields.is_empty() {
+        let allowed_fields = if self.opts.common.fields.is_empty() {
             None
         } else {
             let indices: Vec<_> = (0..row.len()).collect();
-            let fields = self.column_slicer.slice_with::<usize, fn(usize)->usize>(&indices, self.opts.inner.complement, None);
+            let fields = self.column_slicer.slice_with::<usize, fn(usize)->usize>(&indices, self.opts.common.complement, None);
             Some(fields.iter().copied().collect::<HashSet<_>>())
         };
 

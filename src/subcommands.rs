@@ -39,4 +39,5 @@ add_subcommands!(
     cut,
     tocsv,
     grep,
+    replace,
 );
