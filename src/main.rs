@@ -18,16 +18,17 @@ pub struct Cli {
 }
 
 fn main() -> Result<ExitCode> {
+    let is_tty = std::io::stdout().is_terminal();
     let mut cli = Cli::parse();
-    cli.opts.post_process();
+    cli.opts.post_process(is_tty);
 
-    subcommands::run(cli.command, cli.opts, |opts| {
+    subcommands::run(cli.command, cli.opts, is_tty, |opts| {
         if std::io::stdin().is_terminal() {
             Cli::command().print_help()?;
             Ok(ExitCode::SUCCESS)
         } else {
             // run as if cat
-            subcommands::cat::Handler::run(opts, std::default::Default::default())
+            subcommands::cat::Handler::run(opts, std::default::Default::default(), is_tty)
         }
     })
 }

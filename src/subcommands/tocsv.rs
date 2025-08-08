@@ -14,7 +14,7 @@ impl base::Processor<Opts> for Handler {
         Self {}
     }
 
-    fn process_opts(&mut self, opts: &mut base::BaseOptions) {
+    fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         opts.ofs = Some(",".into());
     }
 }

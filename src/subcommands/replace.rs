@@ -29,8 +29,8 @@ impl base::Processor<Opts> for Handler {
         }
     }
 
-    fn process_opts(&mut self, opts: &mut base::BaseOptions) {
-        self.inner.process_opts(opts)
+    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
+        self.inner.process_opts(opts, is_tty)
     }
 
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {

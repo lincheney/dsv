@@ -20,11 +20,12 @@ macro_rules! add_subcommands {
         pub fn run<F: Fn(BaseOptions) -> Result<ExitCode>>(
             subcommand: Option<Command>,
             cli_opts: BaseOptions,
+            is_tty: bool,
             default: F,
         ) -> Result<ExitCode> {
             match subcommand {
                 $(
-                    Some(Command::$name(opts)) => $name::Handler::run(cli_opts, opts),
+                    Some(Command::$name(opts)) => $name::Handler::run(cli_opts, opts, is_tty),
                 )*
                 None => default(cli_opts),
             }
@@ -40,4 +41,5 @@ add_subcommands!(
     tocsv,
     grep,
     replace,
+    flip,
 );

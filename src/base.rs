@@ -1,8 +1,8 @@
 use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
-use std::io::{IsTerminal, Read, BufRead, BufReader, Write, BufWriter};
-use bstr::{BStr, BString, ByteSlice};
+use std::io::{Read, BufRead, BufReader, Write, BufWriter};
+use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{Command, Stdio, ExitCode};
 use anyhow::Result;
 use colorutils_rs::Hsv;
@@ -61,6 +61,14 @@ pub enum AutoChoices {
 }
 
 impl AutoChoices {
+    pub fn resolve(&self, is_tty: bool) -> Self {
+        if self.is_on(is_tty) {
+            Self::Always
+        } else {
+            Self::Never
+        }
+    }
+
     fn is_on(&self, is_tty: bool) -> bool {
         match self {
             Self::Always => true,
@@ -128,9 +136,7 @@ pub struct BaseOptions {
 }
 
 impl BaseOptions {
-    pub fn post_process(&mut self) {
-        let is_tty = std::io::stdout().is_terminal();
-
+    pub fn post_process(&mut self, is_tty: bool) {
         if self.no_header {
             self.header = Some(false);
         } else if self.header == Some(false) {
@@ -142,11 +148,11 @@ impl BaseOptions {
         if self.ors.is_none() {
             self.irs = self.irs.clone();
         }
-        self.colour = if self.colour.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
+        self.colour = self.colour.resolve(is_tty);
         if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
             self.colour = AutoChoices::Never;
         }
-        self.numbered_columns = if self.numbered_columns.is_on(is_tty) { AutoChoices::Always } else { AutoChoices::Never };
+        self.numbered_columns = self.numbered_columns.resolve(is_tty);
         if self.header_colour.is_none() {
             self.header_colour = Some("\x1b[1;4m".into());
         }
@@ -205,12 +211,30 @@ impl Writer {
 
     fn write_row(
         &mut self,
-        row: Vec<BString>,
+        row: GatheredRow,
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) {
-        self.write_output(row, padding, false, opts, ofs);
+        match row {
+            GatheredRow::Row(row) => self.write_output(row, padding, false, opts, ofs),
+            GatheredRow::Separator => self.write_separator(padding, opts),
+        }
+    }
+
+    pub fn write_separator(&mut self, _padding: Option<&Vec<usize>>, opts: &BaseOptions) {
+        let mut sep: BString;
+        let sep = if opts.colour == AutoChoices::Always {
+            let width = termsize::get().map(|size| size.cols).unwrap_or(80) as usize;
+            sep = b"\x1b[2m".into();
+            sep.push_str(&mut b"-".repeat(width));
+            sep.push_str(RESET_COLOUR);
+            &sep[..]
+        } else {
+            b"---"
+        };
+
+        self.write_raw(sep.into(), opts, false);
     }
 
     pub fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) {
@@ -333,13 +357,19 @@ impl Writer {
     }
 }
 
+enum GatheredRow {
+    Row(Vec<BString>),
+    Separator,
+}
+
 pub struct Base {
     pub writer: Writer,
     pub opts: BaseOptions,
     header: Option<Vec<BString>>,
     row_count: usize,
     col_count: Option<usize>,
-    gathered_rows: Vec<Vec<BString>>,
+    gathered_header: Option<Vec<BString>>,
+    gathered_rows: Vec<GatheredRow>,
     out_header: Option<Vec<BString>>,
     ofs: Ofs,
     ifs: Ifs,
@@ -349,9 +379,9 @@ pub trait Processor<T> {
 
     fn new(opts: T) -> Self;
 
-    fn run(mut cli_opts: BaseOptions, opts: T) -> Result<ExitCode> where Self: Sized {
+    fn run(mut cli_opts: BaseOptions, opts: T, is_tty: bool) -> Result<ExitCode> where Self: Sized {
         let mut handler = Self::new(opts);
-        handler.process_opts(&mut cli_opts);
+        handler.process_opts(&mut cli_opts, is_tty);
         let mut base = Base::new(cli_opts);
         handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
     }
@@ -530,7 +560,7 @@ pub trait Processor<T> {
         Ok(ExitCode::SUCCESS)
     }
 
-    fn process_opts(&mut self, _opts: &mut BaseOptions) {
+    fn process_opts(&mut self, _opts: &mut BaseOptions, _is_tty: bool) {
     }
 
     fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> bool {
@@ -552,15 +582,20 @@ impl Base {
     pub fn on_eof(&mut self) {
         let mut header_padding = None;
 
-        if !self.gathered_rows.is_empty() {
-            let padding = self.justify(&self.gathered_rows);
-            for (i, (p, row)) in padding.iter().zip(self.gathered_rows.drain(..)).enumerate() {
-                if i == 0 && self.out_header.is_some() {
-                    header_padding = Some(p.clone());
-                    self.writer.write_header(row, Some(p), &self.opts, &self.ofs);
-                } else {
-                    self.writer.write_row(row, Some(p), &self.opts, &self.ofs);
-                }
+        if (if self.gathered_header.is_some() { 1 } else { 0 } + self.gathered_rows.len()) > 0 {
+            let padding = self.justify(self.gathered_header.as_ref(), &self.gathered_rows);
+
+            let padding = if let Some(header) = self.gathered_header.take() {
+                let (first, new_padding) = padding.split_first().unwrap();
+                header_padding = Some(first.clone());
+                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
+                new_padding
+            } else {
+                &padding[..]
+            };
+
+            for (p, row) in padding.iter().zip(self.gathered_rows.drain(..)) {
+                self.writer.write_row(row, Some(p), &self.opts, &self.ofs);
             }
         }
 
@@ -573,28 +608,51 @@ impl Base {
         ANSI.split(val).map(|x| x.len()).sum()
     }
 
-    fn justify(&self, rows: &[Vec<BString>]) -> Vec<Vec<usize>> {
-        let widths: Vec<Vec<_>> = rows.iter().map(|row|
-            row.iter().map(|col| Self::no_ansi_colour_len(col.as_ref())).collect()
-        ).collect();
+    fn justify(&self, header: Option<&Vec<BString>>, rows: &[GatheredRow]) -> Vec<Vec<usize>> {
+        let empty_vec = vec![];
+        fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a Vec<BString>) -> &'a Vec<BString> {
+            match row {
+                GatheredRow::Row(row) => row,
+                _ => &empty_vec,
+            }
+        }
+        let row_filter = |row| row_filter_fn(row, &empty_vec);
 
-        let max_col = rows.iter().map(|row| row.len()).max().unwrap_or(0);
+        let widths: Vec<Vec<_>> = header.into_iter()
+            .chain(rows.iter().map(row_filter))
+            .map(|row| row.iter().map(|col| Self::no_ansi_colour_len(col.as_ref())).collect())
+            .collect();
+
+        let max_col = rows.iter().map(|row| row_filter(row).len()).max().unwrap_or(0);
+        let max_col = max_col.max(header.map(|h| h.len()).unwrap_or(0));
 
         let max_widths: Vec<_> = (0 .. max_col).map(|i|
             widths.iter().flat_map(|w| w.get(i)).max().cloned().unwrap_or(0)
         ).collect();
 
         // don't pad the last column
-        widths.iter().map(|w|
-            w.iter().zip(&max_widths).take(w.len().saturating_sub(1)).map(|(w, m)| m - w).collect()
-        ).collect()
+        widths.iter()
+            .map(|w| w.iter().zip(&max_widths).take(w.len().saturating_sub(1)).map(|(w, m)| m - w).collect())
+            .collect()
+    }
+
+    pub fn on_separator(&mut self) -> bool {
+        self.row_count += 1;
+
+        if matches!(self.ofs, Ofs::Pretty) {
+            self.gathered_rows.push(GatheredRow::Separator);
+        } else {
+            self.writer.write_row(GatheredRow::Separator, None, &self.opts, &self.ofs);
+        }
+
+        false
     }
 
     pub fn on_row(&mut self, row: Vec<BString>) -> bool {
-        self._on_row(row, None, false)
+        self._on_row(row, false)
     }
 
-    fn _on_row(&mut self, row: Vec<BString>, padding: Option<&Vec<usize>>, is_header: bool) -> bool {
+    fn _on_row(&mut self, row: Vec<BString>, is_header: bool) -> bool {
         if self.col_count.is_none() {
             self.col_count = Some(row.len());
             self.writer.rgb_map.clear();
@@ -606,11 +664,15 @@ impl Base {
         self.row_count += 1;
 
         if matches!(self.ofs, Ofs::Pretty) {
-            self.gathered_rows.push(row);
+            if is_header {
+                self.gathered_header = Some(row);
+            } else {
+                self.gathered_rows.push(GatheredRow::Row(row));
+            }
         } else if is_header {
-            self.writer.write_header(row, padding, &self.opts, &self.ofs);
+            self.writer.write_header(row, None, &self.opts, &self.ofs);
         } else {
-            self.writer.write_row(row, padding, &self.opts, &self.ofs);
+            self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs);
         }
 
         false
@@ -633,7 +695,7 @@ impl Base {
             }
             self.out_header = Some(header.clone());
 
-            self._on_row(header, None, true)
+            self._on_row(header, true)
         }
     }
 
@@ -746,6 +808,7 @@ impl Base {
             col_count: None,
             ifs: Ifs::Pretty,
             ofs: Ofs::Pretty,
+            gathered_header: None,
             gathered_rows: vec![],
             out_header: None,
             writer: Writer {
