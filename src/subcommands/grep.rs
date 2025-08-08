@@ -145,7 +145,11 @@ impl base::Processor<Opts> for Handler {
         if self.opts.line_number {
             header.insert(0, b"n".into());
         }
-        base.on_header(header)
+        if self.opts.count {
+            false
+        } else {
+            base.on_header(header)
+        }
     }
 
     fn on_eof(&mut self, base: &mut base::Base) {
@@ -167,39 +171,43 @@ impl base::Processor<Opts> for Handler {
                 self.last_matched = Some(self.row_num);
             }
             self.matched_count += 1;
-
-            // print the lines before
-            if let Some(before) = &mut self.before {
-                let len = before.len();
-                for (i, mut r) in before.drain(..).enumerate() {
-                    let i = i + self.row_num - len;
-                    if self.opts.line_number {
-                        r.insert(0, format!("{i}").into());
-                    }
-                    if base.on_row(r) {
-                        return true
-                    }
-                }
-            }
         }
 
-        // print this line if matched or it is in after or we are doing passthru
-        if matched || self.opts.passthru || self.last_matched.is_some_and(|lm| lm + self.after >= self.row_num) {
-            if self.opts.line_number {
-                row.insert(0, format!("{}", self.row_num).into());
-            }
-            if base.on_row(row) {
-                return true
-            }
-        } else {
-            if let Some(before) = &mut self.before {
-                // this line might be a before
-                if before.len() >= before.capacity() {
-                    before.pop_front();
+        if !self.opts.count {
+            if matched {
+                // print the lines before
+                if let Some(before) = &mut self.before {
+                    let len = before.len();
+                    for (i, mut r) in before.drain(..).enumerate() {
+                        let i = i + self.row_num - len;
+                        if self.opts.line_number {
+                            r.insert(0, format!("{i}").into());
+                        }
+                        if base.on_row(r) {
+                            return true
+                        }
+                    }
                 }
-                before.push_back(row);
             }
-            return false
+
+            // print this line if matched or it is in after or we are doing passthru
+            if matched || self.opts.passthru || self.last_matched.is_some_and(|lm| lm + self.after >= self.row_num) {
+                if self.opts.line_number {
+                    row.insert(0, format!("{}", self.row_num).into());
+                }
+                if base.on_row(row) {
+                    return true
+                }
+            } else {
+                if let Some(before) = &mut self.before {
+                    // this line might be a before
+                    if before.len() >= before.capacity() {
+                        before.pop_front();
+                    }
+                    before.push_back(row);
+                }
+                return false
+            }
         }
 
         // quit if reached max count
