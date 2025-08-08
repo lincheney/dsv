@@ -2,7 +2,7 @@ use crate::base;
 use clap::{Parser};
 
 #[derive(Parser)]
-#[command(about = "convert to csv")]
+#[command(about = "convert to tsv")]
 pub struct Opts {
 }
 
@@ -15,6 +15,6 @@ impl base::Processor<Opts> for Handler {
     }
 
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
-        opts.ofs = Some(",".into());
+        opts.ofs = Some("\t".into());
     }
 }

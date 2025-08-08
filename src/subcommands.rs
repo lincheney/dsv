@@ -42,4 +42,5 @@ add_subcommands!(
     grep,
     replace,
     flip,
+    totsv,
 );
