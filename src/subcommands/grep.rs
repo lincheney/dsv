@@ -1,7 +1,7 @@
 use std::collections::{VecDeque, HashSet};
 use std::io::{BufReader, BufRead};
 use crate::base;
-use regex::bytes::Regex;
+use regex::bytes::{Regex, RegexBuilder};
 use bstr::{BString};
 use clap::{Parser, ArgAction};
 
@@ -96,7 +96,10 @@ impl base::Processor<Opts> for Handler {
         } else {
             format!("({pattern})")
         };
-        let pattern = Regex::new(&pattern).unwrap();
+        let pattern = RegexBuilder::new(&pattern)
+            .case_insensitive(!opts.common.case_sensitive)
+            .build()
+            .unwrap();
 
         if opts.passthru {
             opts.before_context = None;
@@ -218,9 +221,6 @@ impl Handler {
             if allowed_fields.as_ref().is_some_and(|x| x.contains(&i)) {
                 continue
             }
-
-            // if not self.opts.case_sensitive:
-                // col = col.lower()
 
             matched = if let Some(replace) = &self.replace {
                 let replace: &[u8] = replace.as_ref();
