@@ -327,7 +327,7 @@ impl Writer {
         parts
     }
 
-    fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, quote_output: bool) -> Vec<BString> {
+    pub fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, quote_output: bool) -> Vec<BString> {
         if quote_output {
             // if pretty output, don't allow >1 space, no matter how long the ofs is
             let pretty_output = matches!(ofs, Ofs::Pretty);
@@ -371,8 +371,8 @@ pub struct Base {
     gathered_header: Option<Vec<BString>>,
     gathered_rows: Vec<GatheredRow>,
     out_header: Option<Vec<BString>>,
-    ofs: Ofs,
-    ifs: Ifs,
+    pub ofs: Ofs,
+    pub ifs: Ifs,
 }
 
 pub trait Processor<T> {
@@ -480,7 +480,7 @@ pub trait Processor<T> {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
-        // let mut got_row = false;
+        let mut got_row = false;
         let mut got_line = false;
         let irs: BString = base.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
 
@@ -523,13 +523,14 @@ pub trait Processor<T> {
             let incomplete;
             (row, incomplete) = base.parse_line(line.into(), row, b'"');
             if !incomplete || eof {
-                // got_row = true;
 
-                if base.header.is_none() && base.opts.header.is_none() {
-                    base.opts.header = Some(row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))));
-                }
-
-                let is_header = base.header.is_none() && base.opts.header == Some(true);
+                let is_header = if got_row {
+                    false
+                } else {
+                    // got the first row, is it a header
+                    got_row = true;
+                    base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
+                };
 
                 if is_header {
                     let header = row.clone();
@@ -613,7 +614,7 @@ impl Base {
         fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a Vec<BString>) -> &'a Vec<BString> {
             match row {
                 GatheredRow::Row(row) => row,
-                _ => &empty_vec,
+                _ => empty_vec,
             }
         }
         let row_filter = |row| row_filter_fn(row, &empty_vec);
