@@ -56,16 +56,15 @@ impl ColumnSlicer {
         complement: bool,
         allow_empty: bool,
     ) -> Vec<BString> {
-        self.slice_with::<fn(usize) -> BString>(row, complement, allow_empty, None)
+        self.slice_with::<BString, fn(usize) -> BString>(row, complement, allow_empty.then_some(|_| b"".into()))
     }
 
-    pub fn slice_with<F: Fn(usize) -> BString>(
+    pub fn slice_with<T: Clone, F: Fn(usize) -> T>(
         &self,
-        row: &[BString],
+        row: &[T],
         complement: bool,
-        allow_empty: bool,
         default: Option<F>,
-    ) -> Vec<BString> {
+    ) -> Vec<T> {
 
         if self.fields.is_empty() {
             return vec![];
@@ -112,8 +111,8 @@ impl ColumnSlicer {
                     Field::Index(i) => {
                         if let Some(col) = row.get(*i) {
                             new_row.push(col.clone());
-                        } else if allow_empty {
-                            new_row.push(default.as_ref().map(|f| f(*i)).unwrap_or_else(|| b"".into()));
+                        } else if let Some(default) = &default {
+                            new_row.push(default(*i));
                         }
                     },
                     Field::Regex(regex) => {
@@ -127,8 +126,8 @@ impl ColumnSlicer {
                         if let Some(&i) = self.headers.get(name) {
                             if let Some(col) = row.get(i) {
                                 new_row.push(col.clone());
-                            } else if allow_empty {
-                                new_row.push(default.as_ref().map(|f| f(i)).unwrap_or_else(|| b"".into()));
+                            } else if let Some(default) = &default {
+                                new_row.push(default(i));
                             }
                         }
                     },

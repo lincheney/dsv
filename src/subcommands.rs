@@ -38,4 +38,5 @@ add_subcommands!(
     tail,
     cut,
     tocsv,
+    grep,
 );

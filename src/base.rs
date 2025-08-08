@@ -8,9 +8,10 @@ use anyhow::Result;
 use colorutils_rs::Hsv;
 
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
-const RESET_COLOUR: &[u8] = b"\x1b[0m";
+pub const RESET_COLOUR: &str = "\x1b[0m";
 static SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
 static PPRINT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s\s+").unwrap());
+static ANSI: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;:]*[mK]|\x1b]8;;.*?\x1b\\").unwrap());
 
 fn get_rgb(i: usize, step: f32) -> BString {
     let hue = (step * i as f32) % 1.0;
@@ -156,15 +157,16 @@ impl BaseOptions {
     }
 }
 
-struct Writer {
+pub struct Writer {
     rgb_map: Vec<BString>,
     inner: Option<Box<dyn Write>>,
     proc: Option<std::process::Child>,
+    ors: BString,
 }
 
 impl Writer {
-    fn start(&mut self, opts: &BaseOptions, has_header: bool) -> &mut Box<dyn Write> {
-        self.inner.get_or_insert_with(|| {
+    fn start(&mut self, opts: &BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr) {
+        let file = self.inner.get_or_insert_with(|| {
             if opts.page {
                 let mut cmd = Command::new("less");
                 cmd.args(["-RX"]);
@@ -185,7 +187,8 @@ impl Writer {
                 // inner
                 Box::new(std::io::stdout().lock())
             }
-        })
+        });
+        (file, self.ors.as_ref())
     }
 
     fn write_header(
@@ -194,10 +197,9 @@ impl Writer {
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
-        ors: &BStr,
     ) {
         if !opts.drop_header {
-            self.write_output(header, padding, true, opts, ofs, ors);
+            self.write_output(header, padding, true, opts, ofs);
         }
     }
 
@@ -207,9 +209,15 @@ impl Writer {
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
-        ors: &BStr,
     ) {
-        self.write_output(row, padding, false, opts, ofs, ors);
+        self.write_output(row, padding, false, opts, ofs);
+    }
+
+    pub fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) {
+        let (file, ors) = self.start(opts, is_header);
+        file.write_all(string).expect("Failed to write row");
+        file.write_all(ors).expect("Failed to write row separator");
+        file.flush().expect("Failed to flush output");
     }
 
     fn write_output(
@@ -219,13 +227,9 @@ impl Writer {
         is_header: bool,
         opts: &BaseOptions,
         ofs: &Ofs,
-        ors: &BStr,
     ) {
-        let formatted_row = self.format_row(row, padding, is_header, opts, ofs, ors);
-        let file = self.start(opts, is_header);
-        file.write_all(&formatted_row).expect("Failed to write row");
-        file.write_all(ors).expect("Failed to write row separator");
-        file.flush().expect("Failed to flush output");
+        let formatted_row = self.format_row(row, padding, is_header, opts, ofs);
+        self.write_raw(formatted_row.as_ref(), opts, is_header);
     }
 
     fn format_row(
@@ -235,10 +239,9 @@ impl Writer {
         is_header: bool,
         opts: &BaseOptions,
         ofs: &Ofs,
-        ors: &BStr,
     ) -> BString {
         let colour = opts.colour == AutoChoices::Always;
-        let row = self.format_columns(row, ofs, ors, opts.quote_output);
+        let row = self.format_columns(row, ofs, opts.quote_output);
 
         if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
@@ -283,7 +286,7 @@ impl Writer {
             }
             parts.extend_from_slice(col);
             if header_bg_colour.or(header_colour).is_some() {
-                parts.extend_from_slice(RESET_COLOUR);
+                parts.extend_from_slice(RESET_COLOUR.as_bytes());
                 if let Some(header_bg_colour) = header_bg_colour {
                     parts.extend_from_slice(header_bg_colour);
                 }
@@ -294,20 +297,20 @@ impl Writer {
         }
         // reset colour
         if colour && !parts.is_empty() {
-            parts.extend_from_slice(RESET_COLOUR);
+            parts.extend_from_slice(RESET_COLOUR.as_bytes());
         }
 
         parts
     }
 
-    fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> Vec<BString> {
+    fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, quote_output: bool) -> Vec<BString> {
         if quote_output {
             // if pretty output, don't allow >1 space, no matter how long the ofs is
             let pretty_output = matches!(ofs, Ofs::Pretty);
             let ofs = ofs.as_bstr();
 
             for col in row.iter_mut() {
-                if (pretty_output && col.is_empty()) || Self::needs_quoting(col, ofs, ors) {
+                if (pretty_output && col.is_empty()) || Self::needs_quoting(col, ofs, &self.ors) {
                     let mut quoted_col = vec![];
                     quoted_col.push(b'"');
                     for (i, part) in col.split_str(b"\"").enumerate() {
@@ -331,7 +334,7 @@ impl Writer {
 }
 
 pub struct Base {
-    writer: Writer,
+    pub writer: Writer,
     pub opts: BaseOptions,
     header: Option<Vec<BString>>,
     row_count: usize,
@@ -340,7 +343,6 @@ pub struct Base {
     out_header: Option<Vec<BString>>,
     ofs: Ofs,
     ifs: Ifs,
-    ors: BString,
 }
 
 pub trait Processor<T> {
@@ -555,21 +557,25 @@ impl Base {
             for (i, (p, row)) in padding.iter().zip(self.gathered_rows.drain(..)).enumerate() {
                 if i == 0 && self.out_header.is_some() {
                     header_padding = Some(p.clone());
-                    self.writer.write_header(row, Some(p), &self.opts, &self.ofs, self.ors.as_ref());
+                    self.writer.write_header(row, Some(p), &self.opts, &self.ofs);
                 } else {
-                    self.writer.write_row(row, Some(p), &self.opts, &self.ofs, self.ors.as_ref());
+                    self.writer.write_row(row, Some(p), &self.opts, &self.ofs);
                 }
             }
         }
 
         if let Some(header) = self.out_header.take() && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
-            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs, self.ors.as_ref());
+            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
         }
+    }
+
+    fn no_ansi_colour_len(val: &BStr) -> usize {
+        ANSI.split(val).map(|x| x.len()).sum()
     }
 
     fn justify(&self, rows: &[Vec<BString>]) -> Vec<Vec<usize>> {
         let widths: Vec<Vec<_>> = rows.iter().map(|row|
-            row.iter().map(|col| col.len()).collect()
+            row.iter().map(|col| Self::no_ansi_colour_len(col.as_ref())).collect()
         ).collect();
 
         let max_col = rows.iter().map(|row| row.len()).max().unwrap_or(0);
@@ -602,9 +608,9 @@ impl Base {
         if matches!(self.ofs, Ofs::Pretty) {
             self.gathered_rows.push(row);
         } else if is_header {
-            self.writer.write_header(row, padding, &self.opts, &self.ofs, self.ors.as_ref());
+            self.writer.write_header(row, padding, &self.opts, &self.ofs);
         } else {
-            self.writer.write_row(row, padding, &self.opts, &self.ofs, self.ors.as_ref());
+            self.writer.write_row(row, padding, &self.opts, &self.ofs);
         }
 
         false
@@ -740,13 +746,13 @@ impl Base {
             col_count: None,
             ifs: Ifs::Pretty,
             ofs: Ofs::Pretty,
-            ors,
             gathered_rows: vec![],
             out_header: None,
             writer: Writer {
                 inner: None,
                 proc: None,
                 rgb_map: vec![],
+                ors,
             },
         }
     }
