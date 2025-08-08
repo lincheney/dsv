@@ -90,11 +90,11 @@ impl base::Processor<Opts> for Handler {
 
         // field overrides word
         let pattern = if opts.common.field_regexp {
-            format!("^({})$", pattern)
+            format!("^({pattern})$")
         } else if opts.common.word_regexp {
-            format!("\\b({})\\b", pattern)
+            format!("\\b({pattern})\\b")
         } else {
-            format!("({})", pattern)
+            format!("({pattern})")
         };
         let pattern = Regex::new(&pattern).unwrap();
 
@@ -124,15 +124,13 @@ impl base::Processor<Opts> for Handler {
 
     fn process_opts(&mut self, opts: &mut base::BaseOptions) {
         // no need to replace if invert and not passthru
-        if !self.opts.invert_match || self.opts.passthru {
-            if opts.colour == base::AutoChoices::Always {
-                if let Some(mut replace) = self.opts.replace.take() {
-                    replace.insert_str(0, MATCH_COLOUR);
-                    replace.push_str(base::RESET_COLOUR);
-                    self.replace = Some(replace);
-                } else {
-                    self.replace = Some(format!("{}$1{}", MATCH_COLOUR, base::RESET_COLOUR));
-                }
+        if !self.opts.invert_match || self.opts.passthru && opts.colour == base::AutoChoices::Always {
+            if let Some(mut replace) = self.opts.replace.take() {
+                replace.insert_str(0, MATCH_COLOUR);
+                replace.push_str(base::RESET_COLOUR);
+                self.replace = Some(replace);
+            } else {
+                self.replace = Some(format!("{}$1{}", MATCH_COLOUR, base::RESET_COLOUR));
             }
         }
     }
@@ -171,7 +169,7 @@ impl base::Processor<Opts> for Handler {
                 for (i, mut r) in before.drain(..).enumerate() {
                     let i = i + self.row_num - len;
                     if self.opts.line_number {
-                        r.insert(0, format!("{}", i).into());
+                        r.insert(0, format!("{i}").into());
                     }
                     if base.on_row(r) {
                         return true
@@ -205,7 +203,7 @@ impl base::Processor<Opts> for Handler {
 }
 
 impl Handler {
-    fn grep(&self, row: &mut Vec<BString>) -> bool {
+    fn grep(&self, row: &mut [BString]) -> bool {
         let mut matched = false;
 
         let allowed_fields = if self.opts.common.fields.is_empty() {
@@ -236,7 +234,7 @@ impl Handler {
                 self.pattern.is_match(col)
             } || matched;
 
-            if matched == !self.opts.invert_match && self.opts.replace.is_none() {
+            if matched != self.opts.invert_match && self.opts.replace.is_none() {
                 return true
             }
         }
