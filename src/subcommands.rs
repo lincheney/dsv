@@ -48,4 +48,5 @@ add_subcommands!(
     tac,
     pretty,
     sort,
+    uniq,
 );
