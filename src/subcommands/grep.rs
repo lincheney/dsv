@@ -66,6 +66,7 @@ pub struct Handler {
     after: usize,
     row_num: usize,
     column_slicer: crate::column_slicer::ColumnSlicer,
+    allowed_fields: (HashSet<usize>, usize),
 }
 
 impl base::Processor<Opts> for Handler {
@@ -122,6 +123,7 @@ impl base::Processor<Opts> for Handler {
             pattern,
             replace: None,
             column_slicer,
+            allowed_fields: (HashSet::new(), 0),
         }
     }
 
@@ -206,15 +208,19 @@ impl base::Processor<Opts> for Handler {
 }
 
 impl Handler {
-    fn grep(&self, row: &mut [BString]) -> bool {
+    fn grep(&mut self, row: &mut [BString]) -> bool {
         let mut matched = false;
 
         let allowed_fields = if self.opts.common.fields.is_empty() {
             None
         } else {
-            let indices: Vec<_> = (0..row.len()).collect();
-            let fields = self.column_slicer.slice_with::<usize, fn(usize)->usize>(&indices, self.opts.common.complement, None);
-            Some(fields.iter().copied().collect::<HashSet<_>>())
+            if self.allowed_fields.1 < row.len() {
+                let indices: Vec<_> = (0..row.len()).collect();
+                let fields = self.column_slicer.slice_with::<usize, fn(usize)->usize>(&indices, self.opts.common.complement, None);
+                self.allowed_fields.0 = fields.iter().copied().collect::<HashSet<_>>();
+                self.allowed_fields.1 = row.len();
+            }
+            Some(&self.allowed_fields.0)
         };
 
         for (i, col) in row.iter_mut().enumerate() {
