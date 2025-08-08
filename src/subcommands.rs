@@ -46,4 +46,5 @@ add_subcommands!(
     sqlite,
     page,
     tac,
+    pretty,
 );
