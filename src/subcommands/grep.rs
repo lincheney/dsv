@@ -129,7 +129,7 @@ impl base::Processor<Opts> for Handler {
 
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         // no need to replace if invert and not passthru
-        if !self.opts.invert_match || self.opts.passthru && opts.colour == base::AutoChoices::Always {
+        if !(self.opts.invert_match && self.opts.passthru) && !self.opts.count && opts.colour == base::AutoChoices::Always {
             if let Some(mut replace) = self.opts.replace.take() {
                 replace.insert_str(0, MATCH_COLOUR);
                 replace.push_str(base::RESET_COLOUR);
