@@ -93,17 +93,17 @@ impl base::Processor for Handler {
         do_callbacks: base::Callbacks,
     ) -> Result<std::process::ExitCode> {
 
-        let right_file = std::mem::take(&mut self.opts.file);
         let (sender, receiver) = mpsc::channel();
         let (tx, rx) = mpsc::channel();
 
         let mut left = Child{ ofs_sender: Some(tx), sender: sender.clone(), got_header: false };
-        let mut right = Child{ ofs_sender: None, sender: sender, got_header: false };
+        let mut right = Child{ ofs_sender: None, sender, got_header: false };
 
         std::thread::scope(|scope| {
 
             // start a thread to read from rhs
             let cli_opts = base.opts.clone();
+            let right_file = std::mem::take(&mut self.opts.file);
             scope.spawn(move || {
                 let file = std::fs::File::open(right_file).unwrap();
                 let mut base = base::Base::new(cli_opts);
@@ -115,15 +115,13 @@ impl base::Processor for Handler {
             let opts = self.opts.clone();
             let join = self.join;
             scope.spawn(move || {
-                let ofs = rx.recv().unwrap();
                 let mut base = base::Base::new(cli_opts);
-                base.ofs = ofs;
+                base.ofs = rx.recv().unwrap();
                 Joiner::default().do_joining(join, &opts, receiver, &mut base);
                 base.on_eof();
             });
 
             // and we will read from lhs
-            // self._process_file(file, base, do_callbacks)
             let result = left.process_file(file, base, do_callbacks);
             drop(left);
             result
@@ -142,58 +140,57 @@ type JoinStore = HashMap<Row, Vec<Row>>;
 
 impl Joiner {
     fn do_joining(&mut self, join: Join, opts: &Opts, receiver: Receiver<(bool, Row)>, base: &mut base::Base) {
-        let fields_set = !opts.left_fields.is_empty() || !opts.right_fields.is_empty();
-        let mut left_store = HashMap::new();
-        let mut right_store = HashMap::new();
-        let mut left_header = None;
-        let mut right_header = None;
-        let mut left_slicer = ColumnSlicer::new(&opts.left_fields, opts.regex);
-        let mut right_slicer = ColumnSlicer::new(&opts.left_fields, opts.regex);
+        let fields = (&opts.left_fields, &opts.right_fields);
+        let is_fields_set = !fields.0.is_empty() || !fields.1.is_empty();
+        let mut stores = (HashMap::new(), HashMap::new());
+        let mut headers = (None, None);
+        let mut slicers = (ColumnSlicer::new(fields.0, opts.regex), ColumnSlicer::new(fields.1, opts.regex));
         let mut got_headers = false;
         let mut buffer = vec![];
 
         for (is_left, row) in receiver.iter() {
-            if is_left && left_header.is_none() {
-                left_header = Some(row);
-            } else if !is_left && right_header.is_none() {
-                right_header = Some(row);
+            if is_left && headers.0.is_none() {
+                headers.0 = Some(row);
+            } else if !is_left && headers.1.is_none() {
+                headers.1 = Some(row);
             } else {
                 // non header
 
                 if !got_headers {
-                    // stick it in the buffer
+                    // stick it in the buffer for later
                     buffer.push(row);
-                } else if self.on_row(is_left, row, (&mut left_store, &mut right_store), (&left_slicer, &right_slicer), base) {
+                } else if self.on_row(is_left, row, &mut stores, &slicers, base) {
                     return
                 }
-
             }
 
-            if !got_headers && let Some((left, right)) = left_header.as_ref().zip(right_header.as_ref()) {
+            if !got_headers && let Some(headers) = headers.0.as_ref().zip(headers.1.as_ref()) {
                 got_headers = true;
-                if ! fields_set {
+
+                if ! is_fields_set {
                     // get common fields
-                    let left: HashSet<_> = left.iter().collect();
-                    let right: HashSet<_> = right.iter().collect();
+                    let left: HashSet<_> = headers.0.iter().collect();
+                    let right: HashSet<_> = headers.1.iter().collect();
                     let fields: Vec<_> = left.intersection(&right).cloned().cloned().collect();
                     if fields.is_empty() {
                         // default join field is the first
-                        left_slicer = ColumnSlicer::new(&vec!["1".into()], false);
-                        right_slicer = ColumnSlicer::new(&vec!["1".into()], false);
+                        slicers.0 = ColumnSlicer::new(&vec!["1".into()], false);
+                        slicers.1 = ColumnSlicer::new(&vec!["1".into()], false);
                     } else {
-                        left_slicer = ColumnSlicer::from_names(fields.iter());
-                        right_slicer = ColumnSlicer::from_names(fields.iter());
+                        slicers.0 = ColumnSlicer::from_names(fields.iter());
+                        slicers.1 = ColumnSlicer::from_names(fields.iter());
                     }
                 }
 
                 // make header maps
-                left_slicer.make_header_map(left);
-                right_slicer.make_header_map(right);
+                slicers.0.make_header_map(headers.0);
+                slicers.1.make_header_map(headers.1);
 
                 // paste the headers together
-                let mut header = left_slicer.slice(left, false, true);
-                header.append(&mut left_slicer.slice(left, true, true));
-                header.append(&mut right_slicer.slice(right, true, true));
+                let mut header = slicers.0.slice(headers.0, false, true);
+                header.append(&mut slicers.0.slice(headers.0, true, true));
+                header.append(&mut slicers.1.slice(headers.1, true, true));
+
         // if self.opts.rename_1 {
         // left = [self.opts.rename_1 % h for h in left]
         // }
@@ -206,7 +203,7 @@ impl Joiner {
                 // clear out the buffered rows
                 // their side must be the other side
                 for row in buffer.drain(..) {
-                    if self.on_row(!is_left, row, (&mut left_store, &mut right_store), (&left_slicer, &right_slicer), base) {
+                    if self.on_row(!is_left, row, &mut stores, &slicers, base) {
                         return
                     }
                 }
@@ -215,14 +212,11 @@ impl Joiner {
         }
 
         if matches!(join, Join::Left | Join::Outer) {
-            for (key, rows) in &left_store {
-                if !right_store.contains_key(key) {
+            for (key, rows) in &stores.0 {
+                if !stores.1.contains_key(key) {
                     for row in rows {
-                        let mut new_row = key.clone();
-                        new_row.extend(std::iter::repeat_n(b"".into(), self.key_len - key.len()));
-                        new_row.append(&mut left_slicer.slice(row, true, true));
-                        new_row.extend(std::iter::repeat_n(b"".into(), self.right_len));
-                        if base.on_row(new_row) {
+                        let row = self.make_row(key, Some(row), None, &slicers);
+                        if base.on_row(row) {
                             return
                         }
                     }
@@ -231,13 +225,11 @@ impl Joiner {
         }
 
         if matches!(join, Join::Right | Join::Outer) {
-            for (key, rows) in &right_store {
-                if !left_store.contains_key(key) {
+            for (key, rows) in &stores.1 {
+                if !stores.0.contains_key(key) {
                     for row in rows {
-                        let mut new_row = key.clone();
-                        new_row.extend(std::iter::repeat_n(b"".into(), self.key_len - key.len() + self.left_len));
-                        new_row.append(&mut right_slicer.slice(row, true, true));
-                        if base.on_row(new_row) {
+                        let row = self.make_row(key, None, Some(row), &slicers);
+                        if base.on_row(row) {
                             return
                         }
                     }
@@ -247,12 +239,39 @@ impl Joiner {
 
     }
 
+    fn make_row(
+        &self,
+        key: &Row,
+        left: Option<&Row>,
+        right: Option<&Row>,
+        slicers: &(ColumnSlicer, ColumnSlicer),
+    ) -> Row {
+        let mut new_row = key.clone();
+        new_row.extend(std::iter::repeat_n(b"".into(), self.key_len.saturating_sub(key.len())));
+
+        let left_len = if let Some(left) = left {
+            let left = &mut slicers.0.slice(left, true, true);
+            let left_len = left.len();
+            new_row.append(left);
+            left_len
+        } else {
+            0
+        };
+
+        if let Some(right) = right {
+            new_row.extend(std::iter::repeat_n(b"".into(), self.left_len.saturating_sub(left_len)));
+            new_row.append(&mut slicers.1.slice(right, true, true));
+        }
+
+        new_row
+    }
+
     fn on_row(
         &mut self,
         is_left: bool,
         row: Row,
-        stores: (&mut JoinStore, &mut JoinStore),
-        slicers: (&ColumnSlicer, &ColumnSlicer),
+        stores: &mut (JoinStore, JoinStore),
+        slicers: &(ColumnSlicer, ColumnSlicer),
         base: &mut base::Base,
     ) -> bool {
 
@@ -266,8 +285,8 @@ impl Joiner {
             self.right_len = slicers.1.slice(&row, true, true).len();
         }
 
-        let left = (slicers.0, stores.0);
-        let right = (slicers.1, stores.1);
+        let left = (&slicers.0, &mut stores.0);
+        let right = (&slicers.1, &mut stores.1);
         let (mut this, mut other) = (left, right);
         if !is_left {
             (this, other) = (other, this);
@@ -277,12 +296,9 @@ impl Joiner {
         // find any joined rows
         if let Some(other_rows) = other.1.get(&key) {
             for other_row in other_rows {
-                let mut new_row = key.clone();
-                new_row.append(&mut slicers.0.slice(if is_left { &row } else { other_row }, true, true));
-                new_row.append(&mut slicers.1.slice(if !is_left { &row } else { other_row }, true, true));
-
-                // new_row.extend_from_slice
-                if base.on_row(new_row) {
+                let rows = if is_left { (&row, other_row) } else { (other_row, &row) };
+                let row = self.make_row(&key, Some(rows.0), Some(rows.1), slicers);
+                if base.on_row(row) {
                     return true
                 }
             }
