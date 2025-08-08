@@ -234,7 +234,7 @@ impl Handler {
                 self.pattern.is_match(col)
             } || matched;
 
-            if matched != self.opts.invert_match && self.opts.replace.is_none() {
+            if matched != self.opts.invert_match && self.replace.is_none() {
                 return true
             }
         }

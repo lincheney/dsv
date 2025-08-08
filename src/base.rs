@@ -227,7 +227,7 @@ impl Writer {
         let sep = if opts.colour == AutoChoices::Always {
             let width = termsize::get().map(|size| size.cols).unwrap_or(80) as usize;
             sep = b"\x1b[2m".into();
-            sep.push_str(&mut b"-".repeat(width));
+            sep.push_str(b"-".repeat(width));
             sep.push_str(RESET_COLOUR);
             &sep[..]
         } else {
