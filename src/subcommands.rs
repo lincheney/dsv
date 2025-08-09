@@ -50,4 +50,5 @@ add_subcommands!(
     sort,
     uniq,
     join,
+    tojson,
 );

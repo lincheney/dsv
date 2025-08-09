@@ -171,7 +171,7 @@ pub struct Writer {
 }
 
 impl Writer {
-    fn start(&mut self, opts: &BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr) {
+    fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr) {
         let file = self.inner.get_or_insert_with(|| {
             if opts.page {
                 let mut cmd = Command::new("less");
@@ -238,8 +238,17 @@ impl Writer {
     }
 
     pub fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) {
-        let (file, ors) = self.start(opts, is_header);
-        file.write_all(string).expect("Failed to write row");
+        self.write_raw_with(opts, is_header, |file| Ok(file.write_all(string)?));
+    }
+
+    pub fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<()>>(
+        &mut self,
+        opts: &BaseOptions,
+        is_header: bool,
+        func: F,
+    ) {
+        let (file, ors) = self.get_file(opts, is_header);
+        func(file).expect("Failed to write row");
         file.write_all(ors).expect("Failed to write row separator");
         file.flush().expect("Failed to flush output");
     }
