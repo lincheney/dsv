@@ -5,7 +5,7 @@ use clap::Parser;
 #[derive(Parser)]
 #[command(about = "output the first lines")]
 pub struct Opts {
-    #[arg(short = 'n', long, default_value_t = 10, value_name = "NUM", help = "print the first NUM lines")]
+    #[arg(short = 'n', long, allow_negative_numbers = true, default_value_t = 10, value_name = "NUM", help = "print the first NUM lines")]
     lines: isize,
 }
 
