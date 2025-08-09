@@ -51,4 +51,5 @@ add_subcommands!(
     uniq,
     join,
     tojson,
+    fromjson,
 );
