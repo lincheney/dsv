@@ -215,7 +215,7 @@ impl Joiner {
             for (key, rows) in &stores.0 {
                 if !stores.1.contains_key(key) {
                     for row in rows {
-                        let row = self.make_row(key, Some(row), None, &slicers);
+                        let row = self.make_row(key, Some(row), None, &slicers, opts.empty_value.as_ref());
                         if base.on_row(row) {
                             return
                         }
@@ -228,7 +228,7 @@ impl Joiner {
             for (key, rows) in &stores.1 {
                 if !stores.0.contains_key(key) {
                     for row in rows {
-                        let row = self.make_row(key, None, Some(row), &slicers);
+                        let row = self.make_row(key, None, Some(row), &slicers, opts.empty_value.as_ref());
                         if base.on_row(row) {
                             return
                         }
@@ -245,22 +245,23 @@ impl Joiner {
         left: Option<&Row>,
         right: Option<&Row>,
         slicers: &(ColumnSlicer, ColumnSlicer),
+        empty_value: Option<&String>,
     ) -> Row {
         let mut new_row = key.clone();
-        new_row.extend(std::iter::repeat_n(b"".into(), self.key_len.saturating_sub(key.len())));
+        new_row.resize(new_row.len().max(self.key_len), b"".into());
 
-        let left_len = if let Some(left) = left {
-            let left = &mut slicers.0.slice(left, true, true);
-            let left_len = left.len();
-            new_row.append(left);
-            left_len
-        } else {
-            0
-        };
+        let old_len = new_row.len();
+        if let Some(left) = left {
+            new_row.append(&mut slicers.0.slice(left, true, true));
+        }
+        let empty = empty_value.filter(|_| left.is_none()).map(|x| x.as_bytes()).unwrap_or(b"");
+        new_row.resize(new_row.len().max(old_len + self.left_len), empty.into());
 
+        let old_len = new_row.len();
         if let Some(right) = right {
-            new_row.extend(std::iter::repeat_n(b"".into(), self.left_len.saturating_sub(left_len)));
             new_row.append(&mut slicers.1.slice(right, true, true));
+        } else if let Some(empty) = empty_value {
+            new_row.resize(new_row.len().max(old_len + self.right_len), empty.as_bytes().into());
         }
 
         new_row
@@ -297,7 +298,7 @@ impl Joiner {
         if let Some(other_rows) = other.1.get(&key) {
             for other_row in other_rows {
                 let rows = if is_left { (&row, other_row) } else { (other_row, &row) };
-                let row = self.make_row(&key, Some(rows.0), Some(rows.1), slicers);
+                let row = self.make_row(&key, Some(rows.0), Some(rows.1), slicers, None);
                 if base.on_row(row) {
                     return true
                 }
