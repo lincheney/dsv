@@ -199,13 +199,13 @@ impl Writer {
 
     fn write_header(
         &mut self,
-        header: Vec<BString>,
+        header: FormattedRow,
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) {
         if !opts.drop_header {
-            self.write_output(header, padding, true, opts, ofs);
+            self.write_output(header.0, padding, true, opts, ofs);
         }
     }
 
@@ -217,7 +217,7 @@ impl Writer {
         ofs: &Ofs,
     ) {
         match row {
-            GatheredRow::Row(row) => self.write_output(row, padding, false, opts, ofs),
+            GatheredRow::Row(row) => self.write_output(row.0, padding, false, opts, ofs),
             GatheredRow::Separator => self.write_separator(padding, opts),
         }
     }
@@ -265,7 +265,6 @@ impl Writer {
         ofs: &Ofs,
     ) -> BString {
         let colour = opts.colour == AutoChoices::Always;
-        let row = self.format_columns(row, ofs, self.ors.as_ref(), opts.quote_output);
 
         if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
@@ -327,7 +326,7 @@ impl Writer {
         parts
     }
 
-    pub fn format_columns(&self, mut row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> Vec<BString> {
+    pub fn format_columns(mut row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> FormattedRow {
         if quote_output {
             // if pretty output, don't allow >1 space, no matter how long the ofs is
             let pretty_output = matches!(ofs, Ofs::Pretty);
@@ -349,7 +348,7 @@ impl Writer {
             }
         }
 
-        row
+        FormattedRow(row)
     }
 
     fn needs_quoting(value: &[u8], ofs: &[u8], ors: &[u8]) -> bool {
@@ -357,8 +356,11 @@ impl Writer {
     }
 }
 
+#[derive(Clone)]
+pub struct FormattedRow(pub Vec<BString>);
+
 enum GatheredRow {
-    Row(Vec<BString>),
+    Row(FormattedRow),
     Separator,
 }
 
@@ -368,9 +370,8 @@ pub struct Base {
     header: Option<Vec<BString>>,
     row_count: usize,
     col_count: Option<usize>,
-    gathered_header: Option<Vec<BString>>,
+    gathered_header: Option<FormattedRow>,
     gathered_rows: Vec<GatheredRow>,
-    out_header: Option<Vec<BString>>,
     pub ofs: Ofs,
     pub ifs: Ifs,
 }
@@ -583,6 +584,7 @@ impl Base {
 
     pub fn on_eof(&mut self) {
         let mut header_padding = None;
+        let header = self.gathered_header.clone();
 
         if (if self.gathered_header.is_some() { 1 } else { 0 } + self.gathered_rows.len()) > 0 {
             let padding = self.justify(self.gathered_header.as_ref(), &self.gathered_rows);
@@ -601,7 +603,7 @@ impl Base {
             }
         }
 
-        if let Some(header) = self.out_header.take() && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
+        if let Some(header) = header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
             self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
         }
     }
@@ -610,9 +612,9 @@ impl Base {
         ANSI.split(val).map(|x| x.len()).sum()
     }
 
-    fn justify(&self, header: Option<&Vec<BString>>, rows: &[GatheredRow]) -> Vec<Vec<usize>> {
-        let empty_vec = vec![];
-        fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a Vec<BString>) -> &'a Vec<BString> {
+    fn justify(&self, header: Option<&FormattedRow>, rows: &[GatheredRow]) -> Vec<Vec<usize>> {
+        let empty_vec = FormattedRow(vec![]);
+        fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a FormattedRow) -> &'a FormattedRow {
             match row {
                 GatheredRow::Row(row) => row,
                 _ => empty_vec,
@@ -622,11 +624,11 @@ impl Base {
 
         let widths: Vec<Vec<_>> = header.into_iter()
             .chain(rows.iter().map(row_filter))
-            .map(|row| row.iter().map(|col| Self::no_ansi_colour_len(col.as_ref())).collect())
+            .map(|row| row.0.iter().map(|col| Self::no_ansi_colour_len(col.as_ref())).collect())
             .collect();
 
-        let max_col = rows.iter().map(|row| row_filter(row).len()).max().unwrap_or(0);
-        let max_col = max_col.max(header.map(|h| h.len()).unwrap_or(0));
+        let max_col = rows.iter().map(|row| row_filter(row).0.len()).max().unwrap_or(0);
+        let max_col = max_col.max(header.map(|h| h.0.len()).unwrap_or(0));
 
         let max_widths: Vec<_> = (0 .. max_col).map(|i|
             widths.iter().flat_map(|w| w.get(i)).max().cloned().unwrap_or(0)
@@ -665,16 +667,20 @@ impl Base {
 
         self.row_count += 1;
 
-        if matches!(self.ofs, Ofs::Pretty) {
-            if is_header {
+        let row = Writer::format_columns(row, &self.ofs, self.writer.ors.as_ref(), self.opts.quote_output);
+
+        match &self.ofs {
+            Ofs::Pretty => if is_header {
                 self.gathered_header = Some(row);
             } else {
                 self.gathered_rows.push(GatheredRow::Row(row));
-            }
-        } else if is_header {
-            self.writer.write_header(row, None, &self.opts, &self.ofs);
-        } else {
-            self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs);
+            },
+            _ => if is_header {
+                self.gathered_header = Some(row.clone());
+                self.writer.write_header(row, None, &self.opts, &self.ofs);
+            } else {
+                self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs);
+            },
         }
 
         false
@@ -695,7 +701,6 @@ impl Base {
                     col.splice(0 .. leading_space, prefix.into_bytes());
                 }
             }
-            self.out_header = Some(header.clone());
 
             self._on_row(header, true)
         }
@@ -812,7 +817,6 @@ impl Base {
             ofs: Ofs::Pretty,
             gathered_header: None,
             gathered_rows: vec![],
-            out_header: None,
             writer: Writer {
                 inner: None,
                 proc: None,
