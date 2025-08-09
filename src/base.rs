@@ -586,7 +586,7 @@ impl Base {
         let mut header_padding = None;
         let header = self.gathered_header.clone();
 
-        if (if self.gathered_header.is_some() { 1 } else { 0 } + self.gathered_rows.len()) > 0 {
+        if matches!(self.ofs, Ofs::Pretty) && (if self.gathered_header.is_some() { 1 } else { 0 } + self.gathered_rows.len()) > 0 {
             let padding = self.justify(self.gathered_header.as_ref(), &self.gathered_rows);
 
             let padding = if let Some(header) = self.gathered_header.take() {
