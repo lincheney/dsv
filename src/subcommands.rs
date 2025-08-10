@@ -55,4 +55,5 @@ add_subcommands!(
     tomarkdown,
     frommarkdown,
     set_header,
+    paste,
 );

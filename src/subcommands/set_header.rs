@@ -34,7 +34,7 @@ impl base::Processor for Handler {
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if !self.got_header {
             let header = if self.opts.auto {
-                (0..row.len()).map(|i| format!("col{}", i).into()).collect()
+                (0..row.len()).map(|i| format!("col{i}").into()).collect()
                 // header = [self.opts.auto % (i+1) for i in range(len(row))]
             } else {
                 vec![]
