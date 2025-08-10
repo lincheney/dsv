@@ -316,7 +316,7 @@ pub trait Processor<W: Writer=BaseWriter> {
             }
 
             let incomplete;
-            (row, incomplete) = base.parse_line(line.into(), row, b'"');
+            (row, incomplete) = self.parse_line(base, line.into(), row, b'"');
             if !incomplete || eof {
 
                 let is_header = if got_row {
@@ -357,6 +357,10 @@ pub trait Processor<W: Writer=BaseWriter> {
     }
 
     fn process_opts(&mut self, _opts: &mut BaseOptions, _is_tty: bool) {
+    }
+
+    fn parse_line(&self, base: &mut Base<W>, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
+        base.parse_line(line, row, quote)
     }
 
     fn on_row(&mut self, base: &mut Base<W>, row: Vec<BString>) -> bool {
@@ -543,9 +547,9 @@ impl<W: Writer> Base<W> {
         let mut start = 0;
         let line_len = line.len();
 
-        if !row.is_empty() {
+        if let Some(last) = row.last_mut() {
             let (value, i) = Self::extract_column(line, 0, line_len, quote);
-            row.last_mut().unwrap().extend_from_slice(&value);
+            last.extend_from_slice(&value);
             if i == usize::MAX {
                 return (row, true);
             }

@@ -130,8 +130,12 @@ impl Writer for MarkdownWriter {
                 .zip(&header.0)
                 .map(|(p, h)| {
                     let mut sep: BString = b"-".repeatn(p + base::no_ansi_colour_len(h.as_ref())).into();
-                    sep.get_mut(0).map(|c| *c = b' ');
-                    sep.last_mut().map(|c| *c = b' ');
+                    if let Some(c) = sep.get_mut(0) {
+                        *c = b' ';
+                    }
+                    if let Some(c) = sep.last_mut() {
+                        *c = b' ';
+                    }
                     sep
                 })
                 .collect()
