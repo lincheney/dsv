@@ -54,4 +54,5 @@ add_subcommands!(
     fromjson,
     tomarkdown,
     frommarkdown,
+    set_header,
 );

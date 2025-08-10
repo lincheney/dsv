@@ -3,7 +3,7 @@ from ._base import _Base
 from . import _utils
 
 class set_header(_Base):
-    ''' sets the header labels '''
+    ''' set the header labels '''
     parser = argparse.ArgumentParser()
     parser.add_argument('fields', nargs='*', type=_utils.utf8_type, help='new header names')
     parser.add_argument('--only', action='store_true', help='drop all other header names')
