@@ -52,4 +52,5 @@ add_subcommands!(
     join,
     tojson,
     fromjson,
+    tomarkdown,
 );

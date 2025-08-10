@@ -54,7 +54,7 @@ impl base::Processor for Handler {
             panic!("cannot use sqlite without a header");
         }
         let proc = self.start_proc();
-        let row = base::Writer::format_columns(row, &base.ofs, ORS.into(), true).0;
+        let row = crate::writer::format_columns(row, &base.ofs, ORS.into(), true).0;
         proc.stdin.write_all(&row.join(DELIM.as_bytes())).unwrap();
         proc.stdin.write_all(ORS).unwrap();
         false

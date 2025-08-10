@@ -1,4 +1,5 @@
 use crate::base;
+use crate::writer::Writer;
 use bstr::BString;
 use clap::Parser;
 use serde_json;

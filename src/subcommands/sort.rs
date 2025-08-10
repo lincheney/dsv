@@ -78,7 +78,7 @@ impl base::Processor for Handler {
 
     fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
-        let key = base::Writer::format_columns(key, &self.ofs, (&[ORS]).into(), true).0;
+        let key = crate::writer::format_columns(key, &self.ofs, (&[ORS]).into(), true).0;
         // add row index as first column
         let index = [format!("{}", self.rows.len()).into()];
         let key = index.iter().chain(key.iter());

@@ -1,24 +1,17 @@
 use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
-use std::io::{Read, BufRead, BufReader, Write, BufWriter};
-use bstr::{BStr, BString, ByteSlice, ByteVec};
-use std::process::{Command, Stdio, ExitCode};
+use crate::writer::{BaseWriter, Writer};
+use std::io::{Read, BufRead, BufReader};
+use bstr::{BStr, BString, ByteSlice};
+use std::process::{ExitCode};
 use anyhow::Result;
-use colorutils_rs::Hsv;
 
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 pub const RESET_COLOUR: &str = "\x1b[0m";
 static SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
 static PPRINT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s\s+").unwrap());
 static ANSI: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;:]*[mK]|\x1b]8;;.*?\x1b\\").unwrap());
-
-fn get_rgb(i: usize, step: f32) -> BString {
-    let hue = (step * i as f32) % 1.0;
-    let hsv = Hsv{ h: hue * 360.0, s: 0.3, v: 1.0 };
-    let rgb = hsv.to_rgb8();
-    format!("\x1b[38;2;{};{};{}m", rgb.r, rgb.g, rgb.b).as_bytes().into()
-}
 
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone)]
@@ -28,6 +21,10 @@ bitflags::bitflags! {
         const ON_ROW = 2;
         const ON_EOF = 4;
     }
+}
+
+pub fn no_ansi_colour_len(val: &BStr) -> usize {
+    ANSI.split(val).map(|x| x.len()).sum()
 }
 
 #[derive(Debug)]
@@ -153,6 +150,7 @@ impl BaseOptions {
             self.colour = AutoChoices::Never;
         }
         self.numbered_columns = self.numbered_columns.resolve(is_tty);
+        self.rainbow_columns = self.rainbow_columns.resolve(is_tty);
         if self.header_colour.is_none() {
             self.header_colour = Some("\x1b[1;4m".into());
         }
@@ -163,233 +161,19 @@ impl BaseOptions {
     }
 }
 
-pub struct Writer {
-    rgb_map: Vec<BString>,
-    inner: Option<Box<dyn Write>>,
-    proc: Option<std::process::Child>,
-    ors: BString,
-}
-
-impl Writer {
-    fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr) {
-        let file = self.inner.get_or_insert_with(|| {
-            if opts.page {
-                let mut cmd = Command::new("less");
-                cmd.args(["-RX"]);
-                if has_header && !opts.drop_header {
-                    cmd.arg("--header=1");
-                }
-                let mut proc = cmd.stdin(Stdio::piped()).spawn().expect("Failed to start pager");
-                let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get pager stdin")));
-                self.proc = Some(proc);
-                inner
-            } else {
-                // let mut proc = ProcessCommand::new("cat")
-                    // .stdin(Stdio::piped())
-                    // .spawn()
-                    // .expect("Failed to start output process");
-                // let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get output process stdin")));
-                // self.proc = Some(proc);
-                // inner
-                Box::new(std::io::stdout().lock())
-            }
-        });
-        (file, self.ors.as_ref())
-    }
-
-    fn write_header(
-        &mut self,
-        header: FormattedRow,
-        padding: Option<&Vec<usize>>,
-        opts: &BaseOptions,
-        ofs: &Ofs,
-    ) {
-        if !opts.drop_header {
-            self.write_output(header.0, padding, true, opts, ofs);
-        }
-    }
-
-    fn write_row(
-        &mut self,
-        row: GatheredRow,
-        padding: Option<&Vec<usize>>,
-        opts: &BaseOptions,
-        ofs: &Ofs,
-    ) {
-        match row {
-            GatheredRow::Row(row) => self.write_output(row.0, padding, false, opts, ofs),
-            GatheredRow::Separator => self.write_separator(padding, opts),
-        }
-    }
-
-    pub fn write_separator(&mut self, _padding: Option<&Vec<usize>>, opts: &BaseOptions) {
-        let mut sep: BString;
-        let sep = if opts.colour == AutoChoices::Always {
-            let width = termsize::get().map(|size| size.cols).unwrap_or(80) as usize;
-            sep = b"\x1b[2m".into();
-            sep.push_str(b"-".repeat(width));
-            sep.push_str(RESET_COLOUR);
-            &sep[..]
-        } else {
-            b"---"
-        };
-
-        self.write_raw(sep.into(), opts, false);
-    }
-
-    pub fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) {
-        self.write_raw_with(opts, is_header, |file| Ok(file.write_all(string)?));
-    }
-
-    pub fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<()>>(
-        &mut self,
-        opts: &BaseOptions,
-        is_header: bool,
-        func: F,
-    ) {
-        let (file, ors) = self.get_file(opts, is_header);
-        func(file).expect("Failed to write row");
-        file.write_all(ors).expect("Failed to write row separator");
-        file.flush().expect("Failed to flush output");
-    }
-
-    fn write_output(
-        &mut self,
-        row: Vec<BString>,
-        padding: Option<&Vec<usize>>,
-        is_header: bool,
-        opts: &BaseOptions,
-        ofs: &Ofs,
-    ) {
-        let formatted_row = self.format_row(row, padding, is_header, opts, ofs);
-        self.write_raw(formatted_row.as_ref(), opts, is_header);
-    }
-
-    fn format_row(
-        &mut self,
-        row: Vec<BString>,
-        padding: Option<&Vec<usize>>,
-        is_header: bool,
-        opts: &BaseOptions,
-        ofs: &Ofs,
-    ) -> BString {
-        let colour = opts.colour == AutoChoices::Always;
-
-        if colour && opts.rainbow_columns == AutoChoices::Always {
-            // colour each column differently
-            if row.len() > self.rgb_map.len() {
-                for i in self.rgb_map.len() .. row.len() {
-                    self.rgb_map.push(get_rgb(i, 0.647))
-                }
-            }
-        }
-
-        let mut parts = BString::new(vec![]);
-        let tmp_padding = vec![];
-        let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
-        let rgb = self.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
-        let ofs = ofs.as_bstr();
-        let header_colour = if is_header && colour {
-            opts.header_colour.as_deref().map(|x| x.as_bytes())
-        } else {
-            None
-        };
-        let header_bg_colour = if is_header && colour {
-            opts.header_bg_colour.as_deref().map(|x| x.as_bytes())
-        } else {
-            None
-        };
-
-        for (i, ((col, rgb), &pad)) in row.iter().zip(rgb).zip(padding).enumerate() {
-            if i != 0 {
-                if colour {
-                    parts.extend_from_slice(b"\x1b[39m");
-                }
-                parts.extend_from_slice(ofs);
-            }
-            if let Some(header_colour) = header_colour {
-                parts.extend_from_slice(header_colour);
-            }
-            if let Some(header_bg_colour) = header_bg_colour {
-                parts.extend_from_slice(header_bg_colour);
-            }
-            if colour {
-                parts.extend_from_slice(rgb);
-            }
-            parts.extend_from_slice(col);
-            if header_bg_colour.or(header_colour).is_some() {
-                parts.extend_from_slice(RESET_COLOUR.as_bytes());
-                if let Some(header_bg_colour) = header_bg_colour {
-                    parts.extend_from_slice(header_bg_colour);
-                }
-            }
-            for _ in 0 .. pad {
-                parts.push(b' ');
-            }
-        }
-        // reset colour
-        if colour && !parts.is_empty() {
-            parts.extend_from_slice(RESET_COLOUR.as_bytes());
-        }
-
-        parts
-    }
-
-    pub fn format_columns(mut row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> FormattedRow {
-        if quote_output {
-            // if pretty output, don't allow >1 space, no matter how long the ofs is
-            let pretty_output = matches!(ofs, Ofs::Pretty);
-            let ofs = ofs.as_bstr();
-
-            for col in row.iter_mut() {
-                if (pretty_output && col.is_empty()) || Self::needs_quoting(col, ofs, ors) {
-                    let mut quoted_col = vec![];
-                    quoted_col.push(b'"');
-                    for (i, part) in col.split_str(b"\"").enumerate() {
-                        if i != 0 {
-                            quoted_col.extend_from_slice(b"\"\"");
-                        }
-                        quoted_col.extend_from_slice(part);
-                    }
-                    quoted_col.push(b'"');
-                    *col = quoted_col.into();
-                }
-            }
-        }
-
-        FormattedRow(row)
-    }
-
-    fn needs_quoting(value: &[u8], ofs: &[u8], ors: &[u8]) -> bool {
-        value.contains(&b'"') || value.windows(ofs.len()).any(|window| window == ofs) || value.windows(ors.len()).any(|window| window == ors)
-    }
-}
-
 #[derive(Clone)]
 pub struct FormattedRow(pub Vec<BString>);
 
-enum GatheredRow {
+pub enum GatheredRow {
     Row(FormattedRow),
     Separator,
 }
 
-pub struct Base {
-    pub writer: Writer,
-    pub opts: BaseOptions,
-    header: Option<Vec<BString>>,
-    row_count: usize,
-    col_count: Option<usize>,
-    gathered_header: Option<FormattedRow>,
-    gathered_rows: Vec<GatheredRow>,
-    pub ofs: Ofs,
-    pub ifs: Ifs,
-}
-
-pub trait Processor {
+pub trait Processor<W: Writer=BaseWriter> {
 
     fn run(&mut self, mut cli_opts: BaseOptions, is_tty: bool) -> Result<ExitCode> {
         self.process_opts(&mut cli_opts, is_tty);
-        let mut base = Base::new(cli_opts);
+        let mut base = Base::<W>::new(cli_opts);
         self.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
     }
 
@@ -483,11 +267,11 @@ pub trait Processor {
         (ifs, ofs)
     }
 
-    fn process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn process_file<R: Read>(&mut self, file: R, base: &mut Base<W>, do_callbacks: Callbacks) -> Result<ExitCode> {
         self._process_file(file, base, do_callbacks)
     }
 
-    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base<W>, do_callbacks: Callbacks) -> Result<ExitCode> {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
@@ -575,21 +359,33 @@ pub trait Processor {
     fn process_opts(&mut self, _opts: &mut BaseOptions, _is_tty: bool) {
     }
 
-    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut Base<W>, row: Vec<BString>) -> bool {
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut Base<W>, header: Vec<BString>) -> bool {
         base.on_header(header)
     }
 
-    fn on_eof(&mut self, base: &mut Base) {
+    fn on_eof(&mut self, base: &mut Base<W>) {
         base.on_eof()
     }
-
 }
 
-impl Base {
+pub struct Base<W: Writer=BaseWriter> {
+    pub writer: W,
+    pub opts: BaseOptions,
+    header: Option<Vec<BString>>,
+    row_count: usize,
+    col_count: Option<usize>,
+    gathered_header: Option<FormattedRow>,
+    gathered_rows: Vec<GatheredRow>,
+    pub ofs: Ofs,
+    pub ifs: Ifs,
+}
+
+
+impl<W: Writer> Base<W> {
 
     pub fn on_eof(&mut self) {
         let mut header_padding = None;
@@ -617,10 +413,6 @@ impl Base {
         }
     }
 
-    fn no_ansi_colour_len(val: &BStr) -> usize {
-        ANSI.split(val).map(|x| x.len()).sum()
-    }
-
     fn justify(&self, header: Option<&FormattedRow>, rows: &[GatheredRow]) -> Vec<Vec<usize>> {
         let empty_vec = FormattedRow(vec![]);
         fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a FormattedRow) -> &'a FormattedRow {
@@ -633,7 +425,7 @@ impl Base {
 
         let widths: Vec<Vec<_>> = header.into_iter()
             .chain(rows.iter().map(row_filter))
-            .map(|row| row.0.iter().map(|col| Self::no_ansi_colour_len(col.as_ref())).collect())
+            .map(|row| row.0.iter().map(|col| no_ansi_colour_len(col.as_ref())).collect())
             .collect();
 
         let max_col = rows.iter().map(|row| row_filter(row).0.len()).max().unwrap_or(0);
@@ -668,15 +460,11 @@ impl Base {
     fn _on_row(&mut self, row: Vec<BString>, is_header: bool) -> bool {
         if self.col_count.is_none() {
             self.col_count = Some(row.len());
-            self.writer.rgb_map.clear();
-            for i in 0 .. row.len() {
-                self.writer.rgb_map.push(get_rgb(i, 0.647));
-            }
         }
 
         self.row_count += 1;
 
-        let row = Writer::format_columns(row, &self.ofs, self.writer.ors.as_ref(), self.opts.quote_output);
+        let row = W::format_columns(row, &self.ofs, self.writer.get_ors(), self.opts.quote_output);
 
         match &self.ofs {
             Ofs::Pretty => if is_header {
@@ -826,12 +614,7 @@ impl Base {
             ofs: Ofs::Pretty,
             gathered_header: None,
             gathered_rows: vec![],
-            writer: Writer {
-                inner: None,
-                proc: None,
-                rgb_map: vec![],
-                ors,
-            },
+            writer: W::new(ors),
         }
     }
 

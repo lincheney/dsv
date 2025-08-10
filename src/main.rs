@@ -1,6 +1,7 @@
 mod base;
 mod subcommands;
 mod column_slicer;
+mod writer;
 use std::io::IsTerminal;
 use std::process::*;
 use anyhow::Result;
