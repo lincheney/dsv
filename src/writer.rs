@@ -12,7 +12,7 @@ fn get_rgb(i: usize, step: f32) -> BString {
     format!("\x1b[38;2;{};{};{}m", rgb.r, rgb.g, rgb.b).as_bytes().into()
 }
 
-pub fn format_columns(mut row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> FormattedRow {
+pub fn format_columns<S: AsRef<BStr>>(mut row: Vec<BString>, ofs: &Ofs<S>, ors: &BStr, quote_output: bool) -> FormattedRow {
     if quote_output {
         // if pretty output, don't allow >1 space, no matter how long the ofs is
         let pretty_output = matches!(ofs, Ofs::Pretty);

@@ -1,4 +1,5 @@
 import argparse
+import itertools
 import subprocess
 import threading
 from collections import deque
@@ -59,7 +60,7 @@ class pipe(_ColumnSlicer):
             else:
                 # write the stdout back into the original row
                 indices = self.slice(list(range(len(row))), self.opts.complement)
-                for k, v in zip(indices, stdout):
+                for k, v in itertools.zip_longest(indices, stdout, fillvalue=b''):
                     row[k] = v
 
             if super().on_row(row):

@@ -57,4 +57,5 @@ add_subcommands!(
     set_header,
     paste,
     fromhtml,
+    pipe,
 );

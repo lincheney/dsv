@@ -6,11 +6,13 @@ use std::collections::HashMap;
 
 static FIELD_REGEX: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^(\d+)?-(\d+)?$").unwrap());
 
+#[derive(Clone)]
 pub struct ColumnSlicer {
     fields: Vec<Field>,
     headers: HashMap<BString, usize>,
 }
 
+#[derive(Clone)]
 enum Field {
     Range(usize, usize),
     Index(usize),
@@ -57,6 +59,47 @@ impl ColumnSlicer {
         min(start, len) .. min(end, len)
     }
 
+    pub fn indices(&self, len: usize, complement: bool) -> impl Iterator<Item=usize> {
+        enum DualIter<A, B> {
+            A(A), B(B)
+        }
+
+        let mut iter = if complement {
+            let iter = (0..len)
+                .filter(|index| {
+                    !self.fields.is_empty() &&
+                    !self.fields.iter().any(|field| match field {
+                        Field::Range(start, end) => (start .. end).contains(&index),
+                        Field::Index(i) => i == index,
+                        Field::Regex(regex) => self.headers.iter().any(|(k, v)| v == index && regex.is_match(k)),
+                        Field::Name(name) => self.headers.get(name) != Some(index),
+                    })
+                });
+            DualIter::A(iter)
+        } else {
+            let iter = self.fields.iter()
+                .filter_map(move |field| match field {
+                    Field::Range(start, end) => Some(Self::range_for_row(*start, *end, len)),
+                    Field::Index(i) => Some(*i .. *i+1),
+                    Field::Name(name) => self.headers.get(name).map(|&i| i .. i+1),
+                    Field::Regex(_) => None,
+                }).chain(self.fields.iter()
+                    .filter_map(|field| if let Field::Regex(regex) = field { Some(regex) } else { None })
+                    .flat_map(|regex| {
+                        self.headers.iter().filter(|(k, _)| regex.is_match(k)).map(|(_, &v)| v .. v+1)
+                    })
+                ).flatten();
+            DualIter::B(iter)
+        };
+
+        std::iter::from_fn(move || {
+            match &mut iter {
+                DualIter::A(x) => x.next(),
+                DualIter::B(x) => x.next(),
+            }
+        })
+    }
+
     pub fn slice(
         &self,
         row: &[BString],
@@ -77,70 +120,8 @@ impl ColumnSlicer {
             return vec![];
         }
 
-        if complement {
-            let mut row: Vec<_> = row.iter().map(Some).collect();
-            for field in &self.fields {
-                match field {
-                    Field::Range(start, end) => {
-                        let range = Self::range_for_row(*start, *end, row.len());
-                        row[range].fill(None);
-                    },
-                    Field::Index(i) => {
-                        if let Some(col) = row.get_mut(*i) {
-                            *col = None;
-                        }
-                    },
-                    Field::Regex(regex) => {
-                        for (k, &v) in &self.headers {
-                            if regex.is_match(k) && let Some(col) = row.get_mut(v) {
-                                *col = None;
-                            }
-                        }
-                    },
-                    Field::Name(name) => {
-                        if let Some(&i) = self.headers.get(name) && let Some(col) = row.get_mut(i) {
-                            *col = None;
-                        }
-                    },
-                }
-            }
-            row.iter().filter_map(|x| x.cloned()).collect()
-
-        } else {
-            let mut new_row = vec![];
-
-            for field in &self.fields {
-                match field {
-                    Field::Range(start, end) => {
-                        let range = Self::range_for_row(*start, *end, row.len());
-                        new_row.extend_from_slice(&row[range]);
-                    },
-                    Field::Index(i) => {
-                        if let Some(col) = row.get(*i) {
-                            new_row.push(col.clone());
-                        } else if let Some(default) = &default {
-                            new_row.push(default(*i));
-                        }
-                    },
-                    Field::Regex(regex) => {
-                        for (k, &v) in &self.headers {
-                            if regex.is_match(k) {
-                                new_row.push(row[v].clone());
-                            }
-                        }
-                    },
-                    Field::Name(name) => {
-                        if let Some(&i) = self.headers.get(name) {
-                            if let Some(col) = row.get(i) {
-                                new_row.push(col.clone());
-                            } else if let Some(default) = &default {
-                                new_row.push(default(i));
-                            }
-                        }
-                    },
-                }
-            }
-            new_row
-        }
+        self.indices(row.len(), complement)
+            .filter_map(|i| row.get(i).cloned().or_else(|| default.as_ref().map(|d| d(i))))
+            .collect()
     }
 }

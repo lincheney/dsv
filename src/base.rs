@@ -36,12 +36,12 @@ pub enum Ifs {
 }
 
 #[derive(Debug, Clone)]
-pub enum Ofs {
-    Plain(BString),
+pub enum Ofs<S=BString> {
+    Plain(S),
     Pretty,
 }
 
-impl Ofs {
+impl<S: AsRef<BStr>> Ofs<S> {
     pub fn as_bstr(&self) -> &BStr {
         match self {
             Ofs::Pretty => b"  ".as_bstr(),
@@ -161,9 +161,10 @@ impl BaseOptions {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct FormattedRow(pub Vec<BString>);
 
+#[derive(Debug)]
 pub enum GatheredRow {
     Row(FormattedRow),
     Separator,
