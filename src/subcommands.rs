@@ -56,4 +56,5 @@ add_subcommands!(
     frommarkdown,
     set_header,
     paste,
+    fromhtml,
 );

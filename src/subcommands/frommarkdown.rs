@@ -65,7 +65,7 @@ impl base::Processor for Handler {
         // last column should be empty
         if row.pop().is_none_or(|col| col.trim().len() != col.len()) || row.is_empty() {
             // print('invalid markdown table row:', line, file=sys.stderr)
-            return (vec![], true)
+            return (row, true)
         }
 
         (row, false)

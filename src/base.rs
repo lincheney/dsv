@@ -267,7 +267,7 @@ pub trait Processor<W: Writer=BaseWriter> {
         (ifs, ofs)
     }
 
-    fn process_file<R: Read>(&mut self, file: R, base: &mut Base<W>, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn process_file<R: BufRead>(&mut self, file: R, base: &mut Base<W>, do_callbacks: Callbacks) -> Result<ExitCode> {
         self._process_file(file, base, do_callbacks)
     }
 

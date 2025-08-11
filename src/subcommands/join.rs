@@ -86,7 +86,7 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn process_file<R: std::io::Read>(
+    fn process_file<R: std::io::BufRead>(
         &mut self,
         file: R,
         base: &mut base::Base,
@@ -106,6 +106,7 @@ impl base::Processor for Handler {
             let right_file = std::mem::take(&mut self.opts.file);
             scope.spawn(move || {
                 let file = std::fs::File::open(right_file).unwrap();
+                let file = std::io::BufReader::new(file);
                 let mut base = base::Base::new(cli_opts);
                 right.process_file(file, &mut base, do_callbacks)
             });
