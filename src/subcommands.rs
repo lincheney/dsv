@@ -81,9 +81,13 @@ macro_rules! add_subcommands {
 
             pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) {
                 match self {
-                    $(
-                        Self::$name(handler) => handler.forward_messages(base, receiver),
-                    )*
+                    $( Self::$name(handler) => handler.forward_messages(base, receiver), )*
+                }
+            }
+
+            pub fn process_opts(&mut self, opts: &mut BaseOptions, is_tty: bool) {
+                match self {
+                    $( Self::$name(handler) => handler.process_opts(opts, is_tty), )*
                 }
             }
 

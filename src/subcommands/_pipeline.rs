@@ -40,15 +40,21 @@ impl Processor for Handler {
     }
 
     fn on_start(&mut self, base: &mut Base) -> bool {
-
         let mut new_base;
         let args = std::mem::take(&mut self.args);
+        let mut copied_opts = false;
         for arg in args.rsplit(|a| a == "!") {
             let (sender, receiver) = mpsc::channel();
-            let (handler, mut cli_opts) = super::Subcommands::from_args(arg);
-            cli_opts.post_process(self.is_tty);
+            let (mut handler, mut cli_opts) = super::Subcommands::from_args(arg);
+            handler.process_opts(&mut cli_opts, self.is_tty);
             new_base = Base::new(cli_opts, base.sender.clone(), base.scope);
             base.sender = sender;
+
+            // take opts from the last handler?
+            if !copied_opts {
+                base.opts = new_base.opts.clone();
+                copied_opts = true;
+            }
 
             new_base.scope.spawn(move || {
                 handler.forward_messages(&mut new_base, receiver)
