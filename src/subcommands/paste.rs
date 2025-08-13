@@ -48,7 +48,6 @@ impl base::Processor for Handler {
     }
 
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
-        eprintln!("DEBUG(nave)  \t{}\t= {:?}", stringify!(row), row);
         base.on_row(self.paste_row(row))
     }
 }
