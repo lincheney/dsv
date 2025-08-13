@@ -7,17 +7,7 @@ use std::process::*;
 use anyhow::Result;
 use clap::{Parser, CommandFactory};
 use base::{Processor};
-use subcommands::cat;
-
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
-#[command(propagate_version = true)]
-pub struct Cli {
-    #[command(subcommand)]
-    command: Option<subcommands::Command>,
-    #[command(flatten)]
-    opts: base::BaseOptions,
-}
+use subcommands::{cat, Cli};
 
 fn main() -> Result<ExitCode> {
     let is_tty = std::io::stdout().is_terminal();

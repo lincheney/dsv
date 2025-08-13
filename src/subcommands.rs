@@ -3,6 +3,16 @@ use anyhow::Result;
 use crate::base::{Base, Processor, BaseOptions, Message};
 use clap::{Subcommand, Parser};
 
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+    #[command(flatten)]
+    pub opts: BaseOptions,
+}
+
 macro_rules! add_subcommands {
     ($($name:ident,)*) => {
         $(
@@ -61,7 +71,11 @@ macro_rules! add_subcommands {
                             (Self::$name(handler), cli.cli_opts)
                         },
                     )*
-                    _ => todo!(),
+                    _ => {
+                        let arg0 = std::env::args().next().unwrap_or("dsv".into());
+                        Cli::parse_from(std::iter::once(&arg0).chain(args));
+                        unreachable!();
+                    },
                 }
             }
 
