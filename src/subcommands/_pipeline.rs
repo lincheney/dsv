@@ -22,9 +22,7 @@ pub struct Handler {
 
 impl Handler {
     pub fn new(opts: Opts) -> Self {
-        let args = match opts.args {
-            Args::Args(args) => args,
-        };
+        let Args::Args(args) = opts.args;
         Self {
             args,
             is_tty: false,
