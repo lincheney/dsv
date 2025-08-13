@@ -1,4 +1,5 @@
 use clap::{Parser, ArgAction};
+use std::ops::{Deref, DerefMut};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer};
@@ -50,8 +51,9 @@ impl<S: AsRef<BStr>> Ofs<S> {
     }
 }
 
-#[derive(Clone, PartialEq, Debug, clap::ValueEnum)]
+#[derive(Clone, PartialEq, Debug, clap::ValueEnum, Default)]
 pub enum AutoChoices {
+    #[default]
     Never,
     Auto,
     Always,
@@ -83,7 +85,7 @@ impl AutoChoices {
     }
 }
 
-#[derive(Debug, Parser, Clone)]
+#[derive(Debug, Parser, Clone, Default)]
 #[command(name = "base")]
 pub struct BaseOptions {
     #[arg(global = true, short = 'H', long, action = ArgAction::SetTrue, help = "treat first row as a header")]
@@ -170,11 +172,11 @@ pub enum GatheredRow {
     Separator,
 }
 
-pub trait Processor<W: Writer=BaseWriter> {
+pub trait Processor<H: Hook<W>, W: Writer=BaseWriter> {
 
-    fn run(&mut self, mut cli_opts: BaseOptions, is_tty: bool) -> Result<ExitCode> {
+    fn run(&mut self, hooks: H, mut cli_opts: BaseOptions, is_tty: bool) -> Result<ExitCode> {
         self.process_opts(&mut cli_opts, is_tty);
-        let mut base = Base::<W>::new(cli_opts);
+        let mut base = Base::<H, W>::new(cli_opts, hooks);
         self.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
     }
 
@@ -268,11 +270,11 @@ pub trait Processor<W: Writer=BaseWriter> {
         (ifs, ofs)
     }
 
-    fn process_file<R: BufRead>(&mut self, file: R, base: &mut Base<W>, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn process_file<R: BufRead>(&mut self, file: R, base: &mut Base<H, W>, do_callbacks: Callbacks) -> Result<ExitCode> {
         self._process_file(file, base, do_callbacks)
     }
 
-    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base<W>, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base<H, W>, do_callbacks: Callbacks) -> Result<ExitCode> {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
@@ -360,26 +362,59 @@ pub trait Processor<W: Writer=BaseWriter> {
     fn process_opts(&mut self, _opts: &mut BaseOptions, _is_tty: bool) {
     }
 
-    fn parse_line(&self, base: &mut Base<W>, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
+    fn parse_line(&self, base: &mut Base<H, W>, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
         base.parse_line(line, row, quote)
     }
 
-    fn on_row(&mut self, base: &mut Base<W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut Base<H, W>, row: Vec<BString>) -> bool {
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut Base<W>, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut Base<H, W>, header: Vec<BString>) -> bool {
         base.on_header(header)
     }
 
-    fn on_eof(&mut self, base: &mut Base<W>) {
+    fn on_eof(&mut self, base: &mut Base<H, W>) {
         base.on_eof()
     }
 }
 
-pub struct Base<W: Writer=BaseWriter> {
+pub trait Hook<W: Writer> {
+    fn on_eof(&mut self, base: &mut BaseInner, opts: &BaseOptions, writer: &mut W);
+    fn on_separator(&mut self, base: &mut BaseInner, opts: &BaseOptions, writer: &mut W) -> bool;
+    fn _on_row(&mut self, base: &mut BaseInner, opts: &BaseOptions, row: Vec<BString>, is_header: bool, writer: &mut W) -> bool;
+    fn on_header(&mut self, base: &mut BaseInner, opts: &BaseOptions, header: Vec<BString>, writer: &mut W) -> bool {
+        self._on_row(base, opts, header, true, writer)
+    }
+    fn on_row(&mut self, base: &mut BaseInner, opts: &BaseOptions, row: Vec<BString>, writer: &mut W) -> bool {
+        self._on_row(base, opts, row, false, writer)
+    }
+}
+
+pub struct BaseHook {}
+impl<W: Writer> Hook<W> for BaseHook {
+    fn on_eof(&mut self, base: &mut BaseInner, opts: &BaseOptions, writer: &mut W) {
+        base.on_eof(opts, writer)
+    }
+    fn on_separator(&mut self, base: &mut BaseInner, opts: &BaseOptions, writer: &mut W) -> bool {
+        base.on_separator(opts, writer)
+    }
+    fn _on_row(&mut self, base: &mut BaseInner, opts: &BaseOptions, row: Vec<BString>, is_header: bool, writer: &mut W) -> bool {
+        base.on_row(opts, row, is_header, writer)
+    }
+    fn on_header(&mut self, base: &mut BaseInner, opts: &BaseOptions, header: Vec<BString>, writer: &mut W) -> bool {
+        base.on_header(opts, header, writer, self)
+    }
+}
+
+pub struct Base<H: Hook<W>=BaseHook, W: Writer=BaseWriter> {
     pub writer: W,
     pub opts: BaseOptions,
+    pub hooks: H,
+    pub inner: BaseInner,
+}
+
+pub struct BaseInner {
     header: Option<Vec<BString>>,
     row_count: usize,
     col_count: Option<usize>,
@@ -389,10 +424,62 @@ pub struct Base<W: Writer=BaseWriter> {
     pub ifs: Ifs,
 }
 
+impl<H: Hook<W>, W: Writer> Deref for Base<H, W> {
+    type Target = BaseInner;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
 
-impl<W: Writer> Base<W> {
+impl<H: Hook<W>, W: Writer> DerefMut for Base<H, W> {
+    fn deref_mut(&mut self) -> &mut BaseInner {
+        &mut self.inner
+    }
+}
 
+impl<H: Hook<W>, W: Writer> Base<H, W> {
     pub fn on_eof(&mut self) {
+        self.hooks.on_eof(&mut self.inner, &self.opts, &mut self.writer)
+    }
+
+    pub fn on_separator(&mut self) -> bool {
+        self.hooks.on_separator(&mut self.inner, &self.opts, &mut self.writer)
+    }
+
+    pub fn on_row(&mut self, row: Vec<BString>) -> bool {
+        self.hooks.on_row(&mut self.inner, &self.opts, row, &mut self.writer)
+    }
+
+    pub fn on_header(&mut self, header: Vec<BString>) -> bool {
+        self.hooks.on_header(&mut self.inner, &self.opts, header, &mut self.writer)
+    }
+
+    fn parse_line(&self, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
+        self.inner.parse_line(&self.opts, line, row, quote)
+    }
+
+    pub fn new(opts: BaseOptions, hooks: H) -> Self {
+        let ors = opts.ors.as_deref().unwrap_or("\n").into();
+        Self {
+            hooks,
+            writer: W::new(ors),
+            opts,
+            inner: BaseInner {
+                header: None,
+                row_count: 0,
+                col_count: None,
+                ifs: Ifs::Pretty,
+                ofs: Ofs::Pretty,
+                gathered_header: None,
+                gathered_rows: vec![],
+            }
+        }
+    }
+}
+
+impl BaseInner {
+
+    fn on_eof<W: Writer>(&mut self, opts: &BaseOptions, writer: &mut W) {
         let mut header_padding = None;
         let header = self.gathered_header.clone();
 
@@ -402,19 +489,19 @@ impl<W: Writer> Base<W> {
             let padding = if let Some(header) = self.gathered_header.take() {
                 let (first, new_padding) = padding.split_first().unwrap();
                 header_padding = Some(first.clone());
-                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
+                writer.write_header(header, header_padding.as_ref(), &opts, &self.ofs);
                 new_padding
             } else {
                 &padding[..]
             };
 
             for (p, row) in padding.iter().zip(self.gathered_rows.drain(..)) {
-                self.writer.write_row(row, Some(p), &self.opts, &self.ofs);
+                writer.write_row(row, Some(p), &opts, &self.ofs);
             }
         }
 
-        if let Some(header) = header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
-            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
+        if let Some(header) = header && opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
+            writer.write_header(header, header_padding.as_ref(), &opts, &self.ofs);
         }
     }
 
@@ -446,30 +533,26 @@ impl<W: Writer> Base<W> {
             .collect()
     }
 
-    pub fn on_separator(&mut self) -> bool {
+    fn on_separator<W: Writer>(&mut self, opts: &BaseOptions, writer: &mut W) -> bool {
         self.row_count += 1;
 
         if matches!(self.ofs, Ofs::Pretty) {
             self.gathered_rows.push(GatheredRow::Separator);
         } else {
-            self.writer.write_row(GatheredRow::Separator, None, &self.opts, &self.ofs);
+            writer.write_row(GatheredRow::Separator, None, &opts, &self.ofs);
         }
 
         false
     }
 
-    pub fn on_row(&mut self, row: Vec<BString>) -> bool {
-        self._on_row(row, false)
-    }
-
-    fn _on_row(&mut self, row: Vec<BString>, is_header: bool) -> bool {
+    fn on_row<W: Writer>(&mut self, opts: &BaseOptions, row: Vec<BString>, is_header: bool, writer: &mut W) -> bool {
         if self.col_count.is_none() {
             self.col_count = Some(row.len());
         }
 
         self.row_count += 1;
 
-        let row = W::format_columns(row, &self.ofs, self.writer.get_ors(), self.opts.quote_output);
+        let row = W::format_columns(row, &self.ofs, writer.get_ors(), opts.quote_output);
 
         match &self.ofs {
             Ofs::Pretty => if is_header {
@@ -479,24 +562,20 @@ impl<W: Writer> Base<W> {
             },
             _ => if is_header {
                 self.gathered_header = Some(row.clone());
-                self.writer.write_header(row, None, &self.opts, &self.ofs);
+                writer.write_header(row, None, &opts, &self.ofs);
             } else {
-                self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs);
+                writer.write_row(GatheredRow::Row(row), None, &opts, &self.ofs);
             },
         }
 
         false
     }
 
-    pub fn on_header(&mut self, header: Vec<BString>) -> bool {
-        self._on_header(header)
-    }
-
-    fn _on_header(&mut self, mut header: Vec<BString>) -> bool {
-        if self.opts.drop_header {
+    fn on_header<W: Writer, H: Hook<W>>(&mut self, opts: &BaseOptions, mut header: Vec<BString>, writer: &mut W, hooks: &mut H) -> bool {
+        if opts.drop_header {
             false
         } else {
-            if self.opts.numbered_columns == AutoChoices::Always {
+            if opts.numbered_columns == AutoChoices::Always {
                 for (i, col) in header.iter_mut().enumerate() {
                     let prefix = format!("{} ", i + 1);
                     let leading_space = col.iter().take(prefix.len()).take_while(|&&x| x == b' ').count();
@@ -504,7 +583,7 @@ impl<W: Writer> Base<W> {
                 }
             }
 
-            self._on_row(header, true)
+            hooks._on_row(self, opts, header, true, writer)
         }
     }
 
@@ -525,9 +604,9 @@ impl<W: Writer> Base<W> {
         Some((start + m.start(), start + m.end()))
     }
 
-    fn parse_line(&self, line: &BStr, mut row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
-        let allow_quoted = !self.opts.no_quoting;
-        let maxcols = if self.opts.combine_trailing_columns && self.header.is_some() {
+    fn parse_line(&self, opts: &BaseOptions, line: &BStr, mut row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
+        let allow_quoted = !opts.no_quoting;
+        let maxcols = if opts.combine_trailing_columns && self.header.is_some() {
             self.header.as_ref().unwrap().len()
         } else {
             usize::MAX
@@ -606,21 +685,6 @@ impl<W: Writer> Base<W> {
 
         value.extend_from_slice(&line[start..]);
         (value, usize::MAX)
-    }
-
-    pub fn new(opts: BaseOptions) -> Self {
-        let ors = opts.ors.as_deref().unwrap_or("\n").into();
-        Self {
-            opts,
-            header: None,
-            row_count: 0,
-            col_count: None,
-            ifs: Ifs::Pretty,
-            ofs: Ofs::Pretty,
-            gathered_header: None,
-            gathered_rows: vec![],
-            writer: W::new(ors),
-        }
     }
 
 }

@@ -85,11 +85,11 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
     fn process_file<R: std::io::BufRead>(
         &mut self,
         file: R,
-        base: &mut base::Base,
+        base: &mut base::Base<H, W>,
         do_callbacks: base::Callbacks,
     ) -> Result<std::process::ExitCode> {
 
@@ -107,7 +107,7 @@ impl base::Processor for Handler {
             scope.spawn(move || {
                 let file = std::fs::File::open(right_file).unwrap();
                 let file = std::io::BufReader::new(file);
-                let mut base = base::Base::new(cli_opts);
+                let mut base: base::Base<_, crate::writer::BaseWriter> = base::Base::new(cli_opts, base::BaseHook{});
                 right.process_file(file, &mut base, do_callbacks)
             });
 
@@ -116,7 +116,7 @@ impl base::Processor for Handler {
             let opts = self.opts.clone();
             let join = self.join;
             scope.spawn(move || {
-                let mut base = base::Base::new(cli_opts);
+                let mut base = base::Base::new(cli_opts, base::BaseHook{});
                 base.ofs = rx.recv().unwrap();
                 Joiner::default().do_joining(join, &opts, receiver, &mut base);
                 base.on_eof();
@@ -321,7 +321,7 @@ struct Child {
 }
 
 impl Child {
-    fn notify_header(&mut self, header: &Row, base: &base::Base) {
+    fn notify_header<H: base::Hook<W>, W: crate::writer::Writer>(&mut self, header: &Row, base: &base::Base<H, W>) {
         self.got_header = true;
         if let Some(ofs_sender) = &self.ofs_sender {
             ofs_sender.send(base.ofs.clone()).unwrap();
@@ -330,13 +330,13 @@ impl Child {
     }
 }
 
-impl base::Processor for Child {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Child {
+    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
         self.notify_header(&header, base);
         false
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         if !self.got_header {
             self.notify_header(&vec![], base);
         }

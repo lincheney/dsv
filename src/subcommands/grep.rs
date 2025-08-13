@@ -1,4 +1,3 @@
-use crate::writer::Writer;
 use std::collections::{VecDeque, HashSet};
 use std::io::{BufReader, BufRead};
 use crate::base;
@@ -129,7 +128,7 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         // no need to replace if invert and not passthru
         #[allow(clippy::nonminimal_bool)]
@@ -144,7 +143,7 @@ impl base::Processor for Handler {
         }
     }
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         if self.opts.line_number {
             header.insert(0, b"n".into());
@@ -156,7 +155,7 @@ impl base::Processor for Handler {
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) {
+    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
         base.on_eof();
         if self.opts.count {
             let output: BString = format!("{}", self.matched_count).into();
@@ -165,7 +164,7 @@ impl base::Processor for Handler {
     }
 
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
         self.row_num += 1;
 
         let matched = self.grep(&mut row);

@@ -32,14 +32,14 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         let header = self.column_slicer.slice(&header, self.complement, true);
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         let row = self.column_slicer.slice(&row, self.complement, true);
         base.on_row(row)
     }

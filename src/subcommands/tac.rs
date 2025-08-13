@@ -19,13 +19,13 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+    fn on_row(&mut self, _base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         self.rows.push(row);
         false
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) {
+    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
         for row in self.rows.drain(..).rev() {
             if base.on_row(row) {
                 break

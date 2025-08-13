@@ -25,16 +25,16 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
         if self.opts.number {
             row.insert(0, b"n".into());
         }
         base.on_header(row)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
         if self.opts.number {
             self.row_count += 1;
             row.insert(0, format!("{}", self.row_count).into());
@@ -42,7 +42,7 @@ impl base::Processor for Handler {
         base.on_row(row)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) {
+    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
         let files = std::mem::take(&mut self.opts.files);
         for file in &files {
             let file = std::fs::File::open(file).unwrap();

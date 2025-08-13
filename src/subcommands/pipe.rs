@@ -1,7 +1,6 @@
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::{self, Processor};
 use bstr::{BString, BStr, ByteVec};
-use crate::writer::Writer;
 use std::process::{Child, Command, ChildStdin, Stdio};
 use std::io::{BufReader, BufWriter, Write};
 use crate::column_slicer::ColumnSlicer;
@@ -55,7 +54,7 @@ impl Handler {
 }
 
 impl Handler {
-    fn start_proc(&mut self, base: &base::Base) -> &mut Proc {
+    fn start_proc<H: base::Hook<W>, W: crate::writer::Writer>(&mut self, base: &base::Base<H, W>) -> &mut Proc {
         self.proc.get_or_insert_with(|| {
             let (sender, receiver) = mpsc::channel();
 
@@ -81,7 +80,7 @@ impl Handler {
 
             let thread = std::thread::spawn(move || {
                 cli_opts.header = Some(false);
-                let mut base = base::Base::new(cli_opts);
+                let mut base: base::Base<_, crate::writer::BaseWriter> = base::Base::new(cli_opts, base::BaseHook{});
                 if base.on_header(header) {
                     base.on_eof();
                     return
@@ -94,9 +93,9 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, _base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
         if let Some(slicer) = &mut self.column_slicer {
             slicer.make_header_map(&header);
         }
@@ -105,7 +104,7 @@ impl base::Processor for Handler {
         false
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         let input = self.column_slicer.as_ref().map(|s| s.slice(&row, self.opts.complement, true));
         let ors = base.writer.get_ors();
         let ofs: &BStr = match &base.ofs {
@@ -121,7 +120,7 @@ impl base::Processor for Handler {
         false
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) {
+    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
         if let Some(Proc{mut child, thread, stdin, sender}) = self.proc.take() {
             drop(sender);
             drop(stdin);
@@ -140,9 +139,9 @@ struct PipeHandler {
     header_len: usize,
 }
 
-impl base::Processor for PipeHandler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for PipeHandler {
     // no headers
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
         let mut input = self.receiver.recv().unwrap();
         if self.append {
             if self.header_len > input.len() {

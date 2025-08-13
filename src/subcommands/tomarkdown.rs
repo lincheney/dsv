@@ -30,7 +30,7 @@ impl Handler {
     }
 }
 
-impl base::Processor<MarkdownWriter> for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         opts.trailer = base::AutoChoices::Never;
@@ -39,7 +39,7 @@ impl base::Processor<MarkdownWriter> for Handler {
         opts.drop_header = false;
     }
 
-    fn on_header(&mut self, base: &mut base::Base<MarkdownWriter>, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
         self.got_header = true;
         if self.drop_header {
             for h in header.iter_mut() {
@@ -49,7 +49,7 @@ impl base::Processor<MarkdownWriter> for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<MarkdownWriter>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         if !self.got_header && self.on_header(base, (0..row.len()).map(|_| b"".into()).collect()) {
             false
         } else {

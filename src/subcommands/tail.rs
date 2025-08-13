@@ -29,8 +29,8 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         if let Some(ring) = self.ring.as_mut() {
             // Store the last n lines
             if ring.len() == self.lines {
@@ -49,7 +49,7 @@ impl base::Processor for Handler {
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) {
+    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
         if let Some(ring) = self.ring.take() {
             for row in ring {
                 if base.on_row(row) {

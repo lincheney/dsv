@@ -1,5 +1,4 @@
 use crate::base;
-use crate::writer::Writer;
 use bstr::BString;
 use clap::Parser;
 use serde_json;
@@ -21,14 +20,14 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, _base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
         self.header = header.iter().map(|h| h.to_string()).collect();
         false
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         // default to numbered keys if header names run out
         let keys = self.header.iter().cloned().chain((self.header.len()..).map(|i| i.to_string()));
         let values = row.iter().map(|r| r.to_string().into());

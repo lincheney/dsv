@@ -27,12 +27,12 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
     fn process_file<R: std::io::Read>(
         &mut self,
         file: R,
-        base: &mut base::Base,
+        base: &mut base::Base<H, W>,
         do_callbacks: base::Callbacks,
     ) -> Result<std::process::ExitCode> {
 
@@ -44,7 +44,7 @@ impl base::Processor for Handler {
                 let opts = base.opts.clone();
 
                 scope.spawn(move || {
-                    let mut base = base::Base::new(opts);
+                    let mut base: base::Base<_, crate::writer::BaseWriter> = base::Base::new(opts, base::BaseHook{});
                     let file = std::fs::File::open(file).unwrap();
                     let file = std::io::BufReader::new(file);
                     let _ = Child{ sender }.process_file(file, &mut base, base::Callbacks::all());
@@ -54,11 +54,11 @@ impl base::Processor for Handler {
         })
     }
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
         base.on_header(self.paste_row(header))
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         base.on_row(self.paste_row(row))
     }
 }
@@ -87,12 +87,12 @@ struct Child {
     sender: Sender<Vec<BString>>,
 }
 
-impl base::Processor for Child {
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> bool {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Child {
+    fn on_header(&mut self, _base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
         self.sender.send(header).unwrap();
         false
     }
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, _base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
         self.sender.send(row).unwrap();
         false
     }

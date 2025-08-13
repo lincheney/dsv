@@ -19,7 +19,7 @@ impl Handler {
 }
 
 impl Handler {
-    fn process_json<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) {
+    fn process_json<R: Read, H: base::Hook<W>, W: crate::writer::Writer>(&mut self, file: R, base: &mut base::Base<H, W>, do_callbacks: Callbacks) {
         let mut stream = serde_json::Deserializer::from_reader(file).into_iter::<serde_json::Map<_, _>>();
 
         let header_row = if let Some(header_row) = stream.next() { header_row } else { return };
@@ -48,7 +48,7 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         // default to output with tab
@@ -56,8 +56,8 @@ impl base::Processor for Handler {
         opts.ofs.get_or_insert_with(|| "\t".into());
     }
 
-    fn process_file<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
-        (base.ifs, base.ofs) = self.determine_delimiters(b"".into(), &base.opts);
+    fn process_file<R: Read>(&mut self, file: R, base: &mut base::Base<H, W>, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
+        (base.ifs, base.ofs) = base::Processor::<H, W>::determine_delimiters(self, b"".into(), &base.opts);
         self.process_json(file, base, do_callbacks);
         if do_callbacks.contains(Callbacks::ON_EOF) {
             self.on_eof(base);

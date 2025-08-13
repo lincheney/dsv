@@ -49,10 +49,10 @@ fn add_rowspan(rowspans: &mut Rowspans, column: usize, span: usize, value: BStri
     rowspans.insert(column, (span, value));
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
 
-    fn process_file<R: BufRead>(&mut self, file: R, base: &mut base::Base, do_callbacks: base::Callbacks) -> anyhow::Result<ExitCode> {
-        (base.ifs, base.ofs) = self.determine_delimiters(b"".into(), &base.opts);
+    fn process_file<R: BufRead>(&mut self, file: R, base: &mut base::Base<H, W>, do_callbacks: base::Callbacks) -> anyhow::Result<ExitCode> {
+        (base.ifs, base.ofs) = base::Processor::<H, W>::determine_delimiters(self, b"".into(), &base.opts);
         let mut state: Vec<BString> = vec![];
         let mut current_row: Vec<BString> = vec![];
         let mut got_header = false;

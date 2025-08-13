@@ -15,7 +15,7 @@ impl Handler {
     }
 }
 
-impl base::Processor for Handler {
+impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
         opts.ofs = Some("\t".into());
     }
