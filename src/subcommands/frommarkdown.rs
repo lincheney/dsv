@@ -25,20 +25,21 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor for Handler {
 
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
+    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
+        self._process_opts(opts, is_tty);
         opts.no_header = false;
         opts.header = Some(true);
         opts.irs = Some("\n".into());
     }
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.just_got_header = true;
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if self.just_got_header {
             self.just_got_header = false;
             if row.iter().all(|r| SEPARATOR.is_match(r)) {
@@ -49,7 +50,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         base.on_row(row)
     }
 
-    fn parse_line(&self, _base: &mut base::Base<H, W>, line: &BStr, mut row: Vec<BString>, _quote: u8) -> (Vec<BString>, bool) {
+    fn parse_line(&self, _base: &mut base::Base, line: &BStr, mut row: Vec<BString>, _quote: u8) -> (Vec<BString>, bool) {
         row.clear();
 
         let mut line = TABLE_REGEX.find_iter(line).map(|m| m.as_bytes());

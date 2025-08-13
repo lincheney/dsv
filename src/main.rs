@@ -6,7 +6,7 @@ use std::io::IsTerminal;
 use std::process::*;
 use anyhow::Result;
 use clap::{Parser, CommandFactory};
-use base::{Processor, BaseHook};
+use base::{Processor};
 use subcommands::cat;
 
 #[derive(Parser)]
@@ -21,16 +21,15 @@ pub struct Cli {
 
 fn main() -> Result<ExitCode> {
     let is_tty = std::io::stdout().is_terminal();
-    let mut cli = Cli::parse();
-    cli.opts.post_process(is_tty);
+    let cli = Cli::parse();
 
-    subcommands::run(cli.command, cli.opts, is_tty, |hook, opts| {
+    subcommands::run(cli.command, cli.opts, is_tty, |opts| {
         if std::io::stdin().is_terminal() {
             Cli::command().print_help()?;
             Ok(ExitCode::SUCCESS)
         } else {
             // run as if cat
-            <cat::Handler as Processor<BaseHook, writer::BaseWriter>>::run(&mut cat::Handler::new(std::default::Default::default()), hook, opts, is_tty)
+            cat::Handler::new(std::default::Default::default()).run(opts, is_tty)
         }
     })
 }

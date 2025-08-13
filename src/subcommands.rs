@@ -1,22 +1,7 @@
 use std::process::*;
 use anyhow::Result;
-use bstr::BString;
-use crate::base::{Base, Processor, BaseOptions, Hook, BaseHook};
-use crate::writer::Writer;
+use crate::base::{Base, Processor, BaseOptions, Message};
 use clap::{Subcommand, Parser};
-
-macro_rules! run {
-    (tomarkdown, $opts:expr, $($args:expr),*) => {{
-        run!(tomarkdown, $opts, tomarkdown::MarkdownWriter; $($args),*)
-    }};
-    ($name:ident, $opts:expr, $($args:expr),*) => {{
-        run!($name, $opts, crate::writer::BaseWriter; $($args),*)
-    }};
-    ($name:ident, $opts:expr, $writer:path; $($args:expr),*) => {{
-        let mut handler = $name::Handler::new($opts);
-        <$name::Handler as Processor<BaseHook, $writer>>::run(&mut handler, $($args),*)
-    }};
-}
 
 macro_rules! add_subcommands {
     ($($name:ident,)*) => {
@@ -35,19 +20,18 @@ macro_rules! add_subcommands {
             _pipeline(_pipeline::Opts),
         }
 
-        pub fn run<F: Fn(BaseHook, BaseOptions) -> Result<ExitCode>>(
+        pub fn run<F: Fn(BaseOptions) -> Result<ExitCode>>(
             subcommand: Option<Command>,
             cli_opts: BaseOptions,
             is_tty: bool,
             default: F,
         ) -> Result<ExitCode> {
-            let hook = BaseHook{};
             match subcommand {
                 $(
-                    Some(Command::$name(opts)) => run!($name, opts, hook, cli_opts, is_tty),
+                    Some(Command::$name(opts)) => $name::Handler::new(opts).run(cli_opts, is_tty),
                 )*
-                Some(Command::_pipeline(opts)) => run!(_pipeline, opts, hook, cli_opts, is_tty),
-                None => default(BaseHook{}, cli_opts),
+                Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts).run(cli_opts, is_tty),
+                None => default(cli_opts),
             }
         }
 
@@ -81,29 +65,14 @@ macro_rules! add_subcommands {
                 }
             }
 
-            pub fn on_row<H: Hook<W>, W: Writer>(&mut self, base: &mut Base<H, W>, row: Vec<BString>) -> bool {
+            pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) {
                 match self {
                     $(
-                        Self::$name(handler) => handler.on_row(base, row),
+                        Self::$name(handler) => handler.forward_messages(base, receiver),
                     )*
                 }
             }
 
-            pub fn on_header<H: Hook<W>, W: Writer>(&mut self, base: &mut Base<H, W>, header: Vec<BString>) -> bool {
-                match self {
-                    $(
-                        Self::$name(handler) => handler.on_header(base, header),
-                    )*
-                }
-            }
-
-            pub fn on_eof<H: Hook<W>, W: Writer>(&mut self, base: &mut Base<H, W>) {
-                match self {
-                    $(
-                        Self::$name(handler) => handler.on_eof(base),
-                    )*
-                }
-            }
         }
 
     };

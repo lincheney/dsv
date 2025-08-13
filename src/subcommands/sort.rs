@@ -70,13 +70,13 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
-    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
+impl base::Processor for Handler {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         base.on_header(header)
     }
 
-    fn on_row(&mut self, _base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
         let key = crate::writer::format_columns(key, &self.ofs, (&[ORS]).into(), true).0;
         // add row index as first column
@@ -92,7 +92,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         false
     }
 
-    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
+    fn on_eof(&mut self, base: &mut base::Base) -> bool {
         if let Some(mut proc) = self.proc.take() {
             drop(proc.stdin.into_inner());
 

@@ -27,20 +27,21 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
+        self._process_opts(opts, is_tty);
         self.opts.row_sep = self.opts.row_sep.resolve(is_tty);
         if opts.ofs.is_none() {
             opts.pretty = true;
         }
     }
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.header = Some(header);
         base.on_header(vec![b"row".into(), b"column".into(), b"key".into(), b"value".into()])
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         if self.count == 0 {
             // first row
             if self.header.is_none() && base.on_header(vec![b"row".into(), b"column".into(), b"value".into()]) {

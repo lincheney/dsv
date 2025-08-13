@@ -41,8 +41,8 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
-    fn on_header(&mut self, base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
+impl base::Processor for Handler {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         if let Some(count_column) = &self.opts.count_column {
             header.insert(0, count_column.as_bytes().into());
@@ -50,7 +50,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
         match self.groups.entry(key) {
             Entry::Occupied(mut entry) => {
@@ -73,7 +73,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         false
     }
 
-    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
+    fn on_eof(&mut self, base: &mut base::Base) -> bool {
         if self.opts.group {
             let mut first = true;
             'outer: for (_count, rows) in self.groups.values_mut() {

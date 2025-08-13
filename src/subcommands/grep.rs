@@ -128,8 +128,9 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
+impl base::Processor for Handler {
+    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
+        self._process_opts(opts, is_tty);
         // no need to replace if invert and not passthru
         #[allow(clippy::nonminimal_bool)]
         if !(self.opts.invert_match && self.opts.passthru) && !self.opts.count && opts.colour == base::AutoChoices::Always {
@@ -143,7 +144,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         }
     }
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
         self.column_slicer.make_header_map(&header);
         if self.opts.line_number {
             header.insert(0, b"n".into());
@@ -155,16 +156,17 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
-        base.on_eof();
+    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+        let result = base.on_eof();
         if self.opts.count {
             let output: BString = format!("{}", self.matched_count).into();
-            base.writer.write_raw(output.as_ref(), &base.opts, false);
+            base.write_raw(output);
         }
+        result
     }
 
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         self.row_num += 1;
 
         let matched = self.grep(&mut row);

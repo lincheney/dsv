@@ -37,30 +37,27 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
-        opts.ofs = Some("\t".into());
-    }
+impl base::Processor for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.got_header = true;
         self.on_row(base, header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
         const ORS: &[u8] = b"\n";
 
         if !self.got_header {
             panic!("cannot use sqlite without a header");
         }
         let proc = self.start_proc();
-        let row = crate::writer::format_columns(row, &base.ofs, ORS.into(), true).0;
+        let row = crate::writer::format_columns(row, &base::Ofs::Plain(DELIM.as_bytes()), ORS.into(), true).0;
         proc.stdin.write_all(&row.join(DELIM.as_bytes())).unwrap();
         proc.stdin.write_all(ORS).unwrap();
         false
     }
 
-    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
+    fn on_eof(&mut self, base: &mut base::Base) -> bool {
         if let Some(mut proc) = self.proc.take() {
             drop(proc.stdin.into_inner());
             base.ifs = base::Ifs::Plain(DELIM.into());

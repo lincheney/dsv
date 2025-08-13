@@ -50,7 +50,7 @@ pub struct BaseWriter {
 
 pub trait Writer {
 
-    fn new(ors: BString) -> Self;
+    fn new(opts: &BaseOptions) -> Self;
 
     fn get_ors(&self) -> &BStr;
 
@@ -207,12 +207,12 @@ pub trait Writer {
 
 
 impl Writer for BaseWriter {
-    fn new(ors: BString) -> Self {
+    fn new(opts: &BaseOptions) -> Self {
         Self {
             inner: None,
             proc: None,
             rgb_map: vec![],
-            ors,
+            ors: opts.get_ors().into(),
         }
     }
 

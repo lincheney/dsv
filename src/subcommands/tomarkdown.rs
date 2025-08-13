@@ -12,8 +12,6 @@ static NEEDS_ESCAPE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[`|\\]").unwrap());
 #[derive(Parser)]
 #[command(about = "convert to markdown table")]
 pub struct Opts {
-    #[arg(global = true, long, default_value = "\x1b[1m", help = "ansi escape code for the header")]
-    pub header_colour: Option<String>,
 }
 
 pub struct Handler {
@@ -30,16 +28,18 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor<MarkdownWriter> for Handler {
 
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
+    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
+        opts.header_colour.get_or_insert_with(|| "\x1b[1m".into());
+        self._process_opts(opts, is_tty);
         opts.trailer = base::AutoChoices::Never;
         opts.numbered_columns = base::AutoChoices::Never;
         self.drop_header = opts.drop_header;
         opts.drop_header = false;
     }
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
         self.got_header = true;
         if self.drop_header {
             for h in header.iter_mut() {
@@ -49,7 +49,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if !self.got_header && self.on_header(base, (0..row.len()).map(|_| b"".into()).collect()) {
             false
         } else {
@@ -64,9 +64,9 @@ pub struct MarkdownWriter {
 }
 
 impl Writer for MarkdownWriter {
-    fn new(ors: BString) -> Self {
+    fn new(opts: &base::BaseOptions) -> Self {
         Self {
-            inner: BaseWriter::new(ors),
+            inner: BaseWriter::new(opts),
             ofs: base::Ofs::Plain(b"|".into()),
         }
     }

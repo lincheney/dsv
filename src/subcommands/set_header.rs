@@ -29,9 +29,9 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor for Handler {
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if !self.got_header {
             let header = if self.opts.auto {
                 (0..row.len()).map(|i| format!("col{i}").into()).collect()
@@ -47,7 +47,7 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
         self.got_header = true;
 
         for [old, new] in self.opts.rename.as_chunks::<2>().0.iter() {

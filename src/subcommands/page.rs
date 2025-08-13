@@ -15,8 +15,9 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, _is_tty: bool) {
+impl base::Processor for Handler {
+    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
+        self._process_opts(opts, is_tty);
         opts.page = true;
     }
 

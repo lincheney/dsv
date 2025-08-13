@@ -20,21 +20,22 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> bool {
         self.header = header.iter().map(|h| h.to_string()).collect();
         false
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         // default to numbered keys if header names run out
         let keys = self.header.iter().cloned().chain((self.header.len()..).map(|i| i.to_string()));
         let values = row.iter().map(|r| r.to_string().into());
 
         let output = keys.zip(values).collect();
         let output = serde_json::Value::Object(output);
-        base.writer.write_raw_with(&base.opts, false, |file| Ok(serde_json::to_writer(file, &output)?));
+        let output = serde_json::to_vec(&output).unwrap();
+        base.write_raw(output.into());
         false
     }
 

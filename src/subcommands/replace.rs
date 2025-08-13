@@ -30,16 +30,16 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor for Handler {
     fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        base::Processor::<H, W>::process_opts(&mut self.inner, opts, is_tty)
+        self.inner.process_opts(opts, is_tty)
     }
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
         self.inner.on_header(base, header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         self.inner.on_row(base, row)
     }
 }

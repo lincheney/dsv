@@ -37,7 +37,7 @@ impl ColumnSlicer {
                 let end = captures.get(2).map_or(usize::MAX, |m| m.as_str().parse::<usize>().unwrap() + 1);
                 new_fields.push(Field::Range(start, end));
             } else if let Ok(index) = field.parse::<usize>() {
-                new_fields.push(Field::Index(index - 1));
+                new_fields.push(Field::Index(index.saturating_sub(1)));
             } else if is_regex {
                 new_fields.push(Field::Regex(Regex::new(field).unwrap()));
             } else {
@@ -72,7 +72,7 @@ impl ColumnSlicer {
                         Field::Range(start, end) => (start .. end).contains(&index),
                         Field::Index(i) => i == index,
                         Field::Regex(regex) => self.headers.iter().any(|(k, v)| v == index && regex.is_match(k)),
-                        Field::Name(name) => self.headers.get(name) != Some(index),
+                        Field::Name(name) => self.headers.get(name) == Some(index),
                     })
                 });
             DualIter::A(iter)

@@ -1,6 +1,5 @@
 use std::sync::mpsc::{self, Sender, Receiver};
-use crate::base;
-use anyhow::Result;
+use crate::base::*;
 use bstr::{BString};
 use std::collections::{HashSet, HashMap, hash_map::Entry};
 use crate::column_slicer::ColumnSlicer;
@@ -17,7 +16,7 @@ pub struct Opts {
     left_fields: Vec<String>,
     #[arg(short = '2', help = "join on these fields from FILE")]
     right_fields: Vec<String>,
-    #[arg(short = 'e', value_name = "NAME", help = "replace missing input fields with STRING")]
+    #[arg(short = 'e', value_name = "STRING", help = "replace missing input fields with STRING")]
     empty_value: Option<String>,
     #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
     regex: bool,
@@ -52,6 +51,8 @@ type Row = Vec<BString>;
 pub struct Handler {
     opts: Opts,
     join: Join,
+    inner: Child,
+    receiver: Option<Receiver<(bool, Message)>>,
 }
 
 impl Handler {
@@ -78,55 +79,63 @@ impl Handler {
             },
         };
 
+        let (sender, receiver) = mpsc::channel();
         Self {
             opts,
             join,
+            inner: Child{ got_header: false, left: true, sender: Some(sender) },
+            receiver: Some(receiver),
         }
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
-    fn process_file<R: std::io::BufRead>(
-        &mut self,
-        file: R,
-        base: &mut base::Base<H, W>,
-        do_callbacks: base::Callbacks,
-    ) -> Result<std::process::ExitCode> {
+impl Processor for Handler {
+    fn on_start(&mut self, base: &mut Base) -> bool {
 
-        let (sender, receiver) = mpsc::channel();
-        let (tx, rx) = mpsc::channel();
-
-        let mut left = Child{ ofs_sender: Some(tx), sender: sender.clone(), got_header: false };
-        let mut right = Child{ ofs_sender: None, sender, got_header: false };
-
-        std::thread::scope(|scope| {
-
-            // start a thread to read from rhs
-            let cli_opts = base.opts.clone();
-            let right_file = std::mem::take(&mut self.opts.file);
-            scope.spawn(move || {
-                let file = std::fs::File::open(right_file).unwrap();
-                let file = std::io::BufReader::new(file);
-                let mut base: base::Base<_, crate::writer::BaseWriter> = base::Base::new(cli_opts, base::BaseHook{});
-                right.process_file(file, &mut base, do_callbacks)
-            });
-
-            // start a thread to join everything
-            let cli_opts = base.opts.clone();
+        // start a thread to join everything
+        {
+            let mut base = base.clone();
             let opts = self.opts.clone();
             let join = self.join;
-            scope.spawn(move || {
-                let mut base = base::Base::new(cli_opts, base::BaseHook{});
-                base.ofs = rx.recv().unwrap();
+            let receiver = self.receiver.take().unwrap();
+            base.scope.spawn(move || {
                 Joiner::default().do_joining(join, &opts, receiver, &mut base);
                 base.on_eof();
             });
+        }
 
-            // and we will read from lhs
-            let result = left.process_file(file, base, do_callbacks);
-            drop(left);
-            result
-        })
+        // start a thread to read from rhs
+        {
+            let mut base = base.clone();
+            let right_file = std::mem::take(&mut self.opts.file);
+            let mut child = self.inner.clone();
+            child.left = false;
+            base.scope.spawn(move || {
+                let file = std::fs::File::open(right_file).unwrap();
+                let file = std::io::BufReader::new(file);
+                let _ = child.process_file(file, &mut base, Callbacks::ON_HEADER | Callbacks::ON_ROW);
+            });
+        }
+
+        // and we will read from lhs ...
+        false
+    }
+
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> bool {
+        self.inner.on_row(base, row)
+    }
+
+    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> bool {
+        self.inner.on_header(base, header)
+    }
+
+    fn on_ofs(&mut self, _base: &mut Base, ofs: Ofs) -> bool {
+        self.inner.sender.as_ref().unwrap().send((true, Message::Ofs(ofs))).is_err()
+    }
+
+    fn on_eof(&mut self, _base: &mut Base) -> bool {
+        self.inner.sender.take();
+        false
     }
 }
 
@@ -140,7 +149,7 @@ struct Joiner {
 type JoinStore = HashMap<Row, Vec<Row>>;
 
 impl Joiner {
-    fn do_joining(&mut self, join: Join, opts: &Opts, receiver: Receiver<(bool, Row)>, base: &mut base::Base) {
+    fn do_joining(&mut self, join: Join, opts: &Opts, receiver: Receiver<(bool, Message)>, base: &mut Base) {
         let fields = (&opts.left_fields, &opts.right_fields);
         let is_fields_set = !fields.0.is_empty() || !fields.1.is_empty();
         let mut stores = (HashMap::new(), HashMap::new());
@@ -149,67 +158,76 @@ impl Joiner {
         let mut got_headers = false;
         let mut buffer = vec![];
 
-        for (is_left, row) in receiver.iter() {
-            if is_left && headers.0.is_none() {
-                headers.0 = Some(row);
-            } else if !is_left && headers.1.is_none() {
-                headers.1 = Some(row);
-            } else {
-                // non header
-
-                if !got_headers {
-                    // stick it in the buffer for later
-                    buffer.push(row);
-                } else if self.on_row(is_left, row, &mut stores, &slicers, base) {
+        for (is_left, msg) in receiver.iter() {
+            match msg {
+                Message::Separator => unreachable!(),
+                Message::Raw(_) => unreachable!(),
+                Message::Eof => (),
+                Message::Ofs(ofs) => if is_left && base.on_ofs(ofs) {
                     return
-                }
-            }
-
-            if !got_headers && let Some(headers) = headers.0.as_ref().zip(headers.1.as_ref()) {
-                got_headers = true;
-
-                if ! is_fields_set {
-                    // get common fields
-                    let left: HashSet<_> = headers.0.iter().collect();
-                    let right: HashSet<_> = headers.1.iter().collect();
-                    let fields: Vec<_> = left.intersection(&right).cloned().cloned().collect();
-                    if fields.is_empty() {
-                        // default join field is the first
-                        slicers.0 = ColumnSlicer::new(&vec!["1".into()], false);
-                        slicers.1 = ColumnSlicer::new(&vec!["1".into()], false);
+                },
+                Message::Header(header) => {
+                    if is_left {
+                        headers.0 = Some(header);
                     } else {
-                        slicers.0 = ColumnSlicer::from_names(fields.iter());
-                        slicers.1 = ColumnSlicer::from_names(fields.iter());
+                        headers.1 = Some(header);
                     }
-                }
 
-                // make header maps
-                slicers.0.make_header_map(headers.0);
-                slicers.1.make_header_map(headers.1);
+                    if !got_headers && let Some(headers) = headers.0.as_ref().zip(headers.1.as_ref()) {
+                        got_headers = true;
 
-                // paste the headers together
-                let mut header = slicers.0.slice(headers.0, false, true);
-                header.append(&mut slicers.0.slice(headers.0, true, true));
-                header.append(&mut slicers.1.slice(headers.1, true, true));
+                        if ! is_fields_set {
+                            // get common fields
+                            let left: HashSet<_> = headers.0.iter().collect();
+                            let right: HashSet<_> = headers.1.iter().collect();
+                            let fields: Vec<_> = left.intersection(&right).cloned().cloned().collect();
+                            if fields.is_empty() {
+                                // default join field is the first
+                                slicers.0 = ColumnSlicer::new(&vec!["1".into()], false);
+                                slicers.1 = ColumnSlicer::new(&vec!["1".into()], false);
+                            } else {
+                                slicers.0 = ColumnSlicer::from_names(fields.iter());
+                                slicers.1 = ColumnSlicer::from_names(fields.iter());
+                            }
+                        }
 
-        // if self.opts.rename_1 {
-        // left = [self.opts.rename_1 % h for h in left]
-        // }
-        // if self.opts.rename_2:
-        // right = [self.opts.rename_2 % h for h in right]
+                        // make header maps
+                        slicers.0.make_header_map(headers.0);
+                        slicers.1.make_header_map(headers.1);
 
-                if base.on_header(header) {
-                    return
-                }
-                // clear out the buffered rows
-                // their side must be the other side
-                for row in buffer.drain(..) {
-                    if self.on_row(!is_left, row, &mut stores, &slicers, base) {
+                        // paste the headers together
+                        let mut header = slicers.0.slice(headers.0, false, true);
+                        header.append(&mut slicers.0.slice(headers.0, true, true));
+                        header.append(&mut slicers.1.slice(headers.1, true, true));
+
+                // if self.opts.rename_1 {
+                // left = [self.opts.rename_1 % h for h in left]
+                // }
+                // if self.opts.rename_2:
+                // right = [self.opts.rename_2 % h for h in right]
+
+                        if base.on_header(header) {
+                            return
+                        }
+                        // clear out the buffered rows
+                        // their side must be the other side
+                        for row in buffer.drain(..) {
+                            if self.on_row(!is_left, row, &mut stores, &slicers, base) {
+                                return
+                            }
+                        }
+                    }
+                },
+                Message::Row(row) => {
+                    if !got_headers {
+                        // stick it in the buffer for later
+                        buffer.push(row);
+                        continue
+                    } else if self.on_row(is_left, row, &mut stores, &slicers, base) {
                         return
                     }
-                }
+                },
             }
-
         }
 
         if matches!(join, Join::Left | Join::Outer) {
@@ -274,7 +292,7 @@ impl Joiner {
         row: Row,
         stores: &mut (JoinStore, JoinStore),
         slicers: &(ColumnSlicer, ColumnSlicer),
-        base: &mut base::Base,
+        base: &mut Base,
     ) -> bool {
 
         if is_left && self.key_len == 0 {
@@ -314,33 +332,23 @@ impl Joiner {
     }
 }
 
+#[derive(Clone)]
 struct Child {
-    ofs_sender: Option<Sender<base::Ofs>>,
-    sender: Sender<(bool, Row)>,
     got_header: bool,
+    left: bool,
+    sender: Option<Sender<(bool, Message)>>,
 }
 
-impl Child {
-    fn notify_header<H: base::Hook<W>, W: crate::writer::Writer>(&mut self, header: &Row, base: &base::Base<H, W>) {
+impl Processor for Child {
+    fn on_header(&mut self, _base: &mut Base, header: Vec<BString>) -> bool {
         self.got_header = true;
-        if let Some(ofs_sender) = &self.ofs_sender {
-            ofs_sender.send(base.ofs.clone()).unwrap();
-        }
-        self.sender.send((self.ofs_sender.is_some(), header.clone())).unwrap();
-    }
-}
-
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Child {
-    fn on_header(&mut self, base: &mut base::Base<H, W>, header: Vec<BString>) -> bool {
-        self.notify_header(&header, base);
-        false
+        self.sender.as_ref().unwrap().send((self.left, Message::Header(header))).is_err()
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, row: Vec<BString>) -> bool {
-        if !self.got_header {
-            self.notify_header(&vec![], base);
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> bool {
+        if !self.got_header && self.on_header(base, vec![]) {
+            return true
         }
-        self.sender.send((self.ofs_sender.is_some(), row)).unwrap();
-        false
+        self.sender.as_ref().unwrap().send((self.left, Message::Row(row))).is_err()
     }
 }

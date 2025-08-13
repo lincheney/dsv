@@ -25,16 +25,16 @@ impl Handler {
     }
 }
 
-impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handler {
+impl base::Processor for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         if self.opts.number {
             row.insert(0, b"n".into());
         }
         base.on_header(row)
     }
 
-    fn on_row(&mut self, base: &mut base::Base<H, W>, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         if self.opts.number {
             self.row_count += 1;
             row.insert(0, format!("{}", self.row_count).into());
@@ -42,14 +42,14 @@ impl<H: base::Hook<W>, W: crate::writer::Writer> base::Processor<H, W> for Handl
         base.on_row(row)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base<H, W>) {
+    fn on_eof(&mut self, base: &mut base::Base) -> bool {
         let files = std::mem::take(&mut self.opts.files);
         for file in &files {
             let file = std::fs::File::open(file).unwrap();
             let file = std::io::BufReader::new(file);
             let _ = self.process_file(file, base, base::Callbacks::ON_ROW);
         }
-        base.on_eof();
+        base.on_eof()
     }
 
 }
