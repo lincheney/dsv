@@ -2,7 +2,8 @@ import argparse
 from ._base import _Base
 from ._column_slicer import _ColumnSlicer
 from . import _utils
-from .exec_ import exec_, BaseTable, Proxy
+from .exec_ import exec_
+from ._table import BaseTable, Proxy
 
 class exec_groupby(_ColumnSlicer, exec_):
     ''' aggregate rows using python '''

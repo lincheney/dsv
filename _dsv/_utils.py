@@ -5,6 +5,7 @@ import sys
 import math
 import argparse
 from functools import cache
+from ._table import to_bytes
 
 @cache
 def stdin_is_tty():
@@ -27,32 +28,11 @@ def regex_arg_type(regex):
 def resolve_tty_auto(x: str):
     return x == 'always' or (x == 'auto' and stdout_is_tty())
 
-def as_float(value, warn=True):
-    try:
-        return float(value)
-    except ValueError as e:
-        if warn:
-            print(e, file=sys.stderr)
-        return math.nan
-
-def diff(value):
-    result = []
-    prev = 0
-    for v in value:
-        result.append(v - prev)
-        prev = v
-    return result[1:]
-
 def remove_ansi_colour(value: bytes):
     if b'\x1b[' in value or b'\x1b]' in value:
         # remove colour escapes
         value = re.sub(br'\x1b\[[0-9;:]*[mK]|\x1b]8;;.*?\x1b\\', b'', value)
     return value
-
-def to_bytes(x):
-    if not isinstance(x, bytes):
-        x = str(x).encode('utf8')
-    return x
 
 def parse_value(value):
     if isinstance(value, (list, tuple)):
@@ -69,41 +49,3 @@ def parse_value(value):
         return float(value)
     except ValueError:
         return value
-
-def parse_datetime(
-    value,
-    formats=(
-        '%Y-%m-%dT%H:%M:%S.%f%z',
-        '%Y-%m-%d %H:%M:%S.%f',
-        '%Y-%m-%dT%H:%M:%S%z',
-        '%Y-%m-%dT%H:%M:%S',
-        '%Y-%m-%d %H:%M:%S',
-        '%Y/%m/%d %H:%M:%S',
-        '%d/%m/%y %H:%M:%S',
-    ),
-    date_yardstick=datetime.datetime(2000, 1, 1),
-):
-    if isinstance(value, (list, tuple)):
-        return [parse_datetime(x) for x in value]
-
-    if isinstance(value, datetime.datetime):
-        return value
-
-    elif isinstance(value, (str, bytes)) and value:
-        val = value
-        if isinstance(val, bytes):
-            val = val.decode('utf8')
-        val = re.sub('(\\.[0-9]{6})[0-9]*', '\\1', val)
-        for fmt in formats:
-            try:
-                return datetime.datetime.strptime(val, fmt)
-            except ValueError:
-                pass
-
-    elif isinstance(value, (int, float)) and value >= date_yardstick.timestamp():
-        if value > date_yardstick.timestamp() * 1000:
-            # this is in milliseconds
-            value /= 1000.0
-        return datetime.datetime.fromtimestamp(value)
-
-    return value

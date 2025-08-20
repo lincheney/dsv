@@ -14,3 +14,4 @@ quick-xml = "0.38.1"
 regex = "1.11.1"
 serde_json = { version = "1.0.142", features = ["preserve_order"] }
 termsize = "0.1.9"
+libloading = "0.8.0"

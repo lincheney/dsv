@@ -121,4 +121,6 @@ add_subcommands!(
     paste,
     fromhtml,
     pipe,
+    exec,
+    exec_filter,
 );
