@@ -478,85 +478,96 @@ impl<'a, 'b> Base<'a, 'b> {
 
     fn parse_line(&self, line: &BStr, mut row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
         let allow_quoted = !self.opts.no_quoting;
-        let maxcols = if self.opts.combine_trailing_columns && self.header.is_some() {
-            self.header.as_ref().unwrap().len()
+        let maxcols = if self.opts.combine_trailing_columns && let Some(header) = &self.header {
+            Some(header.len())
         } else {
-            usize::MAX
+            None
         };
 
         if !allow_quoted || !line.contains(&quote) {
-            if !row.is_empty() {
-                row.last_mut().unwrap().extend_from_slice(line);
+            if let Some(last) = row.last_mut() {
+                last.extend_from_slice(line);
                 return (row, true);
             } else if let Ifs::Plain(ifs) = &self.ifs {
-                let row = line.splitn_str(maxcols, ifs).map(|x| x.to_owned().into()).collect();
+                let row = if let Some(maxcols) = maxcols {
+                    line.splitn_str(maxcols, ifs).map(|x| x.into()).collect()
+                } else {
+                    line.split_str(ifs).map(|x| x.into()).collect()
+                };
                 return (row, false);
             } else if let Ifs::Regex(ifs) = &self.ifs {
-                return (ifs.splitn(line, maxcols).map(|x| x.to_owned().into()).collect(), false);
+                let row = if let Some(maxcols) = maxcols {
+                    ifs.splitn(line, maxcols).map(|x| x.into()).collect()
+                } else {
+                    ifs.split(line).map(|x| x.into()).collect()
+                };
+                return (row, false);
             }
         }
 
-        let mut start = 0;
-        let line_len = line.len();
+        let mut start = Some(0);
 
         if let Some(last) = row.last_mut() {
-            let (value, i) = Self::extract_column(line, 0, line_len, quote);
+            let (value, i) = Self::extract_column(line, 0, quote);
             last.extend_from_slice(&value);
-            if i == usize::MAX {
+            if let Some(i) = i {
+                start = self.next_ifs(line, i + 1, &self.ifs).unzip().1;
+            } else {
                 return (row, true);
             }
-            start = self.next_ifs(line, i + 1, &self.ifs).unwrap_or((line_len, line_len)).1;
         }
 
-        while start < line_len {
-            if allow_quoted && line[start] == quote {
-                let (value, i) = Self::extract_column(line, start + 1, line_len, quote);
-                if row.len() >= maxcols {
+        while let Some(s) = start && let Some(&c) = line.get(s) {
+
+            let row_full = maxcols.is_some_and(|m| row.len() >= m);
+
+            if allow_quoted && c == quote {
+                let (value, i) = Self::extract_column(line, s + 1, quote);
+                if row_full {
                     row.last_mut().unwrap().extend_from_slice(&value);
                 } else {
                     row.push(value);
                 }
-                if i == usize::MAX {
+                if let Some(i) = i {
+                    start = self.next_ifs(line, i + 1, &self.ifs).unzip().1;
+                } else {
                     return (row, true);
                 }
-                start = self.next_ifs(line, i + 1, &self.ifs).unwrap_or((line_len, line_len)).1;
             } else {
-                let (s, e) = self.next_ifs(line, start, &self.ifs).unwrap_or((line_len, line_len));
-                if row.len() >= maxcols {
-                    row.last_mut().unwrap().extend_from_slice(&line[start..e]);
+                let se = self.next_ifs(line, s, &self.ifs).unzip();
+                if row_full {
+                    row.last_mut().unwrap().extend_from_slice(&line[s..se.1.unwrap_or(line.len())]);
                 } else {
-                    row.push(line[start..s].to_owned());
+                    row.push(line[s..se.0.unwrap_or(line.len())].to_owned());
                 }
-                if s == line_len {
-                    break;
-                }
-                start = e;
+                start = se.0.zip(se.1).map(|(s, e)| e.max(s+1));
             }
         }
 
-        if start == line_len {
+        if start.is_some() {
             row.push(vec![].into());
         }
 
         (row, false)
     }
 
-    fn extract_column(line: &BStr, mut start: usize, line_len: usize, quote: u8) -> (BString, usize) {
+    fn extract_column(line: &BStr, mut start: usize, quote: u8) -> (BString, Option<usize>) {
         let mut value = BString::new(vec![]);
-        let mut i = line[start..].find_byte(quote).map(|pos| start + pos);
 
-        while let Some(pos) = i {
+        // find the next quote
+        while let Some(pos) = line[start..].find_byte(quote).map(|pos| start + pos) {
             value.extend_from_slice(&line[start..pos]);
-            if pos + 1 < line_len && line[pos + 1] == quote {
+            // is next char also a quote
+            if let Some(&c) = line.get(pos + 1) && c == quote {
+                value.push(quote);
                 start = pos + 2;
-                i = line[start..].find_byte(quote).map(|pos| start + pos);
             } else {
-                return (value, pos);
+                return (value, Some(pos));
             }
         }
 
         value.extend_from_slice(&line[start..]);
-        (value, usize::MAX)
+        (value, None)
     }
 
     pub fn on_eof(&self) -> bool {
