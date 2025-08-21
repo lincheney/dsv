@@ -22,19 +22,25 @@ macro_rules! define_python_lib {
 
         impl PythonLib {
             fn new(lib: &Library) -> Result<Self> {
-                Ok(Self {
+                let lib = Self {
                     $(
                         $name: unsafe { lib.get(concat!(stringify!($name), "\0").as_bytes()) }?,
                     )*
-                })
+                };
+                unsafe{
+                    (lib.Py_InitializeEx)(0);
+                    // release gil in main thread
+                    (lib.PyEval_SaveThread)();
+                }
+                Ok(lib)
             }
         }
     };
 }
 
 define_python_lib!(
-    Py_Initialize: unsafe extern "C" fn(),
-    Py_Finalize: unsafe extern "C" fn(),
+    Py_InitializeEx: unsafe extern "C" fn(i32),
+    // Py_Finalize: unsafe extern "C" fn(),
     PyDict_GetItemString: unsafe extern "C" fn(Pointer, *const c_char) -> Pointer,
     PyDict_GetItem: unsafe extern "C" fn(Pointer, Pointer) -> Pointer,
     PyObject_GetAttr: unsafe extern "C" fn(Pointer, Pointer) -> Pointer,
@@ -46,18 +52,18 @@ define_python_lib!(
     PyLong_FromSize_t: unsafe extern "C" fn(usize) -> Pointer,
     PyLong_FromSsize_t: unsafe extern "C" fn(isize) -> Pointer,
     PyFloat_FromDouble: unsafe extern "C" fn(f64) -> Pointer,
-    PyRun_SimpleString: unsafe extern "C" fn(*const c_char) -> i32,
-    PyRun_String: unsafe extern "C" fn(*const c_char, i32, Pointer, Pointer) -> Pointer,
+    // PyRun_SimpleString: unsafe extern "C" fn(*const c_char) -> i32,
+    // PyRun_String: unsafe extern "C" fn(*const c_char, i32, Pointer, Pointer) -> Pointer,
     PyBytes_FromStringAndSize: unsafe extern "C" fn(*const c_char, isize) -> Pointer,
     PyUnicode_FromStringAndSize: unsafe extern "C" fn(*const c_char, isize) -> Pointer,
-    Py_IncRef: unsafe extern "C" fn(Pointer),
+    // Py_IncRef: unsafe extern "C" fn(Pointer),
     Py_DecRef: unsafe extern "C" fn(Pointer),
     PyObject_IsTrue: unsafe extern "C" fn(Pointer) -> i32,
-    PyImport_AddModule: unsafe extern "C" fn(*const c_char) -> Pointer,
+    // PyImport_AddModule: unsafe extern "C" fn(*const c_char) -> Pointer,
     PyDict_SetItem: unsafe extern "C" fn(Pointer, Pointer, Pointer) -> i32,
     PyDict_SetItemString: unsafe extern "C" fn(Pointer, *const c_char, Pointer) -> i32,
     PyDict_Clear: unsafe extern "C" fn(Pointer),
-    PyModule_GetDict: unsafe extern "C" fn(Pointer) -> Pointer,
+    // PyModule_GetDict: unsafe extern "C" fn(Pointer) -> Pointer,
     PyObject_Vectorcall: unsafe extern "C" fn(Pointer, *const Pointer, usize, Pointer) -> Pointer,
     Py_CompileString: unsafe extern "C" fn(*const c_char, *const c_char, i32) -> Pointer,
     PyEval_EvalCode: unsafe extern "C" fn(Pointer, Pointer, Pointer) -> Pointer,
@@ -70,7 +76,10 @@ define_python_lib!(
     PyEval_GetBuiltins: unsafe extern "C" fn() -> Pointer,
     PyObject_IsInstance: unsafe extern "C" fn(Pointer, Pointer) -> i32,
     PyErr_Clear: unsafe extern "C" fn(),
-    PyErr_Print: unsafe extern "C" fn(),
+    // PyErr_Print: unsafe extern "C" fn(),
+    PyGILState_Ensure: unsafe extern "C" fn() -> i32,
+    PyGILState_Release: unsafe extern "C" fn(i32),
+    PyEval_SaveThread: unsafe extern "C" fn() -> Pointer,
 );
 
 static LIBPYTHON: Lazy<Library> = Lazy::new(|| {
@@ -96,7 +105,6 @@ pub struct Python {
 impl Python {
     fn new() -> Self {
         unsafe{
-            (PYTHON.Py_Initialize)();
             let none = *LIBPYTHON.get(b"_Py_NoneStruct\0").unwrap();
             let bytes = NonNull::new(*LIBPYTHON.get(b"PyBytes_Type\0").unwrap()).unwrap();
             Self{
@@ -106,8 +114,28 @@ impl Python {
         }
     }
 
+    pub fn acquire_gil(&self) -> PythonHandle {
+        let state = unsafe{ (PYTHON.PyGILState_Ensure)() };
+        PythonHandle{ inner: self, state }
+    }
+}
+
+pub struct PythonHandle<'a> {
+    inner: &'a Python,
+    state: i32,
+}
+
+impl<'a> Drop for PythonHandle<'a> {
+    fn drop(&mut self) {
+        unsafe{
+            (PYTHON.PyGILState_Release)(self.state);
+        }
+    }
+}
+
+impl<'a> PythonHandle<'a> {
     fn is_none(&self, obj: PyObject) -> bool {
-        obj.as_ptr() == self.none
+        obj.as_ptr() == self.inner.none
     }
 
     pub fn is_truthy(&self, obj: PyObject) -> bool {
@@ -133,7 +161,7 @@ impl Python {
         unsafe{
             let mut size = 0isize;
 
-            let bytes = if self.isinstance(obj, self.bytes) {
+            let bytes = if self.isinstance(obj, self.inner.bytes) {
                 size = (PYTHON.PyBytes_Size)(obj.as_ptr());
                 (PYTHON.PyBytes_AsString)(obj.as_ptr())
             } else {
@@ -148,30 +176,11 @@ impl Python {
         }
     }
 
-    fn incref(&self, value: PyObject) {
-        unsafe{
-            (PYTHON.Py_IncRef)(value.as_ptr());
-        }
-    }
-
-    fn add_module(&self, name: &str) -> Option<PyObject> {
-        unsafe{
-            NonNull::new((PYTHON.PyImport_AddModule)(CString::new(name).unwrap().as_ptr()))
-        }
-    }
-
-    fn module_get(&self, module: PyObject, name: &str, incref: bool) -> Option<PyObject> {
-        unsafe{
-            let dict = (PYTHON.PyModule_GetDict)(module.as_ptr());
-            debug_assert!(!dict.is_null());
-            let obj = (PYTHON.PyDict_GetItemString)(dict, CString::new(name).unwrap().as_ptr());
-            let obj = NonNull::new(obj);
-            if incref && let Some(obj) = obj {
-                self.incref(obj);
-            }
-            obj
-        }
-    }
+    // fn incref(&self, value: PyObject) {
+        // unsafe{
+            // (PYTHON.Py_IncRef)(value.as_ptr());
+        // }
+    // }
 
     fn to_float(&self, value: f64) -> Option<PyObject> {
         unsafe{
@@ -251,6 +260,13 @@ impl Python {
         }
     }
 
+    fn dict_get_string(&self, dict: PyObject, key: &[u8]) -> Option<PyObject> {
+        let key = CStr::from_bytes_with_nul(key).unwrap();
+        unsafe{
+            NonNull::new((PYTHON.PyDict_GetItemString)(dict.as_ptr(), key.as_ptr() as _))
+        }
+    }
+
     fn dict_set(&self, dict: PyObject, key: PyObject, value: PyObject) {
         unsafe{
             let result = (PYTHON.PyDict_SetItem)(dict.as_ptr(), key.as_ptr(), value.as_ptr());
@@ -259,6 +275,7 @@ impl Python {
     }
 
     fn dict_set_string(&self, dict: PyObject, key: &[u8], value: PyObject) {
+        let key = CStr::from_bytes_with_nul(key).unwrap();
         unsafe{
             let result = (PYTHON.PyDict_SetItemString)(dict.as_ptr(), key.as_ptr() as _, value.as_ptr());
             debug_assert!(result == 0);
@@ -280,10 +297,14 @@ impl Python {
     }
 
     pub fn compile_code(&self, code: &str, start: PyStartToken) -> Option<PyObject> {
+        self.compile_code_cstr(&CString::new(code).unwrap(), start)
+    }
+
+    pub fn compile_code_cstr(&self, code: &CStr, start: PyStartToken) -> Option<PyObject> {
         unsafe{
             (PYTHON.PyErr_Clear)();
             let code = (PYTHON.Py_CompileString)(
-                CString::new(code).unwrap().as_ptr(),
+                code.as_ptr(),
                 CString::new("<string>").unwrap().as_ptr(),
                 start as _,
             );
@@ -293,20 +314,18 @@ impl Python {
 
     pub fn exec_code(&self, code: PyObject, globals: Pointer, locals: Pointer) -> Option<PyObject> {
         unsafe{
+            (PYTHON.PyErr_Clear)();
             NonNull::new((PYTHON.PyEval_EvalCode)(code.as_ptr(), globals, locals))
         }
     }
 
+    fn exec_cstr(&self, code: &CStr, globals: Pointer, locals: Pointer) {
+        let code = self.compile_code_cstr(code, PyStartToken::File).unwrap();
+        self.exec_code(code, globals, locals);
+    }
+
     fn exec(&self, code: &str, globals: Pointer, locals: Pointer) {
-        unsafe{
-            (PYTHON.PyErr_Clear)();
-            (PYTHON.PyRun_String)(
-                CString::new(code).unwrap().as_ptr(),
-                PyStartToken::File as _,
-                globals,
-                locals,
-            )
-        };
+        self.exec_cstr(&CString::new(code).unwrap(), globals, locals)
     }
 
     fn iter(&self, obj: PyObject) -> impl Iterator<Item=PyObject> {
@@ -321,14 +340,6 @@ impl Python {
             item = NonNull::new((PYTHON.PyIter_Next)(iter));
             item
         })
-    }
-}
-
-impl Drop for Python {
-    fn drop(&mut self) {
-        unsafe{
-            (PYTHON.Py_Finalize)()
-        };
     }
 }
 
@@ -361,7 +372,7 @@ pub struct Handler {
     got_header: bool,
 
     var_name: PyObject,
-    vars: PyObject,
+    locals: PyObject,
     pub py: Python,
     prelude: Option<PyObject>,
     code: PyObject,
@@ -376,14 +387,18 @@ unsafe impl Send for Handler {}
 
 impl Handler {
     pub fn new(opts: Opts) -> Self {
-        let py = Python::new();
-        let main = py.add_module("__main__").unwrap();
-        unsafe{
-            (PYTHON.PyRun_SimpleString)(TABLE_SCRIPT.as_ptr());
-        }
-        let table_cls = py.module_get(main, "Table", true).unwrap();
-        let vec_cls = py.module_get(main, "Vec", true).unwrap();
-        let convert_to_table_fn = py.module_get(main, "convert_to_table", true).unwrap();
+        let python = Python::new();
+
+        let py = python.acquire_gil();
+        // let main = py.add_module("__main__").unwrap();
+
+        let globals = py.empty_dict().unwrap();
+        let locals = py.empty_dict().unwrap();
+        py.exec_cstr(TABLE_SCRIPT, globals.as_ptr(), globals.as_ptr());
+
+        let table_cls = py.dict_get_string(globals, b"Table\0").unwrap();
+        let vec_cls = py.dict_get_string(globals, b"Vec\0").unwrap();
+        let convert_to_table_fn = py.dict_get_string(globals, b"convert_to_table\0").unwrap();
 
         let (last, rest) = opts.common.script.split_last().unwrap();
         let prelude = if rest.is_empty() {
@@ -396,8 +411,10 @@ impl Handler {
         let expr = code.is_some();
         let code = code.or_else(|| py.compile_code(last, PyStartToken::File)).unwrap();
         let var_name = py.to_str(&opts.common.var).unwrap();
-        let vars = py.empty_dict().unwrap();
         let header = py.empty_list(0).unwrap();
+        let header_numbers = py.empty_dict().unwrap();
+
+        drop(py);
 
         Self {
             opts,
@@ -406,7 +423,7 @@ impl Handler {
             got_header: false,
 
             var_name,
-            vars,
+            locals,
             expr,
             prelude,
             code,
@@ -414,96 +431,100 @@ impl Handler {
             vec_cls,
             convert_to_table_fn,
             header,
-            header_numbers: py.empty_dict().unwrap(),
-            py,
+            header_numbers,
+            py: python,
         }
     }
 }
 
 impl Handler {
-    fn bytes_to_py(&self, bytes: &BStr) -> PyObject {
+    fn bytes_to_py(&self, py: &PythonHandle, bytes: &BStr) -> PyObject {
         if !self.opts.common.bytes && let Ok(string) = std::str::from_utf8(bytes) {
             if let Ok(val) = string.parse::<isize>() {
-                self.py.to_int(val).unwrap()
+                py.to_int(val).unwrap()
             } else if let Ok(val) = string.parse::<f64>() {
-                self.py.to_float(val).unwrap()
+                py.to_float(val).unwrap()
             } else {
-                self.py.to_str(string).unwrap()
+                py.to_str(string).unwrap()
             }
         } else {
-            self.py.to_bytes(bytes).unwrap()
+            py.to_bytes(bytes).unwrap()
         }
     }
 
-    fn row_to_py(&self, row: &[BString]) -> PyObject {
-        self.py.list_from_iter(row.iter().map(|col| self.bytes_to_py(col.as_ref())) ).unwrap()
+    fn row_to_py(&self, py: &PythonHandle, row: &[BString]) -> PyObject {
+        py.list_from_iter(row.iter().map(|col| self.bytes_to_py(py, col.as_ref())) ).unwrap()
     }
 
     pub fn run_python<T: AsRef<[BString]>, I: ExactSizeIterator + Iterator<Item=T>>(&self, rows: I) -> Option<PyObject> {
 
-        let rows = self.py.list_from_iter(rows.map(|row| self.row_to_py(row.as_ref()))).unwrap();
-        let table = self.py.call_func(self.table_cls, &[rows, self.header_numbers]).unwrap();
+        let py = self.py.acquire_gil();
+        let rows = py.list_from_iter(rows.map(|row| self.row_to_py(&py, row.as_ref()))).unwrap();
+        let table = py.call_func(self.table_cls, &[rows, self.header_numbers]).unwrap();
 
-        self.py.dict_set_string(self.vars, b"Vec\0", self.vec_cls);
-        self.py.dict_set_string(self.vars, b"H\0", self.header);
-        self.py.dict_set_string(self.vars, b"N\0", self.py.to_uint(self.count).unwrap());
-        self.py.dict_set(self.vars, self.var_name, table);
+        py.dict_set_string(self.locals, b"Vec\0", self.vec_cls);
+        py.dict_set_string(self.locals, b"H\0", self.header);
+        py.dict_set_string(self.locals, b"N\0", py.to_uint(self.count).unwrap());
+        py.dict_set(self.locals, self.var_name, table);
 
         if let Some(prelude) = self.prelude {
-            self.py.exec_code(prelude, self.vars.as_ptr(), self.vars.as_ptr());
+            py.exec_code(prelude, self.locals.as_ptr(), self.locals.as_ptr());
         }
-        let result = self.py.exec_code(self.code, self.vars.as_ptr(), self.vars.as_ptr());
+        let result = py.exec_code(self.code, self.locals.as_ptr(), self.locals.as_ptr());
         if self.expr {
             result
         } else {
-            self.py.dict_get(self.vars, self.var_name)
+            py.dict_get(self.locals, self.var_name)
         }
     }
 
     fn handle_result(&mut self, base: &mut base::Base, result: PyObject) -> bool {
-        if !self.py.is_none(result) {
-            let table = self.py.call_func(self.convert_to_table_fn, &[result]).unwrap();
-            if !self.py.is_none(table) {
-                let header = self.py.getattr(table, self.py.to_str("__headers__").unwrap()).unwrap();
+        let py = self.py.acquire_gil();
 
-                if !self.got_header && !self.py.is_none(header) {
+        if !py.is_none(result) {
+            let table = py.call_func(self.convert_to_table_fn, &[result]).unwrap();
+            if !py.is_none(table) {
+                let header = py.getattr(table, py.to_str("__headers__").unwrap()).unwrap();
+
+                if !self.got_header && !py.is_none(header) {
                     self.got_header = true;
-                    let header = self.py.iter(header).map(|x| self.py.convert_py_to_bytes(x).to_owned()).collect();
+                    let header = py.iter(header).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
                     if base.on_header(header) {
                         return true
                     }
                 }
 
-                let rows = self.py.getattr(table, self.py.to_str("__data__").unwrap()).unwrap();
-                if !self.py.is_none(rows) {
-                    for row in self.py.iter(rows) {
-                        let row = self.py.iter(row).map(|x| self.py.convert_py_to_bytes(x).to_owned()).collect();
+                let rows = py.getattr(table, py.to_str("__data__").unwrap()).unwrap();
+                if !py.is_none(rows) {
+                    for row in py.iter(rows) {
+                        let row = py.iter(row).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
                         if base.on_row(row) {
                             return true
                         }
                     }
                 }
             } else if self.expr {
-                let bytes = self.py.convert_py_to_bytes(result);
+                let bytes = py.convert_py_to_bytes(result);
                 if base.write_raw(bytes.to_owned()) {
                     return true
                 }
             } else {
-                self.py.dict_set(self.vars, self.py.to_str("X").unwrap(), result);
-                self.py.exec("raise ValueError(X)", self.vars.as_ptr(), self.vars.as_ptr());
+                py.dict_set(self.locals, py.to_str("X").unwrap(), result);
+                py.exec("raise ValueError(X)", self.locals.as_ptr(), self.locals.as_ptr());
             }
         }
         false
     }
 
     pub fn process_header(&mut self, header: &[BString]) {
-        self.py.dict_clear(self.header_numbers);
-        self.py.list_clear(self.header);
+        let py = self.py.acquire_gil();
+        py.dict_clear(self.header_numbers);
+        py.list_clear(self.header);
 
         for (i, k) in header.iter().enumerate() {
-            let k = self.py.to_bytes(k.as_ref()).unwrap();
-            self.py.dict_set(self.header_numbers, k, self.py.to_uint(i).unwrap());
-            self.py.list_append(self.header, k);
+            let k = py.to_bytes(k.as_ref()).unwrap();
+            py.dict_set(self.header_numbers, k, py.to_uint(i).unwrap());
+            py.list_append(self.header, k);
         }
     }
 }

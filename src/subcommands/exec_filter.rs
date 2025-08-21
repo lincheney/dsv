@@ -52,13 +52,14 @@ impl base::Processor for Handler {
         self.inner.count += 1;
         let result = self.inner.run_python([&row].iter());
         let result = if let Some(mut result) = result {
-            if self.inner.py.isinstance(result, self.inner.vec_cls) {
+            let py = self.inner.py.acquire_gil();
+            if py.isinstance(result, self.inner.vec_cls) {
                 let all = self.all.get_or_insert_with(|| {
-                    self.inner.py.get_builtin(self.inner.py.to_str("all").unwrap()).unwrap()
+                    py.get_builtin(py.to_str("all").unwrap()).unwrap()
                 });
-                result = self.inner.py.call_func(*all, &[result]).unwrap();
+                result = py.call_func(*all, &[result]).unwrap();
             }
-            self.inner.py.is_truthy(result)
+            py.is_truthy(result)
         } else {
             false
         };
