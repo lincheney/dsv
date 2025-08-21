@@ -398,7 +398,7 @@ pub trait Processor<W: Writer=BaseWriter> {
                 Message::Row(row) => if self.on_row(base, row) { break },
                 Message::Header(header) => if self.on_header(base, header) { break },
                 Message::Eof => if self.on_eof(base) { break },
-                Message::Separator => if base.on_separator() { break },
+                Message::Separator => (), // do nothing
                 Message::Raw(value) => if base.write_raw(value) { break },
                 Message::Ofs(ofs) => if self.on_ofs(base, ofs) { break },
             };
