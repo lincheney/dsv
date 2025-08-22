@@ -30,7 +30,6 @@ impl Handler {
         }
 
         for row in std::iter::once(Ok(header_row)).chain(stream) {
-            // TODO warn not panic
             let row = row?;
             if do_callbacks.contains(Callbacks::ON_EOF) {
                 let values = header.iter().map(|k| {
