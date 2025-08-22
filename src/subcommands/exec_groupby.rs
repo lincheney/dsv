@@ -6,6 +6,7 @@ use clap::{Parser, ArgAction};
 use super::exec;
 use std::ffi::{CStr};
 use crate::column_slicer::ColumnSlicer;
+use crate::python;
 
 #[derive(Parser, Default)]
 struct OtherOpts {
@@ -29,8 +30,8 @@ pub struct Opts {
 pub struct Handler {
     inner: exec::Handler,
     opts: OtherOpts,
-    postprocess: exec::PyObject,
-    default_key: exec::PyObject,
+    postprocess: python::Object,
+    default_key: python::Object,
     column_slicer: ColumnSlicer,
     groups: HashMap<Vec<BString>, Vec<Vec<BString>>>,
     header: Option<Vec<BString>>,
@@ -53,7 +54,7 @@ impl Handler {
         let column_slicer = ColumnSlicer::new(&opts.other.fields, opts.other.regex);
 
         let py = inner.py.acquire_gil();
-        let postprocess = py.compile_code_cstr(POSTPROCESS, exec::PyStartToken::File).unwrap();
+        let postprocess = py.compile_code_cstr(POSTPROCESS, python::StartToken::File).unwrap();
         let default_key = py.to_str(inner.opts.common.script.last().unwrap()).unwrap();
 
         drop(py);

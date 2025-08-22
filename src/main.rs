@@ -2,6 +2,7 @@ mod base;
 mod subcommands;
 mod column_slicer;
 mod writer;
+mod python;
 use std::io::IsTerminal;
 use std::process::*;
 use anyhow::Result;

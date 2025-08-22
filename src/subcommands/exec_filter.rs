@@ -3,6 +3,7 @@ use crate::base;
 use bstr::{BString, ByteVec};
 use clap::{Parser};
 use super::exec;
+use crate::python;
 
 #[derive(Parser, Default)]
 #[command(about = "filter rows using python")]
@@ -17,7 +18,7 @@ pub struct Handler {
     passthru: bool,
     colour: bool,
     inner: exec::Handler,
-    all: Option<exec::PyObject>,
+    all: Option<python::Object>,
 }
 
 impl Handler {
