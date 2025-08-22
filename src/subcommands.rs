@@ -123,4 +123,5 @@ add_subcommands!(
     pipe,
     exec,
     exec_filter,
+    exec_groupby,
 );

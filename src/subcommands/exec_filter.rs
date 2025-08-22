@@ -50,7 +50,7 @@ impl base::Processor for Handler {
 
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
         self.inner.count += 1;
-        let result = self.inner.run_python([&row].iter());
+        let result = self.inner.run_python([&row].iter(), &[]);
         let result = if let Some(mut result) = result {
             let py = self.inner.py.acquire_gil();
             if py.isinstance(result, self.inner.vec_cls) {

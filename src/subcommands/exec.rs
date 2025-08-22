@@ -105,8 +105,8 @@ pub struct Python {
 impl Python {
     fn new() -> Self {
         unsafe{
-            let none = *LIBPYTHON.get(b"_Py_NoneStruct\0").unwrap();
-            let bytes = NonNull::new(*LIBPYTHON.get(b"PyBytes_Type\0").unwrap()).unwrap();
+            let none = *LIBPYTHON.get(c"_Py_NoneStruct".to_bytes()).unwrap();
+            let bytes = NonNull::new(*LIBPYTHON.get(c"PyBytes_Type".to_bytes()).unwrap()).unwrap();
             Self{
                 none,
                 bytes,
@@ -242,40 +242,38 @@ impl<'a> PythonHandle<'a> {
         }
     }
 
-    fn empty_dict(&self) -> Option<PyObject> {
+    pub fn empty_dict(&self) -> Option<PyObject> {
         unsafe{
             NonNull::new((PYTHON.PyDict_New)())
         }
     }
 
-    fn dict_clear(&self, dict: PyObject) {
+    pub fn dict_clear(&self, dict: PyObject) {
         unsafe{
             (PYTHON.PyDict_Clear)(dict.as_ptr());
         }
     }
 
-    fn dict_get(&self, dict: PyObject, key: PyObject) -> Option<PyObject> {
+    pub fn dict_get(&self, dict: PyObject, key: PyObject) -> Option<PyObject> {
         unsafe{
             NonNull::new((PYTHON.PyDict_GetItem)(dict.as_ptr(), key.as_ptr()))
         }
     }
 
-    fn dict_get_string(&self, dict: PyObject, key: &[u8]) -> Option<PyObject> {
-        let key = CStr::from_bytes_with_nul(key).unwrap();
+    pub fn dict_get_string(&self, dict: PyObject, key: &CStr) -> Option<PyObject> {
         unsafe{
             NonNull::new((PYTHON.PyDict_GetItemString)(dict.as_ptr(), key.as_ptr() as _))
         }
     }
 
-    fn dict_set(&self, dict: PyObject, key: PyObject, value: PyObject) {
+    pub fn dict_set(&self, dict: PyObject, key: PyObject, value: PyObject) {
         unsafe{
             let result = (PYTHON.PyDict_SetItem)(dict.as_ptr(), key.as_ptr(), value.as_ptr());
             debug_assert!(result == 0);
         }
     }
 
-    fn dict_set_string(&self, dict: PyObject, key: &[u8], value: PyObject) {
-        let key = CStr::from_bytes_with_nul(key).unwrap();
+    pub fn dict_set_string(&self, dict: PyObject, key: &CStr, value: PyObject) {
         unsafe{
             let result = (PYTHON.PyDict_SetItemString)(dict.as_ptr(), key.as_ptr() as _, value.as_ptr());
             debug_assert!(result == 0);
@@ -348,7 +346,7 @@ const TABLE_SCRIPT: &CStr = unsafe{ CStr::from_bytes_with_nul_unchecked(concat!(
 #[derive(Parser, Default)]
 pub struct CommonOpts {
     #[arg(required = true, help = "python statements to run")]
-    script: Vec<String>,
+    pub script: Vec<String>,
     #[arg(long, default_value = "X", help = "python variable to use to refer to the data")]
     var: String,
     #[arg(short = 'b', long, help = "do not auto convert data to int, str etc, treat everything as bytes")]
@@ -365,14 +363,15 @@ pub struct Opts {
 }
 
 pub struct Handler {
-    opts: Opts,
+    pub opts: Opts,
     rows: Vec<Vec<BString>>,
-    expr: bool,
+    pub expr: bool,
     pub count: usize,
     got_header: bool,
 
-    var_name: PyObject,
-    locals: PyObject,
+    pub var_name: PyObject,
+    pub locals: PyObject,
+    pub globals: PyObject,
     pub py: Python,
     prelude: Option<PyObject>,
     code: PyObject,
@@ -396,9 +395,9 @@ impl Handler {
         let locals = py.empty_dict().unwrap();
         py.exec_cstr(TABLE_SCRIPT, globals.as_ptr(), globals.as_ptr());
 
-        let table_cls = py.dict_get_string(globals, b"Table\0").unwrap();
-        let vec_cls = py.dict_get_string(globals, b"Vec\0").unwrap();
-        let convert_to_table_fn = py.dict_get_string(globals, b"convert_to_table\0").unwrap();
+        let table_cls = py.dict_get_string(globals, c"Table").unwrap();
+        let vec_cls = py.dict_get_string(globals, c"Vec").unwrap();
+        let convert_to_table_fn = py.dict_get_string(globals, c"convert_to_table").unwrap();
 
         let (last, rest) = opts.common.script.split_last().unwrap();
         let prelude = if rest.is_empty() {
@@ -424,6 +423,7 @@ impl Handler {
 
             var_name,
             locals,
+            globals,
             expr,
             prelude,
             code,
@@ -438,7 +438,7 @@ impl Handler {
 }
 
 impl Handler {
-    fn bytes_to_py(&self, py: &PythonHandle, bytes: &BStr) -> PyObject {
+    pub fn bytes_to_py(&self, py: &PythonHandle, bytes: &BStr) -> PyObject {
         if !self.opts.common.bytes && let Ok(string) = std::str::from_utf8(bytes) {
             if let Ok(val) = string.parse::<isize>() {
                 py.to_int(val).unwrap()
@@ -456,15 +456,27 @@ impl Handler {
         py.list_from_iter(row.iter().map(|col| self.bytes_to_py(py, col.as_ref())) ).unwrap()
     }
 
-    pub fn run_python<T: AsRef<[BString]>, I: ExactSizeIterator + Iterator<Item=T>>(&self, rows: I) -> Option<PyObject> {
+    pub fn run_python<T, I>(
+        &self,
+        rows: I,
+        vars: &[(&CStr, PyObject)],
+    ) -> Option<PyObject>
+    where
+        T: AsRef<[BString]>,
+        I: ExactSizeIterator + Iterator<Item=T>,
+    {
 
         let py = self.py.acquire_gil();
         let rows = py.list_from_iter(rows.map(|row| self.row_to_py(&py, row.as_ref()))).unwrap();
         let table = py.call_func(self.table_cls, &[rows, self.header_numbers]).unwrap();
 
-        py.dict_set_string(self.locals, b"Vec\0", self.vec_cls);
-        py.dict_set_string(self.locals, b"H\0", self.header);
-        py.dict_set_string(self.locals, b"N\0", py.to_uint(self.count).unwrap());
+        py.dict_clear(self.locals);
+        for (k, v) in vars {
+            py.dict_set_string(self.locals, k, *v);
+        }
+        py.dict_set_string(self.locals, c"Vec", self.vec_cls);
+        py.dict_set_string(self.locals, c"H", self.header);
+        py.dict_set_string(self.locals, c"N", py.to_uint(self.count).unwrap());
         py.dict_set(self.locals, self.var_name, table);
 
         if let Some(prelude) = self.prelude {
@@ -478,7 +490,7 @@ impl Handler {
         }
     }
 
-    fn handle_result(&mut self, base: &mut base::Base, result: PyObject) -> bool {
+    pub fn handle_result(&mut self, base: &mut base::Base, result: PyObject) -> bool {
         let py = self.py.acquire_gil();
 
         if !py.is_none(result) {
@@ -539,7 +551,7 @@ impl base::Processor for Handler {
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
         if self.opts.no_slurp {
             self.count += 1;
-            let result = self.run_python([row].iter());
+            let result = self.run_python([row].iter(), &[]);
             if let Some(result) = result {
                 self.handle_result(base, result)
             } else {
@@ -553,7 +565,7 @@ impl base::Processor for Handler {
 
     fn on_eof(&mut self, base: &mut base::Base) -> bool {
         if !self.opts.no_slurp {
-            let result = self.run_python(self.rows.iter());
+            let result = self.run_python(self.rows.iter(), &[]);
             if let Some(result) = result && self.handle_result(base, result) {
                 return true
             }
