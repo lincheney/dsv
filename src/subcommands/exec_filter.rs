@@ -25,6 +25,9 @@ impl Handler {
     pub fn new(opts: Opts) -> Self {
         let mut exec_opts = exec::Opts::default();
         exec_opts.common = opts.common;
+        if exec_opts.common.ignore_errors {
+            exec_opts.common.remove_errors = true;
+        }
         let inner = exec::Handler::new(exec_opts);
 
         Self{
@@ -52,7 +55,7 @@ impl base::Processor for Handler {
 
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
         self.inner.count += 1;
-        let result = self.inner.run_python([&row].iter(), &[]);
+        let result = self.inner.run_python([&row].iter(), &[])?;
         let result = if let Some(mut result) = result {
             let py = self.inner.py.acquire_gil();
             if py.isinstance(result, self.inner.vec_cls) {

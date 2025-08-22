@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use bstr::{BStr};
 use std::ptr::{NonNull, null_mut};
 use std::ffi::{c_void, CString, CStr};
@@ -78,6 +78,8 @@ define_python_lib!(
     PyGILState_Ensure: unsafe extern "C" fn() -> i32,
     PyGILState_Release: unsafe extern "C" fn(i32),
     PyEval_SaveThread: unsafe extern "C" fn() -> Pointer,
+    PyErr_Fetch: unsafe extern "C" fn(*mut Pointer, *mut Pointer, *mut Pointer),
+    PyErr_SetExcInfo: unsafe extern "C" fn(Pointer, Pointer, Pointer),
 );
 
 static LIBPYTHON: Lazy<Library> = Lazy::new(|| {
@@ -98,6 +100,19 @@ pub enum StartToken {
 pub struct Python {
     none: Pointer,
     bytes: Object,
+    get_exception: Object,
+}
+
+fn _compile_code_cstr(code: &CStr, start: StartToken) -> Option<Object> {
+    unsafe{
+        (PYTHON.PyErr_Clear)();
+        let code = (PYTHON.Py_CompileString)(
+            code.as_ptr(),
+            CString::new("<string>").unwrap().as_ptr(),
+            start as _,
+        );
+        NonNull::new(code)
+    }
 }
 
 impl Python {
@@ -105,9 +120,15 @@ impl Python {
         unsafe{
             let none = *LIBPYTHON.get(c"_Py_NoneStruct".to_bytes()).unwrap();
             let bytes = NonNull::new(*LIBPYTHON.get(c"PyBytes_Type".to_bytes()).unwrap()).unwrap();
+
+            let state = (PYTHON.PyGILState_Ensure)();
+            let get_exception = _compile_code_cstr(c"__import__('traceback').format_exc()", StartToken::Eval).unwrap();
+            (PYTHON.PyGILState_Release)(state);
+
             Self{
                 none,
                 bytes,
+                get_exception,
             }
         }
     }
@@ -296,32 +317,40 @@ impl<'a> GilHandle<'a> {
         self.compile_code_cstr(&CString::new(code).unwrap(), start)
     }
 
-    pub fn compile_code_cstr(&self, code: &CStr, start: StartToken) -> Option<Object> {
-        unsafe{
-            (PYTHON.PyErr_Clear)();
-            let code = (PYTHON.Py_CompileString)(
-                code.as_ptr(),
-                CString::new("<string>").unwrap().as_ptr(),
-                start as _,
-            );
-            NonNull::new(code)
+    fn get_exception(&self) -> anyhow::Error {
+        let dict = self.empty_dict().unwrap();
+
+        let mut typ: Pointer = null_mut();
+        let mut value: Pointer = null_mut();
+        let mut tb: Pointer = null_mut();
+        unsafe {
+            (PYTHON.PyErr_Fetch)(&mut typ as _, &mut value as _, &mut tb as _);
+            (PYTHON.PyErr_SetExcInfo)(typ, value, tb);
         }
+        let exc = self._exec_code(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
+        anyhow!(self.convert_py_to_bytes(exc).to_owned())
     }
 
-    pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Option<Object> {
+
+    fn _exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Option<Object> {
         unsafe{
             (PYTHON.PyErr_Clear)();
             NonNull::new((PYTHON.PyEval_EvalCode)(code.as_ptr(), globals, locals))
         }
     }
 
-    pub fn exec_cstr(&self, code: &CStr, globals: Pointer, locals: Pointer) {
-        let code = self.compile_code_cstr(code, StartToken::File).unwrap();
-        self.exec_code(code, globals, locals);
+    pub fn compile_code_cstr(&self, code: &CStr, start: StartToken) -> Option<Object> {
+        _compile_code_cstr(code, start)
     }
 
-    pub fn exec(&self, code: &str, globals: Pointer, locals: Pointer) {
-        self.exec_cstr(&CString::new(code).unwrap(), globals, locals)
+    pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Result<Object> {
+        self._exec_code(code, globals, locals).ok_or_else(|| self.get_exception())
+    }
+
+    pub fn exec(&self, code: &CStr, globals: Pointer, locals: Pointer) -> Result<()> {
+        let code = self.compile_code_cstr(code, StartToken::File).unwrap();
+        self.exec_code(code, globals, locals)?;
+        Ok(())
     }
 
     pub fn iter(&self, obj: Object) -> impl Iterator<Item=Object> {

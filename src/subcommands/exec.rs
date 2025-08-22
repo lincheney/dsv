@@ -15,6 +15,12 @@ pub struct CommonOpts {
     var: String,
     #[arg(short = 'b', long, help = "do not auto convert data to int, str etc, treat everything as bytes")]
     bytes: bool,
+    #[arg(short = 'I', long, overrides_with = "remove_errors", help = "do not abort on python errors")]
+    pub ignore_errors: bool,
+    #[arg(short = 'E', long, help = "remove rows on python errors")]
+    pub remove_errors: bool,
+    #[arg(short = 'q', long, help = "do not print errors")]
+    quiet: bool,
 }
 
 #[derive(Parser, Default)]
@@ -57,7 +63,7 @@ impl Handler {
 
         let globals = py.empty_dict().unwrap();
         let locals = py.empty_dict().unwrap();
-        py.exec_cstr(TABLE_SCRIPT, globals.as_ptr(), globals.as_ptr());
+        py.exec(TABLE_SCRIPT, globals.as_ptr(), globals.as_ptr()).unwrap();
 
         let table_cls = py.dict_get_string(globals, c"Table").unwrap();
         let vec_cls = py.dict_get_string(globals, c"Vec").unwrap();
@@ -124,7 +130,7 @@ impl Handler {
         &self,
         rows: I,
         vars: &[(&CStr, python::Object)],
-    ) -> Option<python::Object>
+    ) -> Result<Option<python::Object>>
     where
         T: AsRef<[BString]>,
         I: ExactSizeIterator + Iterator<Item=T>,
@@ -144,13 +150,31 @@ impl Handler {
         py.dict_set(self.locals, self.var_name, table);
 
         if let Some(prelude) = self.prelude {
-            py.exec_code(prelude, self.locals.as_ptr(), self.locals.as_ptr());
+            py.exec_code(prelude, self.locals.as_ptr(), self.locals.as_ptr())?;
         }
         let result = py.exec_code(self.code, self.locals.as_ptr(), self.locals.as_ptr());
-        if self.expr {
-            result
-        } else {
-            py.dict_get(self.locals, self.var_name)
+
+        match result {
+            Ok(result) => {
+                if self.expr {
+                    Ok(Some(result))
+                } else {
+                    Ok(py.dict_get(self.locals, self.var_name))
+                }
+            },
+            Err(e) if !self.opts.common.ignore_errors && !self.opts.common.quiet => {
+                Err(e)
+            }
+            Err(e) => {
+                if ! self.opts.common.quiet {
+                    eprintln!("{e}");
+                }
+                if self.opts.common.remove_errors || (self.opts.common.ignore_errors && self.expr) {
+                    Ok(None)
+                } else {
+                    Ok(py.dict_get(self.locals, self.var_name))
+                }
+            },
         }
     }
 
@@ -186,7 +210,7 @@ impl Handler {
                 }
             } else {
                 py.dict_set(self.locals, py.to_str("X").unwrap(), result);
-                py.exec("raise ValueError(X)", self.locals.as_ptr(), self.locals.as_ptr());
+                py.exec(c"raise ValueError(X)", self.locals.as_ptr(), self.locals.as_ptr()).unwrap();
             }
         }
         Ok(false)
@@ -215,7 +239,7 @@ impl base::Processor for Handler {
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         if self.opts.no_slurp {
             self.count += 1;
-            let result = self.run_python([row].iter(), &[]);
+            let result = self.run_python([row].iter(), &[])?;
             if let Some(result) = result {
                 self.handle_result(base, result)
             } else {
@@ -229,7 +253,7 @@ impl base::Processor for Handler {
 
     fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         if !self.opts.no_slurp {
-            let result = self.run_python(self.rows.iter(), &[]);
+            let result = self.run_python(self.rows.iter(), &[])?;
             if let Some(result) = result && self.handle_result(base, result)? {
                 return Ok(true)
             }

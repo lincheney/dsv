@@ -107,7 +107,7 @@ impl base::Processor for Handler {
             }
             drop(py);
 
-            let result = self.inner.run_python(group.iter(), &[(c"current_key", current_key)]);
+            let result = self.inner.run_python(group.iter(), &[(c"current_key", current_key)])?;
             let py = self.inner.py.acquire_gil();
             let result = if self.inner.expr && let Some(result) = result {
                 py.dict_clear(self.inner.locals);
@@ -115,7 +115,7 @@ impl base::Processor for Handler {
                 py.dict_set_string(self.inner.locals, c"default_key", self.default_key);
                 py.dict_set_string(self.inner.locals, c"current_key", current_key);
 
-                py.exec_code(self.postprocess, self.inner.globals.as_ptr(), self.inner.locals.as_ptr());
+                py.exec_code(self.postprocess, self.inner.globals.as_ptr(), self.inner.locals.as_ptr())?;
                 py.dict_get_string(self.inner.locals, c"result")
             } else {
                 result
