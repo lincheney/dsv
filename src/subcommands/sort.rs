@@ -1,3 +1,4 @@
+use anyhow::{Result, Context, anyhow};
 use crate::base;
 use bstr::{BString, ByteSlice};
 use crate::column_slicer::ColumnSlicer;
@@ -71,12 +72,12 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);
         base.on_header(header)
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
         let key = crate::writer::format_columns(key, &self.ofs, (&[ORS]).into(), true).0;
         // add row index as first column
@@ -85,14 +86,14 @@ impl base::Processor for Handler {
         let mut key = bstr::join(self.ofs.as_bstr(), key);
         key.push(ORS);
 
-        let proc = self.start_proc();
-        proc.stdin.write_all(&key).unwrap();
+        let proc = self.start_proc()?;
+        proc.stdin.write_all(&key)?;
 
         self.rows.push(Some(row));
-        false
+        Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         if let Some(mut proc) = self.proc.take() {
             drop(proc.stdin.into_inner());
 
@@ -100,27 +101,30 @@ impl base::Processor for Handler {
 
             let ofs = self.ofs.as_bstr();
             let mut buf = vec![];
-            while proc.stdout.read_until(ORS, &mut buf).unwrap() > 0 {
+            while proc.stdout.read_until(ORS, &mut buf)? > 0 {
                 if buf.ends_with(&[ORS]) {
                     buf.pop();
                 }
                 let index = buf.split_str(ofs).next().unwrap();
-                let index: usize = std::str::from_utf8(index).unwrap().parse().unwrap();
-                let row = self.rows[index].take().unwrap();
-                if base.on_row(row) {
+                let index: usize = std::str::from_utf8(index)?.parse()?;
+                let row = self.rows[index].take().ok_or(anyhow!("duplicated row"))?;
+                if base.on_row(row)? {
                     break
                 }
                 buf.clear();
             }
-            proc.child.wait().unwrap();
+            proc.child.wait()?;
         }
         base.on_eof()
     }
 }
 
 impl Handler {
-    fn start_proc(&mut self) -> &mut Proc {
-        self.proc.get_or_insert_with(|| {
+    fn start_proc(&mut self) -> Result<&mut Proc> {
+        let proc = &mut self.proc;
+        if let Some(proc) = proc {
+            Ok(proc)
+        } else {
             let mut cmd = Command::new("sort");
             cmd.args(["-z", "-k2"]);
             if self.opts.ignore_leading_blanks { cmd.arg("--ignore-leading-blanks"); }
@@ -135,10 +139,10 @@ impl Handler {
             if self.opts.reverse { cmd.arg("--reverse"); }
             if self.opts.version_sort { cmd.arg("--version-sort"); }
 
-            let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().expect("failed to start sort");
+            let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().context("failed to start sort")?;
             let stdin = BufWriter::new(child.stdin.take().unwrap());
             let stdout = BufReader::new(child.stdout.take().unwrap());
-            Proc { child, stdin, stdout }
-        })
+            Ok(proc.insert(Proc { child, stdin, stdout }))
+        }
     }
 }

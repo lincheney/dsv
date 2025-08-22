@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::{BString};
 use clap::{Parser};
@@ -20,14 +21,14 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         self.rows.push(row);
-        false
+        Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         for row in self.rows.drain(..).rev() {
-            if base.on_row(row) {
+            if base.on_row(row)? {
                 break
             }
         }

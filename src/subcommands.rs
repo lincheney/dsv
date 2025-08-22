@@ -79,7 +79,7 @@ macro_rules! add_subcommands {
                 }
             }
 
-            pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) {
+            pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) -> Result<()> {
                 match self {
                     $( Self::$name(handler) => handler.forward_messages(base, receiver), )*
                 }

@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::{BString};
 use std::collections::{HashMap, hash_map::Entry};
@@ -42,7 +43,7 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);
         if let Some(count_column) = &self.opts.count_column {
             header.insert(0, count_column.as_bytes().into());
@@ -50,7 +51,7 @@ impl base::Processor for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
         match self.groups.entry(key) {
             Entry::Occupied(mut entry) => {
@@ -70,10 +71,10 @@ impl base::Processor for Handler {
                 }
             },
         }
-        false
+        Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         if self.opts.group {
             let mut first = true;
             'outer: for (_count, rows) in self.groups.values_mut() {
@@ -82,7 +83,7 @@ impl base::Processor for Handler {
                 }
                 first = false;
                 for row in rows.drain(..) {
-                    if base.on_row(row) {
+                    if base.on_row(row)? {
                         break 'outer
                     }
                 }
@@ -92,7 +93,7 @@ impl base::Processor for Handler {
             for (count, rows) in self.groups.values_mut() {
                 let mut row = rows.swap_remove(0);
                 row.insert(0, format!("{count}").into());
-                if base.on_row(row) {
+                if base.on_row(row)? {
                     break
                 }
             }

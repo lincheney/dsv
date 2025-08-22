@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use super::grep;
 use bstr::{BString};
@@ -35,11 +36,11 @@ impl base::Processor for Handler {
         self.inner.process_opts(opts, is_tty)
     }
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.inner.on_header(base, header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         self.inner.on_row(base, row)
     }
 }

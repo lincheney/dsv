@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::{BString, ByteVec};
 use clap::{Parser};
@@ -43,12 +44,12 @@ impl base::Processor for Handler {
         self.colour = opts.colour == base::AutoChoices::Always;
     }
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.inner.process_header(&header);
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
         self.inner.count += 1;
         let result = self.inner.run_python([&row].iter(), &[]);
         let result = if let Some(mut result) = result {
@@ -75,9 +76,9 @@ impl base::Processor for Handler {
         }
 
         if result || self.passthru {
-            base.on_row(row);
+            base.on_row(row)?;
         }
-        false
+        Ok(false)
     }
 
 }

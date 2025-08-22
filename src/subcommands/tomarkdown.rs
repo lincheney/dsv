@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use crate::writer::{Writer, BaseWriter};
 use once_cell::sync::Lazy;
@@ -39,7 +40,7 @@ impl base::Processor<MarkdownWriter> for Handler {
         opts.drop_header = false;
     }
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
         if self.drop_header {
             for h in header.iter_mut() {
@@ -49,9 +50,9 @@ impl base::Processor<MarkdownWriter> for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
-        if !self.got_header && self.on_header(base, (0..row.len()).map(|_| b"".into()).collect()) {
-            false
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+        if !self.got_header && self.on_header(base, (0..row.len()).map(|_| b"".into()).collect())? {
+            Ok(false)
         } else {
             base.on_row(row)
         }
@@ -123,7 +124,7 @@ impl Writer for MarkdownWriter {
         padding: Option<&Vec<usize>>,
         opts: &base::BaseOptions,
         ofs: &base::Ofs,
-    ) {
+    ) -> Result<()> {
         // write the separator
         let sep: Vec<_> = if let Some(padding) = padding {
             padding.iter().chain(std::iter::repeat(&0))
@@ -142,8 +143,8 @@ impl Writer for MarkdownWriter {
         } else {
             (0..header.0.len()).map(|_| b"---".into()).collect()
         };
-        self.write_output(header.0, padding, true, opts, ofs);
-        self.write_output(sep, None, false, opts, ofs);
+        self.write_output(header.0, padding, true, opts, ofs)?;
+        self.write_output(sep, None, false, opts, ofs)
     }
 
 }

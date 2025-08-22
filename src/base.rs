@@ -200,7 +200,7 @@ pub trait Processor<W: Writer=BaseWriter> {
                 Output::<W>::new(opts).run(receiver)
             });
 
-            if self.on_start(&mut base) {
+            if self.on_start(&mut base)? {
                 Ok(ExitCode::SUCCESS)
             } else {
                 self.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
@@ -365,10 +365,10 @@ pub trait Processor<W: Writer=BaseWriter> {
                 if is_header {
                     let header = row.clone();
                     base.header = Some(row);
-                    if do_callbacks.contains(Callbacks::ON_HEADER) && self.on_header(base, header) {
+                    if do_callbacks.contains(Callbacks::ON_HEADER) && self.on_header(base, header)? {
                         break
                     }
-                } else if do_callbacks.contains(Callbacks::ON_ROW) && self.on_row(base, row) {
+                } else if do_callbacks.contains(Callbacks::ON_ROW) && self.on_row(base, row)? {
                     break
                 }
 
@@ -385,24 +385,25 @@ pub trait Processor<W: Writer=BaseWriter> {
         }
 
         if do_callbacks.contains(Callbacks::ON_EOF) {
-            self.on_eof(base);
+            self.on_eof(base)?;
         }
 
         Ok(ExitCode::SUCCESS)
     }
 
-    fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) where Self: Sized {
-        self.on_start(base);
+    fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<()> where Self: Sized {
+        self.on_start(base)?;
         for msg in receiver.iter() {
             match msg {
-                Message::Row(row) => if self.on_row(base, row) { break },
-                Message::Header(header) => if self.on_header(base, header) { break },
-                Message::Eof => if self.on_eof(base) { break },
+                Message::Row(row) => if self.on_row(base, row)? { break },
+                Message::Header(header) => if self.on_header(base, header)? { break },
+                Message::Eof => if self.on_eof(base)? { break },
                 Message::Separator => (), // do nothing
                 Message::Raw(value) => if base.write_raw(value) { break },
                 Message::Ofs(ofs) => if self.on_ofs(base, ofs) { break },
             };
         }
+        Ok(())
     }
 
     fn _process_opts(&mut self, opts: &mut BaseOptions, is_tty: bool) {
@@ -417,19 +418,19 @@ pub trait Processor<W: Writer=BaseWriter> {
         base.parse_line(line, row, quote)
     }
 
-    fn on_start(&mut self, _base: &mut Base) -> bool {
-        false
+    fn on_start(&mut self, _base: &mut Base) -> Result<bool> {
+        Ok(false)
     }
 
-    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<bool> {
         base.on_header(header)
     }
 
-    fn on_eof(&mut self, base: &mut Base) -> bool {
+    fn on_eof(&mut self, base: &mut Base) -> Result<bool> {
         base.on_eof()
     }
 
@@ -570,20 +571,20 @@ impl<'a, 'b> Base<'a, 'b> {
         (value, None)
     }
 
-    pub fn on_eof(&self) -> bool {
-        self.sender.send(Message::Eof).is_err()
+    pub fn on_eof(&self) -> Result<bool> {
+        Ok(self.sender.send(Message::Eof).is_err())
     }
 
     pub fn on_separator(&self) -> bool {
         self.sender.send(Message::Separator).is_err()
     }
 
-    pub fn on_row(&self, row: Vec<BString>) -> bool {
-        self.sender.send(Message::Row(row)).is_err()
+    pub fn on_row(&self, row: Vec<BString>) -> Result<bool> {
+        Ok(self.sender.send(Message::Row(row)).is_err())
     }
 
-    pub fn on_header(&self, header: Vec<BString>) -> bool {
-        self.sender.send(Message::Header(header)).is_err()
+    pub fn on_header(&self, header: Vec<BString>) -> Result<bool> {
+        Ok(self.sender.send(Message::Header(header)).is_err())
     }
 
     pub fn write_raw(&self, value: BString) -> bool {
@@ -650,7 +651,7 @@ impl<W: Writer> Output<W> {
     }
 
 
-    fn on_eof(&mut self) -> bool {
+    fn on_eof(&mut self) -> Result<bool> {
         let mut header_padding = None;
         let header = self.gathered_header.clone();
 
@@ -660,36 +661,36 @@ impl<W: Writer> Output<W> {
             let padding = if let Some(header) = self.gathered_header.take() {
                 let (first, new_padding) = padding.split_first().unwrap();
                 header_padding = Some(first.clone());
-                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
+                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs)?;
                 new_padding
             } else {
                 &padding[..]
             };
 
             for (p, row) in padding.iter().zip(self.gathered_rows.drain(..)) {
-                self.writer.write_row(row, Some(p), &self.opts, &self.ofs);
+                self.writer.write_row(row, Some(p), &self.opts, &self.ofs)?;
             }
         }
 
         if let Some(header) = header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
-            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs);
+            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs)?;
         }
-        true
+        Ok(true)
     }
 
-    fn on_separator(&mut self) -> bool {
+    fn on_separator(&mut self) -> Result<bool> {
         self.row_count += 1;
 
         if matches!(self.ofs, Ofs::Pretty) {
             self.gathered_rows.push(GatheredRow::Separator);
         } else {
-            self.writer.write_row(GatheredRow::Separator, None, &self.opts, &self.ofs);
+            self.writer.write_row(GatheredRow::Separator, None, &self.opts, &self.ofs)?;
         }
 
-        false
+        Ok(false)
     }
 
-    fn on_row(&mut self, row: Vec<BString>, is_header: bool) -> bool {
+    fn on_row(&mut self, row: Vec<BString>, is_header: bool) -> Result<bool> {
         if self.col_count.is_none() {
             self.col_count = Some(row.len());
         }
@@ -706,18 +707,18 @@ impl<W: Writer> Output<W> {
             },
             _ => if is_header {
                 self.gathered_header = Some(row.clone());
-                self.writer.write_header(row, None, &self.opts, &self.ofs);
+                self.writer.write_header(row, None, &self.opts, &self.ofs)?;
             } else {
-                self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs);
+                self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs)?;
             },
         }
 
-        false
+        Ok(false)
     }
 
-    fn on_header(&mut self, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, mut header: Vec<BString>) -> Result<bool> {
         if self.opts.drop_header {
-            false
+            Ok(false)
         } else {
             if self.opts.numbered_columns == AutoChoices::Always {
                 for (i, col) in header.iter_mut().enumerate() {
@@ -731,9 +732,9 @@ impl<W: Writer> Output<W> {
         }
     }
 
-    fn on_raw(&mut self, value: BString) -> bool {
-        self.writer.write_raw(value.as_ref(), &self.opts, false);
-        false
+    fn on_raw(&mut self, value: BString) -> Result<bool> {
+        self.writer.write_raw(value.as_ref(), &self.opts, false)?;
+        Ok(false)
     }
 
     fn on_ofs(&mut self, ofs: Ofs) -> bool {
@@ -741,17 +742,18 @@ impl<W: Writer> Output<W> {
         false
     }
 
-    fn run(&mut self, receiver: Receiver<Message>) {
+    fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
         for msg in receiver.iter() {
             match msg {
-                Message::Row(row) => if self.on_row(row, false) { break },
-                Message::Header(header) => if self.on_header(header) { break },
-                Message::Eof => if self.on_eof() { break },
-                Message::Separator => if self.on_separator() { break },
-                Message::Raw(value) => if self.on_raw(value) { break },
+                Message::Row(row) => if self.on_row(row, false)? { break },
+                Message::Header(header) => if self.on_header(header)? { break },
+                Message::Eof => if self.on_eof()? { break },
+                Message::Separator => if self.on_separator()? { break },
+                Message::Raw(value) => if self.on_raw(value)? { break },
                 Message::Ofs(ofs) => if self.on_ofs(ofs) { break },
             };
         }
+        Ok(())
     }
 
 }

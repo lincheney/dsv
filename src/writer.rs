@@ -2,7 +2,7 @@ use crate::base::*;
 use std::io::{Write, BufWriter};
 use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{Command, Stdio};
-use anyhow::Result;
+use anyhow::{Result, Context};
 use colorutils_rs::Hsv;
 
 fn get_rgb(i: usize, step: f32) -> BString {
@@ -76,10 +76,11 @@ pub trait Writer {
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
-    ) {
+    ) -> Result<()> {
         if !opts.drop_header {
-            self.write_output(header.0, padding, true, opts, ofs);
+            self.write_output(header.0, padding, true, opts, ofs)?;
         }
+        Ok(())
     }
 
     fn write_row(
@@ -88,14 +89,14 @@ pub trait Writer {
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
-    ) {
+    ) -> Result<()> {
         match row {
             GatheredRow::Row(row) => self.write_output(row.0, padding, false, opts, ofs),
             GatheredRow::Separator => self.write_separator(padding, opts),
         }
     }
 
-    fn write_separator(&mut self, _padding: Option<&Vec<usize>>, opts: &BaseOptions) {
+    fn write_separator(&mut self, _padding: Option<&Vec<usize>>, opts: &BaseOptions) -> Result<()> {
         let mut sep: BString;
         let sep = if opts.colour == AutoChoices::Always {
             let width = termsize::get().map(|size| size.cols).unwrap_or(80) as usize;
@@ -107,11 +108,11 @@ pub trait Writer {
             b"---"
         };
 
-        self.write_raw(sep.into(), opts, false);
+        self.write_raw(sep.into(), opts, false)
     }
 
-    fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) {
-        self.write_raw_with(opts, is_header, |file| Ok(file.write_all(string)?));
+    fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) -> Result<()> {
+        self.write_raw_with(opts, is_header, |file| Ok(file.write_all(string)?))
     }
 
     fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<()>>(
@@ -119,11 +120,12 @@ pub trait Writer {
         opts: &BaseOptions,
         is_header: bool,
         func: F,
-    ) {
+    ) -> Result<()> {
         let (file, ors) = self.get_file(opts, is_header);
-        func(file).expect("Failed to write row");
-        file.write_all(ors).expect("Failed to write row separator");
-        file.flush().expect("Failed to flush output");
+        func(file).context("Failed to write row")?;
+        file.write_all(ors).context("Failed to write row separator")?;
+        file.flush().context("Failed to flush output")?;
+        Ok(())
     }
 
     fn write_output(
@@ -133,9 +135,9 @@ pub trait Writer {
         is_header: bool,
         opts: &BaseOptions,
         ofs: &Ofs,
-    ) {
+    ) -> Result<()> {
         let formatted_row = self.format_row(row, padding, is_header, opts, ofs);
-        self.write_raw(formatted_row.as_ref(), opts, is_header);
+        self.write_raw(formatted_row.as_ref(), opts, is_header)
     }
 
     fn format_row(

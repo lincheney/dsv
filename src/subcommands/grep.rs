@@ -1,3 +1,4 @@
+use anyhow::{Result, Context};
 use std::collections::{VecDeque, HashSet};
 use std::io::{BufReader, BufRead};
 use crate::base;
@@ -71,37 +72,6 @@ pub struct Handler {
 
 impl Handler {
     pub fn new(mut opts: Opts) -> Self {
-        let patterns = std::mem::take(&mut opts.patterns);
-        let pattern = patterns.into_iter()
-            .chain(
-                opts.common.file.iter()
-                    .flat_map(|file| {
-                        let file = std::fs::File::open(file).unwrap();
-                        let file = BufReader::new(file);
-                        file.lines().map(|l| l.unwrap())
-                    })
-            ).map(|pat| {
-                if opts.common.fixed_strings {
-                    regex::escape(&pat)
-                } else {
-                    pat
-                }
-            }).collect::<Vec<_>>().join("|");
-        opts.common.case_sensitive = opts.common.case_sensitive || pattern.chars().any(|c| c.is_ascii_uppercase());
-
-        // field overrides word
-        let pattern = if opts.common.field_regexp {
-            format!("^({pattern})$")
-        } else if opts.common.word_regexp {
-            format!("\\b({pattern})\\b")
-        } else {
-            format!("({pattern})")
-        };
-        let pattern = RegexBuilder::new(&pattern)
-            .case_insensitive(!opts.common.case_sensitive)
-            .build()
-            .unwrap();
-
         if opts.passthru {
             opts.before_context = None;
             opts.after_context = None;
@@ -120,7 +90,7 @@ impl Handler {
             row_num: 0,
             last_matched: None,
             matched_count: 0,
-            pattern,
+            pattern: Regex::new("").unwrap(),
             replace: None,
             column_slicer,
             allowed_fields: (HashSet::new(), 0),
@@ -144,19 +114,52 @@ impl base::Processor for Handler {
         }
     }
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_start(&mut self, _base: &mut base::Base) -> Result<bool> {
+        let mut patterns = std::mem::take(&mut self.opts.patterns);
+        for file in &self.opts.common.file {
+            let file = std::fs::File::open(file).with_context(|| format!("failed to open {file}"))?;
+            let file = BufReader::new(file);
+            for line in file.lines() {
+                patterns.push(line?);
+            }
+        }
+
+        if self.opts.common.fixed_strings {
+            for pat in patterns.iter_mut() {
+                *pat = regex::escape(pat);
+            }
+        }
+        let pattern = patterns.join("|");
+
+        self.opts.common.case_sensitive = self.opts.common.case_sensitive || pattern.chars().any(|c| c.is_ascii_uppercase());
+
+        // field overrides word
+        let pattern = if self.opts.common.field_regexp {
+            format!("^({pattern})$")
+        } else if self.opts.common.word_regexp {
+            format!("\\b({pattern})\\b")
+        } else {
+            format!("({pattern})")
+        };
+        self.pattern = RegexBuilder::new(&pattern)
+            .case_insensitive(!self.opts.common.case_sensitive)
+            .build()?;
+        Ok(false)
+    }
+
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);
         if self.opts.line_number {
             header.insert(0, b"n".into());
         }
         if self.opts.count {
-            false
+            Ok(false)
         } else {
             base.on_header(header)
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         let result = base.on_eof();
         if self.opts.count {
             let output: BString = format!("{}", self.matched_count).into();
@@ -166,7 +169,7 @@ impl base::Processor for Handler {
     }
 
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
         self.row_num += 1;
 
         let matched = self.grep(&mut row);
@@ -188,8 +191,8 @@ impl base::Processor for Handler {
                         if self.opts.line_number {
                             r.insert(0, format!("{i}").into());
                         }
-                        if base.on_row(r) {
-                            return true
+                        if base.on_row(r)? {
+                            return Ok(true)
                         }
                     }
                 }
@@ -200,8 +203,8 @@ impl base::Processor for Handler {
                 if self.opts.line_number {
                     row.insert(0, format!("{}", self.row_num).into());
                 }
-                if base.on_row(row) {
-                    return true
+                if base.on_row(row)? {
+                    return Ok(true)
                 }
             } else {
                 if let Some(before) = &mut self.before {
@@ -211,12 +214,12 @@ impl base::Processor for Handler {
                     }
                     before.push_back(row);
                 }
-                return false
+                return Ok(false)
             }
         }
 
         // quit if reached max count
-        self.matched_count >= self.opts.common.max_count && self.last_matched.is_some_and(|lm| lm + self.after <= self.row_num)
+        Ok(self.matched_count >= self.opts.common.max_count && self.last_matched.is_some_and(|lm| lm + self.after <= self.row_num))
     }
 }
 

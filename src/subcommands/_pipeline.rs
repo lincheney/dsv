@@ -1,3 +1,4 @@
+use anyhow::Result;
 use std::sync::mpsc;
 use crate::base::*;
 use clap::{Parser, Subcommand};
@@ -37,7 +38,7 @@ impl Processor for Handler {
         self.is_tty = is_tty;
     }
 
-    fn on_start(&mut self, base: &mut Base) -> bool {
+    fn on_start(&mut self, base: &mut Base) -> Result<bool> {
         let mut new_base;
         let args = std::mem::take(&mut self.args);
         let mut copied_opts = false;
@@ -58,6 +59,6 @@ impl Processor for Handler {
                 handler.forward_messages(&mut new_base, receiver)
             });
         }
-        false
+        Ok(false)
     }
 }

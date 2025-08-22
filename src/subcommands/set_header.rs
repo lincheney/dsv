@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::{BString};
 use clap::{Parser, ArgAction};
@@ -31,7 +32,7 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         if !self.got_header {
             let header = if self.opts.auto {
                 (0..row.len()).map(|i| format!("col{i}").into()).collect()
@@ -39,15 +40,15 @@ impl base::Processor for Handler {
             } else {
                 vec![]
             };
-            if base.on_header(header) {
-                return true
+            if base.on_header(header)? {
+                return Ok(true)
             }
         }
 
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
 
         for [old, new] in self.opts.rename.as_chunks::<2>().0.iter() {
@@ -78,7 +79,7 @@ impl base::Processor for Handler {
         }
 
         if header.is_empty() {
-            false
+            Ok(false)
         } else {
             base.on_header(header)
         }

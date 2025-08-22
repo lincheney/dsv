@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::BString;
 use crate::column_slicer::ColumnSlicer;
@@ -33,13 +34,13 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);
         let header = self.column_slicer.slice(&header, self.complement, true);
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         let row = self.column_slicer.slice(&row, self.complement, true);
         base.on_row(row)
     }

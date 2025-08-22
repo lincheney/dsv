@@ -1,10 +1,10 @@
+use anyhow::Result;
 use crate::base;
 use bstr::{BString, BStr};
 use clap::{Parser};
 use std::ptr::{NonNull, null_mut};
 use std::ffi::{c_void, CString, CStr};
 use libloading::os::unix::{Library, Symbol, RTLD_GLOBAL, RTLD_LAZY};
-use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::os::raw::c_char;
 
@@ -490,7 +490,7 @@ impl Handler {
         }
     }
 
-    pub fn handle_result(&mut self, base: &mut base::Base, result: PyObject) -> bool {
+    pub fn handle_result(&mut self, base: &mut base::Base, result: PyObject) -> Result<bool> {
         let py = self.py.acquire_gil();
 
         if !py.is_none(result) {
@@ -501,8 +501,8 @@ impl Handler {
                 if !self.got_header && !py.is_none(header) {
                     self.got_header = true;
                     let header = py.iter(header).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
-                    if base.on_header(header) {
-                        return true
+                    if base.on_header(header)? {
+                        return Ok(true)
                     }
                 }
 
@@ -510,22 +510,22 @@ impl Handler {
                 if !py.is_none(rows) {
                     for row in py.iter(rows) {
                         let row = py.iter(row).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
-                        if base.on_row(row) {
-                            return true
+                        if base.on_row(row)? {
+                            return Ok(true)
                         }
                     }
                 }
             } else if self.expr {
                 let bytes = py.convert_py_to_bytes(result);
                 if base.write_raw(bytes.to_owned()) {
-                    return true
+                    return Ok(true)
                 }
             } else {
                 py.dict_set(self.locals, py.to_str("X").unwrap(), result);
                 py.exec("raise ValueError(X)", self.locals.as_ptr(), self.locals.as_ptr());
             }
         }
-        false
+        Ok(false)
     }
 
     pub fn process_header(&mut self, header: &[BString]) {
@@ -543,31 +543,31 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.process_header(&header);
-        false
+        Ok(false)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         if self.opts.no_slurp {
             self.count += 1;
             let result = self.run_python([row].iter(), &[]);
             if let Some(result) = result {
                 self.handle_result(base, result)
             } else {
-                false
+                Ok(false)
             }
         } else {
             self.rows.push(row);
-            false
+            Ok(false)
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         if !self.opts.no_slurp {
             let result = self.run_python(self.rows.iter(), &[]);
-            if let Some(result) = result && self.handle_result(base, result) {
-                return true
+            if let Some(result) = result && self.handle_result(base, result)? {
+                return Ok(true)
             }
         }
         base.on_eof()

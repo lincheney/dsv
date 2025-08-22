@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::{BString};
 use std::collections::{HashMap, hash_map::Entry};
@@ -71,23 +72,23 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);
         self.inner.process_header(&header);
         self.header = Some(header);
-        false
+        Ok(false)
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
         match self.groups.entry(key) {
             Entry::Occupied(mut entry) => { entry.get_mut().push(row); },
             Entry::Vacant(entry) => { entry.insert(vec![row]); },
         }
-        false
+        Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
         let mut header: Option<Vec<_>> = None;
         for (key, group) in self.groups.iter() {
             let py = self.inner.py.acquire_gil();
@@ -121,8 +122,8 @@ impl base::Processor for Handler {
             drop(py);
 
             if let Some(result) = result {
-                if self.inner.handle_result(base, result) {
-                    return true
+                if self.inner.handle_result(base, result)? {
+                    return Ok(true)
                 }
             }
         }

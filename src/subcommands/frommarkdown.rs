@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use once_cell::sync::Lazy;
 use regex::bytes::Regex;
@@ -34,16 +35,16 @@ impl base::Processor for Handler {
         opts.irs = Some("\n".into());
     }
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> bool {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.just_got_header = true;
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         if self.just_got_header {
             self.just_got_header = false;
             if row.iter().all(|r| SEPARATOR.is_match(r)) {
-                return false
+                return Ok(false)
             }
         }
 

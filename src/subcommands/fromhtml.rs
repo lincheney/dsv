@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use std::ops::Deref;
 use std::io::BufRead;
@@ -51,7 +52,7 @@ fn add_rowspan(rowspans: &mut Rowspans, column: usize, span: usize, value: BStri
 
 impl base::Processor for Handler {
 
-    fn process_file<R: BufRead>(&mut self, file: R, base: &mut base::Base, do_callbacks: base::Callbacks) -> anyhow::Result<ExitCode> {
+    fn process_file<R: BufRead>(&mut self, file: R, base: &mut base::Base, do_callbacks: base::Callbacks) -> Result<ExitCode> {
 
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
         if base.on_ofs(ofs) {
@@ -73,7 +74,7 @@ impl base::Processor for Handler {
 
         loop {
             buffer.clear();
-            match reader.read_event_into(&mut buffer).unwrap() {
+            match reader.read_event_into(&mut buffer)? {
                 Event::Start(tag) => {
                     if matches!(state.last().map(|x| x.as_slice()), Some(b"td" | b"th")) {
                         if self.opts.inner_html && let Some(last) = current_row.last_mut() {
@@ -106,7 +107,7 @@ impl base::Processor for Handler {
                                     // new column
                                     current_row.push(b"".into());
                                     for attr in tag.html_attributes().with_checks(false) {
-                                        let attr = attr.unwrap();
+                                        let attr = attr?;
                                         if attr.key.0 == b"rowspan" {
                                             if let Ok(Ok(span)) = std::str::from_utf8(&attr.value).map(|x| x.parse::<usize>()) && span > 0 {
                                                 add_rowspan(&mut rowspans, current_row.len(), span, b"".into());
@@ -155,9 +156,9 @@ impl base::Processor for Handler {
                         if had_thead && got_header {
                             // print('got duplicate html table header', file=sys.stderr)
                         } else if had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {
-                            self.on_header(base, current_row.clone());
+                            self.on_header(base, current_row.clone())?;
                         } else if !had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {
-                            self.on_row(base, current_row.clone());
+                            self.on_row(base, current_row.clone())?;
                         }
                         got_header = had_thead;
                     }
@@ -178,7 +179,7 @@ impl base::Processor for Handler {
             }
         }
         if do_callbacks.contains(base::Callbacks::ON_EOF) {
-            self.on_eof(base);
+            self.on_eof(base)?;
         }
         Ok(ExitCode::SUCCESS)
     }

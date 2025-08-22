@@ -1,3 +1,4 @@
+use anyhow::{Result, Context};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::{self, Processor, Ofs};
 use bstr::{BString, BStr, ByteVec};
@@ -27,6 +28,7 @@ struct Proc {
     child: Child,
     stdin: BufWriter<ChildStdin>,
     sender: Sender<Vec<BString>>,
+    err_receiver: Receiver<Result<()>>,
 }
 
 pub struct Handler {
@@ -55,13 +57,17 @@ impl Handler {
 }
 
 impl Handler {
-    fn start_proc(&mut self, base: &base::Base) -> &mut Proc {
-        self.proc.get_or_insert_with(|| {
+    fn start_proc(&mut self, base: &base::Base) -> Result<&mut Proc> {
+        let proc = &mut self.proc;
+        if let Some(proc) = proc {
+            Ok(proc)
+        } else {
             let (sender, receiver) = mpsc::channel();
+            let (err_sender, err_receiver) = mpsc::channel();
 
             let mut cmd = Command::new(&self.opts.command[0]);
             cmd.args(&self.opts.command[1..]);
-            let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().expect("failed to start process");
+            let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().context("failed to start process")?;
             let stdin = BufWriter::new(child.stdin.take().unwrap());
             let stdout = BufReader::new(child.stdout.take().unwrap());
 
@@ -70,6 +76,7 @@ impl Handler {
                 Ofs::Pretty => cli_opts.pretty = true,
                 Ofs::Plain(ofs) => cli_opts.ofs = Some(ofs.to_string()),
             }
+            cli_opts.header = Some(false);
             let mut handler = PipeHandler{
                 receiver,
                 column_slicer: self.column_slicer.clone(),
@@ -81,16 +88,25 @@ impl Handler {
             let mut base = base.clone();
 
             base.scope.spawn(move || {
-                cli_opts.header = Some(false);
-                if base.on_header(header) {
-                    base.on_eof();
-                    return
-                }
-                handler.process_file(stdout, &mut base, base::Callbacks::all()).unwrap();
+                let result = (|| {
+                    cli_opts.header = Some(false);
+                    if base.on_header(header)? {
+                        base.on_eof()?;
+                    } else {
+                        handler.process_file(stdout, &mut base, base::Callbacks::all())?;
+                    }
+                    Ok(())
+                })();
+                err_sender.send(result).unwrap();
             });
 
-            Proc { child, stdin, sender }
-        })
+            Ok(proc.insert(Proc {
+                err_receiver,
+                child,
+                stdin,
+                sender,
+            }))
+        }
     }
 }
 
@@ -101,16 +117,16 @@ impl base::Processor for Handler {
         base.on_ofs(ofs)
     }
 
-    fn on_header(&mut self, _base: &mut base::Base, mut header: Vec<BString>) -> bool {
+    fn on_header(&mut self, _base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         if let Some(slicer) = &mut self.column_slicer {
             slicer.make_header_map(&header);
         }
         header.extend(self.opts.append_columns.iter().map(|x| x.as_bytes().into()));
         self.header = header;
-        false
+        Ok(false)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         let input = self.column_slicer.as_ref().map(|s| s.slice(&row, self.opts.complement, true));
         let ors = base.opts.get_ors();
         let ofs: &BStr = match &self.ofs {
@@ -120,17 +136,26 @@ impl base::Processor for Handler {
         let mut input: BString = bstr::join(ofs, input.as_ref().unwrap_or(&row)).into();
         input.push_str(ors);
 
-        let proc = self.start_proc(base);
-        proc.stdin.write_all(&input).unwrap();
-        proc.sender.send(row).unwrap();
-        false
+        let proc = self.start_proc(base)?;
+        proc.stdin.write_all(&input)?;
+        Ok(proc.sender.send(row).is_err())
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> bool {
-        if let Some(Proc{mut child, stdin, sender}) = self.proc.take() {
+    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
+        if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc.take() {
+            let result1 = err_receiver.recv().unwrap();
+
             drop(sender);
             drop(stdin);
-            child.wait().unwrap();
+            drop(err_receiver);
+            let result2 = child.wait();
+
+            match (result1, result2) {
+                (Ok(_), Ok(_)) => (),
+                (r1, Ok(_)) => { r1?; },
+                (Ok(_), r2) => { r2?; },
+                (r1, Err(r)) => { r1.context(r)?; },
+            }
         }
         base.on_eof()
     }
@@ -146,7 +171,7 @@ struct PipeHandler {
 
 impl base::Processor for PipeHandler {
     // no headers
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
         let mut input = self.receiver.recv().unwrap();
         if self.append {
             if self.header_len > input.len() {

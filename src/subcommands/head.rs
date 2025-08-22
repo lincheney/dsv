@@ -1,3 +1,4 @@
+use anyhow::Result;
 use crate::base;
 use bstr::BString;
 use clap::Parser;
@@ -28,21 +29,21 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> bool {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         if let Some(ring) = self.ring.as_mut() {
             // print except for last n lines
-            if ring.len() >= self.lines && let Some(row) = ring.pop_front() && base.on_row(row) {
-                true
+            if ring.len() >= self.lines && let Some(row) = ring.pop_front() && base.on_row(row)? {
+                Ok(true)
             } else {
                 ring.push_back(row);
-                false
+                Ok(false)
             }
 
-        } else if self.lines == 0 || base.on_row(row) {
-            true
+        } else if self.lines == 0 || base.on_row(row)? {
+            Ok(true)
         } else {
             self.count += 1;
-            self.count >= self.lines
+            Ok(self.count >= self.lines)
         }
     }
 }
