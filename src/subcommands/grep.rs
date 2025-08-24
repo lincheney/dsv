@@ -71,7 +71,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Self {
+    pub fn new(mut opts: Opts) -> Result<Self> {
         if opts.passthru {
             opts.before_context = None;
             opts.after_context = None;
@@ -83,7 +83,7 @@ impl Handler {
         let before = before.map(|b| VecDeque::with_capacity(b));
         let column_slicer = crate::column_slicer::ColumnSlicer::new(&opts.common.fields, opts.common.regex);
 
-        Self {
+        Ok(Self {
             opts,
             before,
             after,
@@ -94,7 +94,7 @@ impl Handler {
             replace: None,
             column_slicer,
             allowed_fields: (HashSet::new(), 0),
-        }
+        })
     }
 }
 

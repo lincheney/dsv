@@ -29,12 +29,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
-        Self {
+    pub fn new(opts: Opts) -> Result<Self> {
+        Ok(Self {
             proc: None,
             got_header: false,
             opts,
-        }
+        })
     }
 }
 
@@ -63,7 +63,7 @@ impl base::Processor for Handler {
             drop(proc.stdin.into_inner());
             base.ifs = base::Ifs::Plain(DELIM.into());
 
-            let mut cat = super::cat::Handler::new(std::default::Default::default());
+            let mut cat = super::cat::Handler::new(std::default::Default::default())?;
             let _ = cat.process_file(proc.stdout, base, base::Callbacks::all());
 
             proc.child.wait()?;

@@ -13,10 +13,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_: Opts) -> Self {
-        Self {
+    pub fn new(_: Opts) -> Result<Self> {
+        Ok(Self {
             rows: vec![],
-        }
+        })
     }
 }
 

@@ -19,10 +19,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts) -> Self {
-        Self {
+    pub fn new(_opts: Opts) -> Result<Self> {
+        Ok(Self {
             just_got_header: false,
-        }
+        })
     }
 }
 

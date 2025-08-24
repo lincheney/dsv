@@ -40,19 +40,19 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
+    pub fn new(opts: Opts) -> Result<Self> {
         let column_slicer = if opts.fields.is_empty() {
             None
         } else {
             Some(ColumnSlicer::new(&opts.fields, opts.regex))
         };
-        Self {
+        Ok(Self {
             proc: None,
             opts,
             ofs: Ofs::default(),
             column_slicer,
             header: vec![],
-        }
+        })
     }
 }
 

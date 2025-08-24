@@ -18,11 +18,11 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
-        Self {
+    pub fn new(opts: Opts) -> Result<Self> {
+        Ok(Self {
             row_count: 0,
             opts,
-        }
+        })
     }
 }
 

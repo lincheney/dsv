@@ -58,7 +58,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Self {
+    pub fn new(mut opts: Opts) -> Result<Self> {
         if !opts.fields.is_empty() {
             opts.left_fields = opts.fields.clone();
             opts.right_fields = std::mem::take(&mut opts.fields);
@@ -82,13 +82,13 @@ impl Handler {
         };
 
         let (sender, receiver) = mpsc::channel();
-        Self {
+        Ok(Self {
             opts,
             join,
             inner: Child{ got_header: false, left: true, sender: Some(sender) },
             receiver: Some(receiver),
             err_receiver: None,
-        }
+        })
     }
 }
 

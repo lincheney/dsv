@@ -23,13 +23,13 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Self {
+    pub fn new(mut opts: Opts) -> Result<Self> {
         opts.fields.extend(opts.old_style_fields.iter().flat_map(|x| x.split(",")).map(|x| x.into()));
 
-        Self {
+        Ok(Self {
             complement: opts.complement,
             column_slicer: ColumnSlicer::new(&opts.fields, opts.regex),
-        }
+        })
     }
 }
 

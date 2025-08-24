@@ -20,14 +20,14 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
+    pub fn new(opts: Opts) -> Result<Self> {
         let mut grep_opts = grep::Opts::default();
         grep_opts.patterns = vec![opts.patterns];
         grep_opts.replace = Some(opts.replace);
         grep_opts.common = opts.common;
-        Self{
-            inner: grep::Handler::new(grep_opts),
-        }
+        Ok(Self{
+            inner: grep::Handler::new(grep_opts)?,
+        })
     }
 }
 

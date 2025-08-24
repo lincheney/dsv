@@ -21,11 +21,11 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts) -> Self {
-        Self {
+    pub fn new(_opts: Opts) -> Result<Self> {
+        Ok(Self {
             drop_header: false,
             got_header: false,
-        }
+        })
     }
 }
 

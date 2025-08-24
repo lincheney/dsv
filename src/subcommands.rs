@@ -38,9 +38,9 @@ macro_rules! add_subcommands {
         ) -> Result<ExitCode> {
             match subcommand {
                 $(
-                    Some(Command::$name(opts)) => $name::Handler::new(opts).run(cli_opts, is_tty),
+                    Some(Command::$name(opts)) => $name::Handler::new(opts)?.run(cli_opts, is_tty),
                 )*
-                Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts).run(cli_opts, is_tty),
+                Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts)?.run(cli_opts, is_tty),
                 None => default(cli_opts),
             }
         }
@@ -53,7 +53,7 @@ macro_rules! add_subcommands {
         }
 
         impl Subcommands {
-            pub fn from_args(args: &[String]) -> (Self, BaseOptions) {
+            pub fn from_args(args: &[String]) -> Result<(Self, BaseOptions)> {
                 match args[0].as_str() {
                     $(
                         stringify!($name) => {
@@ -67,8 +67,8 @@ macro_rules! add_subcommands {
                             }
 
                             let cli = Cli::parse_from(args);
-                            let handler = $name::Handler::new(cli.opts);
-                            (Self::$name(handler), cli.cli_opts)
+                            let handler = $name::Handler::new(cli.opts)?;
+                            Ok((Self::$name(handler), cli.cli_opts))
                         },
                     )*
                     _ => {

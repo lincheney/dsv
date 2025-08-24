@@ -22,11 +22,11 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
-        Self {
+    pub fn new(opts: Opts) -> Result<Self> {
+        Ok(Self {
             opts,
             got_header: false,
-        }
+        })
     }
 }
 

@@ -21,6 +21,8 @@ pub struct CommonOpts {
     pub remove_errors: bool,
     #[arg(short = 'q', long, help = "do not print errors")]
     quiet: bool,
+    #[arg(long, long, help = "path to libpython3.so")]
+    libpython: Option<String>,
 }
 
 #[derive(Parser, Default)]
@@ -55,8 +57,8 @@ pub struct Handler {
 unsafe impl Send for Handler {}
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
-        let python = python::Python::new();
+    pub fn new(opts: Opts) -> Result<Self> {
+        let python = python::Python::new(opts.common.libpython.as_ref().map(|x| x.as_ref()))?;
 
         let py = python.acquire_gil();
         // let main = py.add_module("__main__").unwrap();
@@ -85,7 +87,7 @@ impl Handler {
 
         drop(py);
 
-        Self {
+        Ok(Self {
             opts,
             rows: vec![],
             count: 0,
@@ -103,7 +105,7 @@ impl Handler {
             header,
             header_numbers,
             py: python,
-        }
+        })
     }
 }
 

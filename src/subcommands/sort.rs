@@ -58,16 +58,16 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Self {
+    pub fn new(mut opts: Opts) -> Result<Self> {
         opts.fields.extend(opts.old_style_fields.iter().flat_map(|x| x.split(",")).map(|x| x.into()));
         let column_slicer = ColumnSlicer::new(&opts.fields, opts.regex);
-        Self {
+        Ok(Self {
             proc: None,
             opts,
             ofs: base::Ofs::Plain(b"\t".into()),
             column_slicer,
             rows: vec![],
-        }
+        })
     }
 }
 

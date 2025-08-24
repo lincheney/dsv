@@ -22,12 +22,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
+    pub fn new(opts: Opts) -> Result<Self> {
         let Args::Args(args) = opts.args;
-        Self {
+        Ok(Self {
             args,
             is_tty: false,
-        }
+        })
     }
 }
 
@@ -44,7 +44,7 @@ impl Processor for Handler {
         let mut copied_opts = false;
         for arg in args.rsplit(|a| a == "!") {
             let (sender, receiver) = mpsc::channel();
-            let (mut handler, mut cli_opts) = super::Subcommands::from_args(arg);
+            let (mut handler, mut cli_opts) = super::Subcommands::from_args(arg)?;
             handler.process_opts(&mut cli_opts, self.is_tty);
             new_base = Base::new(cli_opts, base.sender.clone(), base.scope);
             base.sender = sender;

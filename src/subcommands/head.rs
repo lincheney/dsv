@@ -17,12 +17,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
-        Self {
+    pub fn new(opts: Opts) -> Result<Self> {
+        Ok(Self {
             ring: if opts.lines >= 0 { None } else { Some(std::collections::VecDeque::new()) },
             lines: opts.lines.unsigned_abs(),
             count: 0,
-        }
+        })
     }
 }
 

@@ -20,7 +20,7 @@ fn main() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         } else {
             // run as if cat
-            cat::Handler::new(std::default::Default::default()).run(opts, is_tty)
+            cat::Handler::new(std::default::Default::default())?.run(opts, is_tty)
         }
     })
 }

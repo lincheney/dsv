@@ -22,20 +22,20 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Self {
+    pub fn new(opts: Opts) -> Result<Self> {
         let mut exec_opts = exec::Opts::default();
         exec_opts.common = opts.common;
         if exec_opts.common.ignore_errors {
             exec_opts.common.remove_errors = true;
         }
-        let inner = exec::Handler::new(exec_opts);
+        let inner = exec::Handler::new(exec_opts)?;
 
-        Self{
+        Ok(Self{
             passthru: opts.passthru,
             colour: false,
             inner,
             all: None,
-        }
+        })
     }
 }
 
