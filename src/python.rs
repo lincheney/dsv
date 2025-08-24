@@ -178,8 +178,7 @@ impl<'a> GilHandle<'a> {
 
     pub fn get_builtin(&self, key: Object) -> Option<Object> {
         unsafe{
-            let builtins = NonNull::new((self.py.PyEval_GetBuiltins)()).unwrap();
-            self.dict_get(builtins, key)
+            NonNull::new((self.py.PyEval_GetBuiltins)()).and_then(|builtins| self.dict_get(builtins, key))
         }
     }
 
@@ -312,15 +311,16 @@ impl<'a> GilHandle<'a> {
         }
     }
 
-    pub fn call_func(&self, func: Object, args: &[Object]) -> Option<Object> {
+    pub fn call_func(&self, func: Object, args: &[Object]) -> Result<Object> {
         unsafe{
             (self.py.PyErr_Clear)();
             let args: &[Pointer] = std::mem::transmute(args);
             NonNull::new((self.py.PyObject_Vectorcall)(func.as_ptr(), args.as_ptr(), args.len(), null_mut()))
+                .ok_or_else(|| self.get_exception())
         }
     }
 
-    pub fn compile_code(&self, code: &str, start: StartToken) -> Option<Object> {
+    pub fn compile_code(&self, code: &str, start: StartToken) -> Result<Object> {
         self.compile_code_cstr(&CString::new(code).unwrap(), start)
     }
 
@@ -333,9 +333,11 @@ impl<'a> GilHandle<'a> {
         unsafe {
             (self.py.PyErr_Fetch)(&mut typ as _, &mut value as _, &mut tb as _);
             (self.py.PyErr_SetExcInfo)(typ, value, tb);
+            let exc = self._exec_code(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
+            // then clear it
+            (self.py.PyErr_SetExcInfo)(null_mut(), null_mut(), null_mut());
+            anyhow!(self.convert_py_to_bytes(exc).to_owned())
         }
-        let exc = self._exec_code(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
-        anyhow!(self.convert_py_to_bytes(exc).to_owned())
     }
 
 
@@ -346,8 +348,8 @@ impl<'a> GilHandle<'a> {
         }
     }
 
-    pub fn compile_code_cstr(&self, code: &CStr, start: StartToken) -> Option<Object> {
-        _compile_code_cstr(self.py, code, start)
+    pub fn compile_code_cstr(&self, code: &CStr, start: StartToken) -> Result<Object> {
+        _compile_code_cstr(self.py, code, start).ok_or_else(|| self.get_exception())
     }
 
     pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Result<Object> {
@@ -355,7 +357,7 @@ impl<'a> GilHandle<'a> {
     }
 
     pub fn exec(&self, code: &CStr, globals: Pointer, locals: Pointer) -> Result<()> {
-        let code = self.compile_code_cstr(code, StartToken::File).unwrap();
+        let code = self.compile_code_cstr(code, StartToken::File)?;
         self.exec_code(code, globals, locals)?;
         Ok(())
     }

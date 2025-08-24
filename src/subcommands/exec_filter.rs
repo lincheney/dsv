@@ -59,10 +59,16 @@ impl base::Processor for Handler {
         let result = if let Some(mut result) = result {
             let py = self.inner.py.acquire_gil();
             if py.isinstance(result, self.inner.vec_cls) {
-                let all = self.all.get_or_insert_with(|| {
-                    py.get_builtin(py.to_str("all").unwrap()).unwrap()
-                });
-                result = py.call_func(*all, &[result]).unwrap();
+                let all = &mut self.all;
+                let all = if let Some(all) = all {
+                    all
+                } else {
+                    all.insert(
+                        py.get_builtin(py.to_str("all").unwrap())
+                        .ok_or_else(|| anyhow::anyhow!("could not get builtin `all`"))?
+                    )
+                };
+                result = py.call_func(*all, &[result])?;
             }
             py.is_truthy(result)
         } else {

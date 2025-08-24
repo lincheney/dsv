@@ -54,7 +54,7 @@ impl Handler {
         let column_slicer = ColumnSlicer::new(&opts.other.fields, opts.other.regex);
 
         let py = inner.py.acquire_gil();
-        let postprocess = py.compile_code_cstr(POSTPROCESS, python::StartToken::File).unwrap();
+        let postprocess = py.compile_code_cstr(POSTPROCESS, python::StartToken::File)?;
         let default_key = py.to_str(inner.opts.common.script.last().unwrap()).unwrap();
 
         drop(py);

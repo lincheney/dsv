@@ -75,12 +75,12 @@ impl Handler {
         let prelude = if rest.is_empty() {
             None
         } else {
-            Some(py.compile_code(&rest.join("\n"), python::StartToken::File).unwrap())
+            Some(py.compile_code(&rest.join("\n"), python::StartToken::File)?)
         };
 
         let code = py.compile_code(last, python::StartToken::Eval);
-        let expr = code.is_some();
-        let code = code.or_else(|| py.compile_code(last, python::StartToken::File)).unwrap();
+        let expr = code.is_ok();
+        let code = code.or_else(|_| py.compile_code(last, python::StartToken::File))?;
         let var_name = py.to_str(&opts.common.var).unwrap();
         let header = py.empty_list(0).unwrap();
         let header_numbers = py.empty_dict().unwrap();
@@ -140,7 +140,7 @@ impl Handler {
 
         let py = self.py.acquire_gil();
         let rows = py.list_from_iter(rows.map(|row| self.row_to_py(&py, row.as_ref()))).unwrap();
-        let table = py.call_func(self.table_cls, &[rows, self.header_numbers]).unwrap();
+        let table = py.call_func(self.table_cls, &[rows, self.header_numbers])?;
 
         py.dict_clear(self.locals);
         for (k, v) in vars {
@@ -184,11 +184,11 @@ impl Handler {
         let py = self.py.acquire_gil();
 
         if !py.is_none(result) {
-            let table = py.call_func(self.convert_to_table_fn, &[result]).unwrap();
+            let table = py.call_func(self.convert_to_table_fn, &[result])?;
             if !py.is_none(table) {
-                let header = py.getattr(table, py.to_str("__headers__").unwrap()).unwrap();
+                let header = py.getattr(table, py.to_str("__headers__").unwrap());
 
-                if !self.got_header && !py.is_none(header) {
+                if !self.got_header && let Some(header) = header && !py.is_none(header) {
                     self.got_header = true;
                     let header = py.iter(header).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
                     if base.on_header(header)? {
@@ -196,8 +196,8 @@ impl Handler {
                     }
                 }
 
-                let rows = py.getattr(table, py.to_str("__data__").unwrap()).unwrap();
-                if !py.is_none(rows) {
+                let rows = py.getattr(table, py.to_str("__data__").unwrap());
+                if let Some(rows) = rows && !py.is_none(rows) {
                     for row in py.iter(rows) {
                         let row = py.iter(row).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
                         if base.on_row(row)? {
