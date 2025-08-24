@@ -18,7 +18,7 @@ pub struct Handler {
     passthru: bool,
     colour: bool,
     inner: exec::Handler,
-    all: Option<python::Object>,
+    all: python::Object,
 }
 
 impl Handler {
@@ -29,12 +29,17 @@ impl Handler {
             exec_opts.common.remove_errors = true;
         }
         let inner = exec::Handler::new(exec_opts)?;
+        let all = {
+            let py = inner.py.acquire_gil();
+            py.get_builtin(py.to_str("all").unwrap())
+                .ok_or_else(|| anyhow::anyhow!("could not get builtin `all`"))?
+        };
 
         Ok(Self{
             passthru: opts.passthru,
             colour: false,
             inner,
-            all: None,
+            all,
         })
     }
 }
@@ -59,16 +64,7 @@ impl base::Processor for Handler {
         let result = if let Some(mut result) = result {
             let py = self.inner.py.acquire_gil();
             if py.isinstance(result, self.inner.vec_cls) {
-                let all = &mut self.all;
-                let all = if let Some(all) = all {
-                    all
-                } else {
-                    all.insert(
-                        py.get_builtin(py.to_str("all").unwrap())
-                        .ok_or_else(|| anyhow::anyhow!("could not get builtin `all`"))?
-                    )
-                };
-                result = py.call_func(*all, &[result])?;
+                result = py.call_func(self.all, &[result])?;
             }
             py.is_truthy(result)
         } else {
