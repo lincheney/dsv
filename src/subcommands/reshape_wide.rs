@@ -43,17 +43,14 @@ impl base::Processor for Handler {
         Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        let header = std::mem::take(&mut self.header);
-        let rows = std::mem::take(&mut self.rows);
-
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
         let mut seen = HashSet::new();
-        for row in &rows {
+        for row in &self.rows {
             let i = self.column_slicer.indices(row.len(), false).next().unwrap();
             seen.insert(row[i].clone());
         }
 
-        let new_headers: Vec<_> = seen.into_iter().chain(header.into_iter().flatten()).collect();
+        let new_headers: Vec<_> = seen.into_iter().chain(self.header.into_iter().flatten()).collect();
         if base.on_header(new_headers.clone())? {
             return Ok(true)
         }
@@ -61,7 +58,7 @@ impl base::Processor for Handler {
         let new_headers: HashMap<_, _> = new_headers.iter().enumerate().map(|(i, h)| (h, i)).collect();
 
         let mut groups: HashMap<Vec<BString>, Vec<Option<BString>>> = HashMap::new();
-        for mut row in rows.into_iter() {
+        for mut row in self.rows.into_iter() {
             let mut indices = self.column_slicer.indices(row.len(), false);
             let group_key = self.column_slicer.slice(&row, true, true);
             let key = indices.next().unwrap();

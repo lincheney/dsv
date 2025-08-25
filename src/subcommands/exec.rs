@@ -251,7 +251,7 @@ impl base::Processor for Handler {
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
+    fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
         if !self.opts.no_slurp {
             let result = self.run_python(self.rows.iter(), &[])?;
             if let Some(result) = result && self.handle_result(base, result)? {

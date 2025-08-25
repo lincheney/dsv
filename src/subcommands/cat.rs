@@ -43,13 +43,12 @@ impl base::Processor for Handler {
         base.on_row(row)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        let files = std::mem::take(&mut self.opts.files);
-        for file in &files {
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        for file in &self.opts.files {
             match std::fs::File::open(file) {
                 Ok(file) => {
                     let file = std::io::BufReader::new(file);
-                    let _ = self.process_file(file, base, base::Callbacks::ON_ROW);
+                    let _ = base::DefaultProcessor{}.process_file(file, base, base::Callbacks::ON_ROW);
                 },
                 Err(e) => {
                     eprintln!("{e}: {file}");

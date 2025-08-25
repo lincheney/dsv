@@ -190,7 +190,7 @@ pub enum GatheredRow {
 
 pub trait Processor<W: Writer=BaseWriter> {
 
-    fn run(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
+    fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
         let opts = base.opts.clone();
         base.scope.spawn(move || {
             Output::<W>::new(opts).run(receiver)
@@ -288,11 +288,11 @@ pub trait Processor<W: Writer=BaseWriter> {
         (ifs, ofs)
     }
 
-    fn process_file<R: BufRead>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn process_file<R: BufRead>(self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
         self._process_file(file, base, do_callbacks)
     }
 
-    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
+    fn _process_file<R: Read>(mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
         let mut reader = BufReader::new(file);
         let mut buffer = BString::new(vec![]);
         let mut row = vec![];
@@ -386,7 +386,7 @@ pub trait Processor<W: Writer=BaseWriter> {
             match msg {
                 Message::Row(row) => if self.on_row(base, row)? { break },
                 Message::Header(header) => if self.on_header(base, header)? { break },
-                Message::Eof => if self.on_eof(base)? { break },
+                Message::Eof => { self.on_eof(base)?; break },
                 Message::Separator => (), // do nothing
                 Message::Raw(value) => if base.write_raw(value) { break },
                 Message::Ofs(ofs) => if self.on_ofs(base, ofs) { break },
@@ -407,7 +407,7 @@ pub trait Processor<W: Writer=BaseWriter> {
         base.on_header(header)
     }
 
-    fn on_eof(&mut self, base: &mut Base) -> Result<bool> {
+    fn on_eof(self, base: &mut Base) -> Result<bool> where Self: Sized {
         base.on_eof()
     }
 
@@ -415,6 +415,9 @@ pub trait Processor<W: Writer=BaseWriter> {
         base.on_ofs(ofs)
     }
 }
+
+pub struct DefaultProcessor{}
+impl Processor for DefaultProcessor{}
 
 #[derive(Clone)]
 pub struct Base<'a, 'b> {

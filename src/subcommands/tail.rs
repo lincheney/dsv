@@ -50,8 +50,8 @@ impl base::Processor for Handler {
         }
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        if let Some(ring) = self.ring.take() {
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        if let Some(ring) = self.ring {
             for row in ring {
                 if base.on_row(row)? {
                     break;

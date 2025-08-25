@@ -56,7 +56,7 @@ impl Processor for Handler {
         base.on_row(self.paste_row(row))
     }
 
-    fn on_eof(&mut self, base: &mut Base) -> Result<bool> {
+    fn on_eof(self, base: &mut Base) -> Result<bool> {
         let mut result = Ok(());
         for r in self.err_receivers.iter() {
             match r.recv().unwrap() {

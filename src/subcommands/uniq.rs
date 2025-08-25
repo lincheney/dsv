@@ -74,7 +74,7 @@ impl base::Processor for Handler {
         Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
+    fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
         if self.opts.group {
             let mut first = true;
             'outer: for (_count, rows) in self.groups.values_mut() {

@@ -26,8 +26,8 @@ impl base::Processor for Handler {
         Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        for row in self.rows.drain(..).rev() {
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        for row in self.rows.into_iter().rev() {
             if base.on_row(row)? {
                 break
             }

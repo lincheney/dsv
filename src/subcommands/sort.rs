@@ -93,8 +93,8 @@ impl base::Processor for Handler {
         Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        if let Some(mut proc) = self.proc.take() {
+    fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
+        if let Some(mut proc) = self.proc {
             drop(proc.stdin.into_inner());
 
             // get the sorted values

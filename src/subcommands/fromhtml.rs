@@ -52,7 +52,7 @@ fn add_rowspan(rowspans: &mut Rowspans, column: usize, span: usize, value: BStri
 
 impl base::Processor for Handler {
 
-    fn process_file<R: BufRead>(&mut self, file: R, base: &mut base::Base, do_callbacks: base::Callbacks) -> Result<ExitCode> {
+    fn process_file<R: BufRead>(mut self, file: R, base: &mut base::Base, do_callbacks: base::Callbacks) -> Result<ExitCode> {
 
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
         if base.on_ofs(ofs) {

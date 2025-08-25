@@ -136,8 +136,8 @@ impl Processor for Handler {
         self.inner.sender.as_ref().unwrap().send((true, Message::Ofs(ofs))).is_err()
     }
 
-    fn on_eof(&mut self, _base: &mut Base) -> Result<bool> {
-        self.inner.sender.take();
+    fn on_eof(self, _base: &mut Base) -> Result<bool> {
+        drop(self.inner.sender);
         let result1 = self.err_receiver.recv().unwrap();
         let result2 = self.err_receiver.recv().unwrap();
 

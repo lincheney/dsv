@@ -51,7 +51,7 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn process_file<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
+    fn process_file<R: Read>(mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
         if !base.on_ofs(ofs) {
             self.process_json(file, base, do_callbacks)?;

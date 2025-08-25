@@ -77,7 +77,7 @@ impl Handler {
                 Ofs::Plain(ofs) => cli_opts.ofs = Some(ofs.to_string()),
             }
             cli_opts.header = Some(false);
-            let mut handler = PipeHandler{
+            let handler = PipeHandler{
                 receiver,
                 column_slicer: self.column_slicer.clone(),
                 append: !self.opts.append_columns.is_empty(),
@@ -141,8 +141,8 @@ impl base::Processor for Handler {
         Ok(proc.sender.send(row).is_err())
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc.take() {
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc {
             let result1 = err_receiver.recv().unwrap();
 
             drop(sender);

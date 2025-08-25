@@ -58,13 +58,12 @@ impl base::Processor for Handler {
         Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
-        if let Some(mut proc) = self.proc.take() {
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        if let Some(mut proc) = self.proc {
             drop(proc.stdin.into_inner());
             base.ifs = base::Ifs::Plain(DELIM.into());
 
-            let mut printer = Printer{};
-            printer.process_file(proc.stdout, base, base::Callbacks::all())?;
+            base::DefaultProcessor{}.process_file(proc.stdout, base, base::Callbacks::all())?;
             proc.child.wait()?;
         }
         base.on_eof()
@@ -93,6 +92,3 @@ impl Handler {
         }
     }
 }
-
-struct Printer {}
-impl base::Processor for Printer {}

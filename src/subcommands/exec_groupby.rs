@@ -89,7 +89,7 @@ impl base::Processor for Handler {
         Ok(false)
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
+    fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
         let mut header: Option<Vec<_>> = None;
         for (key, group) in self.groups.iter() {
             let py = self.inner.py.acquire_gil();
