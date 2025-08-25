@@ -11,15 +11,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_: Opts) -> Result<Self> {
+    pub fn new(_: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+        base.opts.pretty = true;
         Ok(Self {})
     }
 }
 
-impl base::Processor for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        opts.pretty = true;
-    }
-
-}
+impl base::Processor for Handler {}

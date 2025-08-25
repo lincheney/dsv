@@ -47,10 +47,10 @@ if not isinstance(result, BaseTable) or (isinstance(result, Proxy) and (result._
 ";
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
         let mut exec_opts = exec::Opts::default();
         exec_opts.common = opts.common;
-        let inner = exec::Handler::new(exec_opts)?;
+        let inner = exec::Handler::new(exec_opts, base, is_tty)?;
         let column_slicer = ColumnSlicer::new(&opts.other.fields, opts.other.regex);
 
         let py = inner.py.acquire_gil();

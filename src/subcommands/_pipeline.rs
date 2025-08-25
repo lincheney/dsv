@@ -17,48 +17,36 @@ enum Args {
 }
 
 pub struct Handler {
-    args: Vec<String>,
-    is_tty: bool,
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut Base, is_tty: bool) -> Result<Self> {
         let Args::Args(args) = opts.args;
-        Ok(Self {
-            args,
-            is_tty: false,
-        })
-    }
-}
 
-impl Processor for Handler {
+        let (opts_sender, opts_receiver) = mpsc::channel();
+        for (i, arg) in args.rsplit(|a| a == "!").enumerate() {
+            let new_sender = base.sender.clone();
+            let receiver;
+            (base.sender, receiver) = mpsc::channel();
 
-    fn process_opts(&mut self, opts: &mut BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        self.is_tty = is_tty;
-    }
-
-    fn on_start(&mut self, base: &mut Base) -> Result<bool> {
-        let mut new_base;
-        let args = std::mem::take(&mut self.args);
-        let mut copied_opts = false;
-        for arg in args.rsplit(|a| a == "!") {
-            let (sender, receiver) = mpsc::channel();
-            let (mut handler, mut cli_opts) = super::Subcommands::from_args(arg)?;
-            handler.process_opts(&mut cli_opts, self.is_tty);
-            new_base = Base::new(cli_opts, base.sender.clone(), base.scope);
-            base.sender = sender;
-
-            // take opts from the last handler?
-            if !copied_opts {
-                base.opts = new_base.opts.clone();
-                copied_opts = true;
-            }
-
-            new_base.scope.spawn(move || {
-                handler.forward_messages(&mut new_base, receiver)
+            let last = i == 0;
+            let opts_sender = opts_sender.clone();
+            let arg = arg.to_owned();
+            let scope = base.scope;
+            scope.spawn(move || {
+                let (handler, mut base) = super::Subcommands::from_args(&arg, new_sender, scope, is_tty)?;
+                // take opts from the last handler?
+                if last {
+                    opts_sender.send(base.opts.clone()).unwrap();
+                }
+                handler.forward_messages(&mut base, receiver)
             });
         }
-        Ok(false)
+
+        base.opts = opts_receiver.recv().unwrap();
+
+        Ok(Self {})
     }
 }
+
+impl Processor for Handler {}

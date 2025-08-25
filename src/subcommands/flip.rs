@@ -19,7 +19,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
+        opts.row_sep = opts.row_sep.resolve(is_tty);
+        if base.opts.ofs.is_none() {
+            base.opts.pretty = true;
+        }
+
         Ok(Self{
             opts,
             count: 0,
@@ -29,14 +34,6 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        self.opts.row_sep = self.opts.row_sep.resolve(is_tty);
-        if opts.ofs.is_none() {
-            opts.pretty = true;
-        }
-    }
-
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.header = Some(header);
         base.on_header(vec![b"row".into(), b"column".into(), b"key".into(), b"value".into()])

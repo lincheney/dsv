@@ -1,6 +1,6 @@
 use anyhow::{Result, Context};
 use std::sync::mpsc::{self, Sender, Receiver};
-use crate::base;
+use crate::base::*;
 use bstr::BString;
 use clap::{Parser};
 
@@ -12,55 +12,51 @@ pub struct Opts {
 }
 
 pub struct Handler {
-    opts: Opts,
     receivers: Vec<Receiver<Vec<BString>>>,
     err_receivers: Vec<Receiver<Result<()>>>,
     row_sizes: Vec<usize>,
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
-        Ok(Self {
-            opts,
-            receivers: vec![],
-            err_receivers: vec![],
-            row_sizes: vec![],
-        })
-    }
-}
+    pub fn new(opts: Opts, base: &mut Base, _is_tty: bool) -> Result<Self> {
 
-impl base::Processor for Handler {
-
-    fn on_start(&mut self, base: &mut base::Base) -> Result<bool> {
-        let files = std::mem::take(&mut self.opts.files);
-        for file in files {
+        let mut receivers = vec![];
+        let mut err_receivers = vec![];
+        for file in opts.files {
             let (sender, receiver) = mpsc::channel();
             let (err_sender, err_receiver) = mpsc::channel();
-            self.receivers.push(receiver);
-            self.err_receivers.push(err_receiver);
+            receivers.push(receiver);
+            err_receivers.push(err_receiver);
             let mut base = base.clone();
             base.scope.spawn(move || {
                 let result = (|| {
                     let file = std::fs::File::open(file)?;
                     let file = std::io::BufReader::new(file);
-                    Child{ sender }.process_file(file, &mut base, base::Callbacks::ON_HEADER | base::Callbacks::ON_ROW)?;
+                    Child{ sender }.process_file(file, &mut base, Callbacks::ON_HEADER | Callbacks::ON_ROW)?;
                     Ok(())
                 })();
                 err_sender.send(result).unwrap();
             });
         }
-        Ok(false)
-    }
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+        Ok(Self {
+            receivers,
+            err_receivers,
+            row_sizes: vec![],
+        })
+    }
+}
+
+impl Processor for Handler {
+    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<bool> {
         base.on_header(self.paste_row(header))
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {
         base.on_row(self.paste_row(row))
     }
 
-    fn on_eof(&mut self, base: &mut base::Base) -> Result<bool> {
+    fn on_eof(&mut self, base: &mut Base) -> Result<bool> {
         let mut result = Ok(());
         for r in self.err_receivers.iter() {
             match r.recv().unwrap() {
@@ -99,11 +95,11 @@ struct Child {
     sender: Sender<Vec<BString>>,
 }
 
-impl base::Processor for Child {
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+impl Processor for Child {
+    fn on_header(&mut self, _base: &mut Base, header: Vec<BString>) -> Result<bool> {
         Ok(self.sender.send(header).is_err())
     }
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, _base: &mut Base, row: Vec<BString>) -> Result<bool> {
         Ok(self.sender.send(row).is_err())
     }
 }

@@ -22,13 +22,13 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
         let mut exec_opts = exec::Opts::default();
         exec_opts.common = opts.common;
         if exec_opts.common.ignore_errors {
             exec_opts.common.remove_errors = true;
         }
-        let inner = exec::Handler::new(exec_opts)?;
+        let inner = exec::Handler::new(exec_opts, base, is_tty)?;
         let all = {
             let py = inner.py.acquire_gil();
             py.get_builtin(py.to_str("all").unwrap())
@@ -37,7 +37,7 @@ impl Handler {
 
         Ok(Self{
             passthru: opts.passthru,
-            colour: false,
+            colour: base.opts.colour == base::AutoChoices::Always,
             inner,
             all,
         })
@@ -47,12 +47,6 @@ impl Handler {
 unsafe impl Send for Handler {}
 
 impl base::Processor for Handler {
-
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        self.colour = opts.colour == base::AutoChoices::Always;
-    }
-
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.inner.process_header(&header);
         base.on_header(header)

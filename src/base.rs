@@ -1,4 +1,4 @@
-use std::sync::mpsc::{self, Sender, Receiver};
+use std::sync::mpsc::{Sender, Receiver};
 use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
@@ -190,22 +190,12 @@ pub enum GatheredRow {
 
 pub trait Processor<W: Writer=BaseWriter> {
 
-    fn run(mut self, mut opts: BaseOptions, is_tty: bool) -> Result<ExitCode> where Self: Sized {
-        self.process_opts(&mut opts, is_tty);
-        std::thread::scope(|scope| {
-            let (sender, receiver) = mpsc::channel();
-            let mut base = Base::new(opts.clone(), sender, scope);
-
-            scope.spawn(move || {
-                Output::<W>::new(opts).run(receiver)
-            });
-
-            if self.on_start(&mut base)? {
-                Ok(ExitCode::SUCCESS)
-            } else {
-                self.process_file(std::io::stdin().lock(), &mut base, Callbacks::all())
-            }
-        })
+    fn run(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
+        let opts = base.opts.clone();
+        base.scope.spawn(move || {
+            Output::<W>::new(opts).run(receiver)
+        });
+        self.process_file(std::io::stdin().lock(), base, Callbacks::all())
     }
 
     fn determine_ifs(&self, line: &BStr, opts: &BaseOptions) -> Ifs {
@@ -392,7 +382,6 @@ pub trait Processor<W: Writer=BaseWriter> {
     }
 
     fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<()> where Self: Sized {
-        self.on_start(base)?;
         for msg in receiver.iter() {
             match msg {
                 Message::Row(row) => if self.on_row(base, row)? { break },
@@ -406,20 +395,8 @@ pub trait Processor<W: Writer=BaseWriter> {
         Ok(())
     }
 
-    fn _process_opts(&mut self, opts: &mut BaseOptions, is_tty: bool) {
-        opts.post_process(is_tty);
-    }
-
-    fn process_opts(&mut self, opts: &mut BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty)
-    }
-
     fn parse_line(&self, base: &mut Base, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
         base.parse_line(line, row, quote)
-    }
-
-    fn on_start(&mut self, _base: &mut Base) -> Result<bool> {
-        Ok(false)
     }
 
     fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {

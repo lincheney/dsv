@@ -18,7 +18,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         let lines = opts.lines.parse::<usize>().unwrap();
         let ring = if opts.lines.starts_with('+') { None } else { Some(VecDeque::with_capacity(lines)) };
 

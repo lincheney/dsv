@@ -29,7 +29,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, _: &mut base::Base, _is_tty: bool) -> Result<Self> {
         Ok(Self {
             proc: None,
             got_header: false,
@@ -63,9 +63,8 @@ impl base::Processor for Handler {
             drop(proc.stdin.into_inner());
             base.ifs = base::Ifs::Plain(DELIM.into());
 
-            let mut cat = super::cat::Handler::new(std::default::Default::default())?;
-            let _ = cat.process_file(proc.stdout, base, base::Callbacks::all());
-
+            let mut printer = Printer{};
+            printer.process_file(proc.stdout, base, base::Callbacks::all())?;
             proc.child.wait()?;
         }
         base.on_eof()
@@ -94,3 +93,6 @@ impl Handler {
         }
     }
 }
+
+struct Printer {}
+impl base::Processor for Printer {}

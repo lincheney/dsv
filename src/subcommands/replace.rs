@@ -20,22 +20,18 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
         let mut grep_opts = grep::Opts::default();
         grep_opts.patterns = vec![opts.patterns];
         grep_opts.replace = Some(opts.replace);
         grep_opts.common = opts.common;
         Ok(Self{
-            inner: grep::Handler::new(grep_opts)?,
+            inner: grep::Handler::new(grep_opts, base, is_tty)?,
         })
     }
 }
 
 impl base::Processor for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self.inner.process_opts(opts, is_tty)
-    }
-
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.inner.on_header(base, header)
     }

@@ -19,7 +19,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts) -> Result<Self> {
+    pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+        base.opts.no_header = false;
+        base.opts.header = Some(true);
+        base.opts.irs = Some("\n".into());
         Ok(Self {
             just_got_header: false,
         })
@@ -27,14 +30,6 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        opts.no_header = false;
-        opts.header = Some(true);
-        opts.irs = Some("\n".into());
-    }
-
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
         self.just_got_header = true;
         base.on_header(header)

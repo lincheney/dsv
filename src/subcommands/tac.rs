@@ -13,7 +13,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_: Opts) -> Result<Self> {
+    pub fn new(_: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         Ok(Self {
             rows: vec![],
         })

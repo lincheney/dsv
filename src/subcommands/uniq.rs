@@ -29,7 +29,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Result<Self> {
+    pub fn new(mut opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         let column_slicer = ColumnSlicer::new(&opts.fields, opts.regex);
         if opts.count && opts.count_column.is_none() {
             opts.count_column = Some("count".into());

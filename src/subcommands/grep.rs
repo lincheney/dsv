@@ -71,7 +71,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         if opts.passthru {
             opts.before_context = None;
             opts.after_context = None;
@@ -83,40 +83,9 @@ impl Handler {
         let before = before.map(|b| VecDeque::with_capacity(b));
         let column_slicer = crate::column_slicer::ColumnSlicer::new(&opts.common.fields, opts.common.regex);
 
-        Ok(Self {
-            opts,
-            before,
-            after,
-            row_num: 0,
-            last_matched: None,
-            matched_count: 0,
-            pattern: Regex::new("").unwrap(),
-            replace: None,
-            column_slicer,
-            allowed_fields: (HashSet::new(), 0),
-        })
-    }
-}
-
-impl base::Processor for Handler {
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        // no need to replace if invert and not passthru
-        #[allow(clippy::nonminimal_bool)]
-        if !(self.opts.invert_match && self.opts.passthru) && !self.opts.count && opts.colour == base::AutoChoices::Always {
-            if let Some(mut replace) = self.opts.replace.take() {
-                replace.insert_str(0, MATCH_COLOUR);
-                replace.push_str(base::RESET_COLOUR);
-                self.replace = Some(replace);
-            } else {
-                self.replace = Some(format!("{}$1{}", MATCH_COLOUR, base::RESET_COLOUR));
-            }
-        }
-    }
-
-    fn on_start(&mut self, _base: &mut base::Base) -> Result<bool> {
-        let mut patterns = std::mem::take(&mut self.opts.patterns);
-        for file in &self.opts.common.file {
+        // construct the regex pattern
+        let mut patterns = std::mem::take(&mut opts.patterns);
+        for file in &opts.common.file {
             let file = std::fs::File::open(file).with_context(|| format!("failed to open {file}"))?;
             let file = BufReader::new(file);
             for line in file.lines() {
@@ -124,28 +93,59 @@ impl base::Processor for Handler {
             }
         }
 
-        if self.opts.common.fixed_strings {
+        if opts.common.fixed_strings {
             for pat in patterns.iter_mut() {
                 *pat = regex::escape(pat);
             }
         }
         let pattern = patterns.join("|");
 
-        self.opts.common.case_sensitive = self.opts.common.case_sensitive || pattern.chars().any(|c| c.is_ascii_uppercase());
+        opts.common.case_sensitive = opts.common.case_sensitive || pattern.chars().any(|c| c.is_ascii_uppercase());
 
         // field overrides word
-        let pattern = if self.opts.common.field_regexp {
+        let pattern = if opts.common.field_regexp {
             format!("^({pattern})$")
-        } else if self.opts.common.word_regexp {
+        } else if opts.common.word_regexp {
             format!("\\b({pattern})\\b")
         } else {
             format!("({pattern})")
         };
-        self.pattern = RegexBuilder::new(&pattern)
-            .case_insensitive(!self.opts.common.case_sensitive)
+        let pattern = RegexBuilder::new(&pattern)
+            .case_insensitive(!opts.common.case_sensitive)
             .build()?;
-        Ok(false)
+
+        // construct the replace pattern
+        // no need to replace if invert and not passthru
+        #[allow(clippy::nonminimal_bool)]
+        let replace = if !(opts.invert_match && opts.passthru) && !opts.count && base.opts.colour == base::AutoChoices::Always {
+            if let Some(mut replace) = opts.replace.take() {
+                replace.insert_str(0, MATCH_COLOUR);
+                replace.push_str(base::RESET_COLOUR);
+                Some(replace)
+            } else {
+                Some(format!("{}$1{}", MATCH_COLOUR, base::RESET_COLOUR))
+            }
+        } else {
+            None
+        };
+
+        Ok(Self {
+            opts,
+            before,
+            after,
+            row_num: 0,
+            last_matched: None,
+            matched_count: 0,
+            pattern,
+            replace,
+            column_slicer,
+            allowed_fields: (HashSet::new(), 0),
+        })
     }
+}
+
+impl base::Processor for Handler {
+
 
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);

@@ -50,15 +50,12 @@ enum Join {
 type Row = Vec<BString>;
 
 pub struct Handler {
-    opts: Opts,
-    join: Join,
     inner: Child,
-    receiver: Option<Receiver<(bool, Message)>>,
-    err_receiver: Option<Receiver<Result<()>>>,
+    err_receiver: Receiver<Result<()>>,
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut Base, _is_tty: bool) -> Result<Self> {
         if !opts.fields.is_empty() {
             opts.left_fields = opts.fields.clone();
             opts.right_fields = std::mem::take(&mut opts.fields);
@@ -82,43 +79,29 @@ impl Handler {
         };
 
         let (sender, receiver) = mpsc::channel();
-        Ok(Self {
-            opts,
-            join,
-            inner: Child{ got_header: false, left: true, sender: Some(sender) },
-            receiver: Some(receiver),
-            err_receiver: None,
-        })
-    }
-}
-
-impl Processor for Handler {
-    fn on_start(&mut self, base: &mut Base) -> Result<bool> {
-        let (sender, receiver) = mpsc::channel();
-        self.err_receiver = Some(receiver);
+        let (err_sender, err_receiver) = mpsc::channel();
+        let child = Child{ got_header: false, left: true, sender: Some(sender) };
 
         // start a thread to join everything
         {
             let mut base = base.clone();
-            let opts = self.opts.clone();
-            let join = self.join;
-            let receiver = self.receiver.take().unwrap();
-            let sender = sender.clone();
+            let opts = opts.clone();
+            let err_sender = err_sender.clone();
             base.scope.spawn(move || {
                 let result = (|| {
                     Joiner::default().do_joining(join, &opts, receiver, &mut base)?;
                     base.on_eof()?;
                     Ok(())
                 })();
-                sender.send(result).unwrap();
+                err_sender.send(result).unwrap();
             });
         }
 
         // start a thread to read from rhs
         {
             let mut base = base.clone();
-            let right_file = std::mem::take(&mut self.opts.file);
-            let mut child = self.inner.clone();
+            let right_file = std::mem::take(&mut opts.file);
+            let mut child = child.clone();
             child.left = false;
             base.scope.spawn(move || {
                 let result = (|| {
@@ -127,14 +110,20 @@ impl Processor for Handler {
                     child.process_file(file, &mut base, Callbacks::ON_HEADER | Callbacks::ON_ROW)?;
                     Ok(())
                 })();
-                sender.send(result).unwrap();
+                err_sender.send(result).unwrap();
             });
         }
 
         // and we will read from lhs ...
-        Ok(false)
-    }
 
+        Ok(Self {
+            inner: child,
+            err_receiver,
+        })
+    }
+}
+
+impl Processor for Handler {
     fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {
         self.inner.on_row(base, row)
     }
@@ -149,9 +138,8 @@ impl Processor for Handler {
 
     fn on_eof(&mut self, _base: &mut Base) -> Result<bool> {
         self.inner.sender.take();
-        let err_receiver = self.err_receiver.take().unwrap();
-        let result1 = err_receiver.recv().unwrap();
-        let result2 = err_receiver.recv().unwrap();
+        let result1 = self.err_receiver.recv().unwrap();
+        let result2 = self.err_receiver.recv().unwrap();
 
         match (result1, result2) {
             (Ok(_), Ok(_)) => (),

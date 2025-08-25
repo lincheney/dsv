@@ -21,25 +21,22 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts) -> Result<Self> {
+    pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+        // TODO
+        base.opts.header_colour.get_or_insert_with(|| "\x1b[1m".into());
+        base.opts.trailer = base::AutoChoices::Never;
+        base.opts.numbered_columns = base::AutoChoices::Never;
+        let drop_header = base.opts.drop_header;
+        base.opts.drop_header = false;
+
         Ok(Self {
-            drop_header: false,
+            drop_header,
             got_header: false,
         })
     }
 }
 
 impl base::Processor<MarkdownWriter> for Handler {
-
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        opts.header_colour.get_or_insert_with(|| "\x1b[1m".into());
-        self._process_opts(opts, is_tty);
-        opts.trailer = base::AutoChoices::Never;
-        opts.numbered_columns = base::AutoChoices::Never;
-        self.drop_header = opts.drop_header;
-        opts.drop_header = false;
-    }
-
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
         if self.drop_header {

@@ -14,7 +14,10 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts) -> Result<Self> {
+    pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+        // default to output with tab
+        base.opts.ifs.get_or_insert_with(|| "\t".into());
+        base.opts.ofs.get_or_insert_with(|| "\t".into());
         Ok(Self {})
     }
 }
@@ -48,14 +51,6 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-
-    fn process_opts(&mut self, opts: &mut base::BaseOptions, is_tty: bool) {
-        self._process_opts(opts, is_tty);
-        // default to output with tab
-        opts.ifs.get_or_insert_with(|| "\t".into());
-        opts.ofs.get_or_insert_with(|| "\t".into());
-    }
-
     fn process_file<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
         if !base.on_ofs(ofs) {

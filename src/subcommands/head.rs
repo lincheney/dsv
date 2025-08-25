@@ -17,7 +17,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         Ok(Self {
             ring: if opts.lines >= 0 { None } else { Some(std::collections::VecDeque::new()) },
             lines: opts.lines.unsigned_abs(),

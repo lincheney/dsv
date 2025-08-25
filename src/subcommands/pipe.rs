@@ -40,7 +40,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         let column_slicer = if opts.fields.is_empty() {
             None
         } else {

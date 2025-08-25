@@ -1,4 +1,5 @@
 use std::process::*;
+use std::sync::mpsc::{self, Sender, Receiver};
 use anyhow::Result;
 use crate::base::{Base, Processor, BaseOptions, Message};
 use clap::{Subcommand, Parser};
@@ -30,19 +31,24 @@ macro_rules! add_subcommands {
             _pipeline(_pipeline::Opts),
         }
 
-        pub fn run<F: Fn(BaseOptions) -> Result<ExitCode>>(
+        pub fn run<F: Fn(&mut Base, Receiver<Message>) -> Result<ExitCode>>(
             subcommand: Option<Command>,
-            cli_opts: BaseOptions,
+            mut cli_opts: BaseOptions,
             is_tty: bool,
             default: F,
         ) -> Result<ExitCode> {
-            match subcommand {
-                $(
-                    Some(Command::$name(opts)) => $name::Handler::new(opts)?.run(cli_opts, is_tty),
-                )*
-                Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts)?.run(cli_opts, is_tty),
-                None => default(cli_opts),
-            }
+            std::thread::scope(|scope| {
+                let (sender, receiver) = mpsc::channel();
+                cli_opts.post_process(is_tty);
+                let mut base = Base::new(cli_opts.clone(), sender, scope);
+                match subcommand {
+                    $(
+                        Some(Command::$name(opts)) => $name::Handler::new(opts, &mut base, is_tty)?.run(&mut base, receiver),
+                    )*
+                    Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts, &mut base, is_tty)?.run(&mut base, receiver),
+                    None => default(&mut base, receiver),
+                }
+            })
         }
 
         #[allow(non_camel_case_types)]
@@ -53,7 +59,13 @@ macro_rules! add_subcommands {
         }
 
         impl Subcommands {
-            pub fn from_args(args: &[String]) -> Result<(Self, BaseOptions)> {
+            pub fn from_args<'a, 'b>(
+                args: &[String],
+                sender: Sender<Message>,
+                scope: &'a std::thread::Scope<'a, 'b>,
+                is_tty: bool,
+        ) -> Result<(Self, Base<'a, 'b>)> {
+
                 match args[0].as_str() {
                     $(
                         stringify!($name) => {
@@ -66,9 +78,11 @@ macro_rules! add_subcommands {
                                 cli_opts: BaseOptions,
                             }
 
-                            let cli = Cli::parse_from(args);
-                            let handler = $name::Handler::new(cli.opts)?;
-                            Ok((Self::$name(handler), cli.cli_opts))
+                            let mut cli = Cli::parse_from(args);
+                            cli.cli_opts.post_process(is_tty);
+                            let mut base = Base::new(cli.cli_opts, sender, scope);
+                            let handler = $name::Handler::new(cli.opts, &mut base, is_tty)?;
+                            Ok((Self::$name(handler), base))
                         },
                     )*
                     _ => {
@@ -82,12 +96,6 @@ macro_rules! add_subcommands {
             pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) -> Result<()> {
                 match self {
                     $( Self::$name(handler) => handler.forward_messages(base, receiver), )*
-                }
-            }
-
-            pub fn process_opts(&mut self, opts: &mut BaseOptions, is_tty: bool) {
-                match self {
-                    $( Self::$name(handler) => handler.process_opts(opts, is_tty), )*
                 }
             }
 
