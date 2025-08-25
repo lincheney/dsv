@@ -146,7 +146,6 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.column_slicer.make_header_map(&header);
         if self.opts.line_number {

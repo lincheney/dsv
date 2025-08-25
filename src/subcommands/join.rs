@@ -196,8 +196,8 @@ impl Joiner {
                             let fields: Vec<_> = left.intersection(&right).cloned().cloned().collect();
                             if fields.is_empty() {
                                 // default join field is the first
-                                slicers.0 = ColumnSlicer::new(&vec!["1".into()], false);
-                                slicers.1 = ColumnSlicer::new(&vec!["1".into()], false);
+                                slicers.0 = ColumnSlicer::new(&["1".into()], false);
+                                slicers.1 = ColumnSlicer::new(&["1".into()], false);
                             } else {
                                 slicers.0 = ColumnSlicer::from_names(fields.iter());
                                 slicers.1 = ColumnSlicer::from_names(fields.iter());

@@ -132,4 +132,6 @@ add_subcommands!(
     exec,
     exec_filter,
     exec_groupby,
+    reshape_long,
+    reshape_wide,
 );
