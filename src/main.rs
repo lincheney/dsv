@@ -8,7 +8,7 @@ use std::process::*;
 use anyhow::Result;
 use clap::{Parser, CommandFactory};
 use base::{Processor};
-use subcommands::{cat, Cli};
+use subcommands::{Cli};
 
 fn main() -> Result<ExitCode> {
     let is_tty = std::io::stdout().is_terminal();
@@ -20,7 +20,7 @@ fn main() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         } else {
             // run as if cat
-            cat::Handler::new(std::default::Default::default(), base, is_tty)?.run(base, receiver)
+            base::DefaultProcessor{}.run(base, receiver)
         }
     })
 }
