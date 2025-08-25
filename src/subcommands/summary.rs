@@ -116,7 +116,8 @@ impl base::Processor for Handler {
                 if base.on_row(vec![h, b"(empty)".into()])? {
                     return Ok(true)
                 }
-            } else if let Some(result) = display_enum(base, &h, &column, CUTOFF)
+            } else if let Some(result) =
+                                display_enum(base, &h, &column, CUTOFF)
                     .or_else(|| display_date(base, &h, &column, CUTOFF))
                     .or_else(|| display_numeric(base, &h, &column, CUTOFF))
                     .or_else(|| display_percentage(base, &h, &column, CUTOFF))
@@ -133,10 +134,16 @@ impl base::Processor for Handler {
         }
 
         base.on_eof()
-                // elif self.is_numeric(numbers := _utils.parse_value([c.strip().removesuffix(b'%') for c in col])) >= cutoff:
-                    // if self.display_numeric(h, numbers, formatter=self.format_percentage):
-                        // break
     }
+}
+
+fn display_stats<I: Iterator<Item=Vec<BString>>>(base: &mut base::Base, stats: I) -> Result<bool> {
+    for row in stats {
+        if base.on_row(row)? {
+            return Ok(true)
+        }
+    }
+    Ok(false)
 }
 
 fn display_enum(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
@@ -162,24 +169,24 @@ fn display_enum(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
     let mut stats = common.clone();
 
     if non_blank.len() != column.len() {
-        stats.push((b"[empty string]".to_owned().into(), column.len() - non_blank.len() ));
+        stats.push((b"[empty string]".into(), column.len() - non_blank.len() ));
     }
 
-    let typ: &BStr;
+    let typ: &[u8];
     let stats = if stats.is_empty() {
         let mut stats: Vec<(&[u8], BString)> = vec![];
         // no common strings, do some word stats etc instead
-        typ = b"string".into();
-        let min_len = column.iter().map(|c| c.map_or(0, |c| c.len())).min().unwrap();
+        typ = b"string";
+        let min_len = column.iter().flatten().map(|c| c.len()).min().unwrap();
         stats.push((b"min length", format!("{min_len}").into()));
-        let max_len = column.iter().map(|c| c.map_or(0, |c| c.len())).max().unwrap();
+        let max_len = column.iter().flatten().map(|c| c.len()).max().unwrap();
         stats.push((b"max length", format!("{max_len}").into()));
         let words = column.iter().flatten().flat_map(|c| c.fields()).count();
         stats.push((b"words", format!("{words}").to_string().into()));
         stats.push((b"[example]", column.iter().flatten().next().unwrap().to_owned().clone() ));
         stats
     } else {
-        typ = b"enum".into();
+        typ = b"enum";
         let other: usize = non_blank.len() - common.iter().map(|(_, v)| v).sum::<usize>();
         if other > 0 {
             stats.push((format!("[{} other values]", counts_len - common.len()).into(), other ));
@@ -190,21 +197,18 @@ fn display_enum(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
             .collect()
     };
 
-    Some((|| {
-        for (k, v) in stats.iter() {
-            if base.on_row(vec![header.clone(), typ.to_owned(), k.to_owned().into(), v.clone()])? {
-                return Ok(true)
-            }
-        }
-        Ok(false)
-    })())
+    Some(display_stats(base, stats.into_iter().map(|(k, v)| {
+        vec![header.clone(), typ.into(), k.into(), v]
+    })))
 }
 
 fn display_date(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
-    const DATE_YARDSTICK: chrono::NaiveDate = chrono::NaiveDate::from_ymd_opt(2000, 1, 1).unwrap();
+    const DATE_YARDSTICK: f64 = chrono::NaiveDate
+        ::from_ymd_opt(2000, 1, 1).unwrap()
+        .and_hms_opt(0, 0, 0).unwrap()
+        .and_utc()
+        .timestamp() as _;
 
-    let date_yardstick: chrono::NaiveDateTime = DATE_YARDSTICK.into();
-    let date_yardstick = date_yardstick.and_utc().timestamp();
     let parsed: Vec<_> = column.iter().map(|&c| {
         let c = std::str::from_utf8(c?).ok()?;
         [
@@ -216,52 +220,33 @@ fn display_date(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
             "%Y/%m/%d %H:%M:%S",
             "%d/%m/%y %H:%M:%S",
         ].iter().filter_map(|f| chrono::DateTime::parse_from_str(c, f).map(|d| d.to_utc()).ok()).next()
+        .map(|date| date.timestamp() as f64)
         .or_else(|| {
             let val = c.parse::<f64>().ok()?;
-            if val > (date_yardstick * 1000) as f64 {
+            if val > DATE_YARDSTICK * 1000. {
                 // this is in milliseconds
-                chrono::DateTime::from_timestamp((val / 1000.) as _, ((val % 1000.) * 1_000_000.) as _)
-            } else if val > date_yardstick as f64 {
-                chrono::DateTime::from_timestamp(val.floor() as _, ((val % 1.) * 1_000_000.) as _)
+                Some(val / 1000.)
+            } else if val > DATE_YARDSTICK {
+                Some(val)
             } else {
                 None
             }
         })
     }).collect();
-    let mut valid: Vec<_> = parsed.iter().flatten().collect();
-    if (valid.len() as f64 / parsed.len() as f64) < cutoff {
-        return None
-    }
 
-    valid.sort();
-    let quartiles = get_quartiles(&valid);
-    let mean = valid.iter().map(|d| d.timestamp()).sum::<i64>() as f64 / valid.len() as f64;
-    let mean = chrono::DateTime::from_timestamp((mean / 1000.) as _, ((mean % 1000.) * 1_000_000.) as _).unwrap();
-
-    let stats = [
-        ("min", valid[0]),
-        ("first quartile", quartiles.0),
-        ("mean", &mean),
-        ("median", quartiles.1),
-        ("third quartile", quartiles.2),
-        ("max", valid.last().unwrap()),
-    ];
-
-    Some((|| {
-        for (k, v) in stats.iter() {
-            if base.on_row(vec![header.clone(), b"date".into(), k.as_bytes().into(), v.to_rfc3339().into()])? {
-                return Ok(true)
-            }
-        }
-        Ok(false)
-    })())
+    let stats = get_numeric_stats(&parsed, cutoff, |x| {
+        chrono::DateTime::from_timestamp(x.floor() as _, ((x % 1.) * 1_000_000.) as _).unwrap().to_rfc3339()
+    })?;
+    Some(display_stats(base, stats.into_iter().map(|(k, v)| {
+        vec![header.clone(), b"date".into(), k.into(), v.into()]
+    })))
 }
 
 fn get_numeric_stats<F: Fn(f64) -> String>(
     column: &[Option<f64>],
     cutoff: f64,
     formatter: F,
-) -> Option<Vec<(BString, BString)>> {
+) -> Option<Vec<(&str, String)>> {
 
     let valid_len = column.iter().flatten().count();
     if (valid_len as f64 / column.len() as f64) < cutoff {
@@ -277,18 +262,18 @@ fn get_numeric_stats<F: Fn(f64) -> String>(
     let mean = mean.iter().copied().sum::<f64>() / mean.len() as f64;
 
     let mut stats = vec![
-        ("min".into(), formatter(non_nan[0]).into()),
-        ("first quartile".into(), formatter(*quartiles.0).into()),
-        ("mean".into(), formatter(mean).into()),
-        ("median".into(), formatter(*quartiles.1).into()),
-        ("third quartile".into(), formatter(*quartiles.2).into()),
-        ("max".into(), formatter(*non_nan.last().unwrap()).into()),
+        ("min", formatter(non_nan[0])),
+        ("first quartile", formatter(*quartiles.0)),
+        ("mean", formatter(mean)),
+        ("median", formatter(*quartiles.1)),
+        ("third quartile", formatter(*quartiles.2)),
+        ("max", formatter(*non_nan.last().unwrap())),
     ];
     if non_nan.len() != valid_len {
-        stats.push(("nan".into(), (valid_len - non_nan.len()).to_string().into()));
+        stats.push(("nan", (valid_len - non_nan.len()).to_string()));
     }
     if valid_len != column.len() {
-        stats.push(("non numeric".into(), (column.len() - valid_len).to_string().into()));
+        stats.push(("non numeric", (column.len() - valid_len).to_string()));
     }
     Some(stats)
 }
@@ -296,26 +281,16 @@ fn get_numeric_stats<F: Fn(f64) -> String>(
 fn display_numeric(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
     let parsed: Vec<_> = column.iter().map(|c| std::str::from_utf8(c.as_ref()?.as_ref()).ok()?.parse::<f64>().ok()).collect();
     let stats = get_numeric_stats(&parsed, cutoff, nice_float)?;
-    Some((|| {
-        for (k, v) in stats.iter() {
-            if base.on_row(vec![header.clone(), b"numeric".into(), k.as_bytes().into(), v.as_bytes().into()])? {
-                return Ok(true)
-            }
-        }
-        Ok(false)
-    })())
+    Some(display_stats(base, stats.into_iter().map(|(k, v)| {
+        vec![header.clone(), b"numeric".into(), k.into(), v.into()]
+    })))
 }
 fn display_percentage(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
     let parsed: Vec<_> = column.iter().map(|&c| std::str::from_utf8(c?.strip_suffix(b"%")?).ok()?.parse::<f64>().ok()).collect();
     let stats = get_numeric_stats(&parsed, cutoff, |x| format!("{}%", nice_float(x)))?;
-    Some((|| {
-        for (k, v) in stats.iter() {
-            if base.on_row(vec![header.clone(), b"percent".into(), k.as_bytes().into(), v.as_bytes().into()])? {
-                return Ok(true)
-            }
-        }
-        Ok(false)
-    })())
+    Some(display_stats(base, stats.into_iter().map(|(k, v)| {
+        vec![header.clone(), b"percent".into(), k.into(), v.into()]
+    })))
 }
 fn display_size(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
     let parsed: Vec<_> = column.iter().map(|&c| parse_size(c?.as_ref())).collect();
@@ -329,12 +304,7 @@ fn display_size(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
             .unwrap();
         format!("{} {}", nice_float(size / 1_000usize.pow(exp as u32) as f64), suffix)
     })?;
-    Some((|| {
-        for (k, v) in stats.iter() {
-            if base.on_row(vec![header.clone(), b"size".into(), k.as_bytes().into(), v.as_bytes().into()])? {
-                return Ok(true)
-            }
-        }
-        Ok(false)
-    })())
+    Some(display_stats(base, stats.into_iter().map(|(k, v)| {
+        vec![header.clone(), b"size".into(), k.into(), v.into()]
+    })))
 }
