@@ -80,7 +80,7 @@ impl AutoChoices {
         }
     }
 
-    fn is_on(&self, is_tty: bool) -> bool {
+    pub fn is_on(&self, is_tty: bool) -> bool {
         match self {
             Self::Always => true,
             Self::Never => false,

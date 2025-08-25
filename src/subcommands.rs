@@ -134,4 +134,5 @@ add_subcommands!(
     exec_groupby,
     reshape_long,
     reshape_wide,
+    summary,
 );

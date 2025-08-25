@@ -5,7 +5,7 @@ import sys
 import math
 import argparse
 from functools import cache
-from ._table import to_bytes
+from ._table import to_bytes, parse_datetime
 
 @cache
 def stdin_is_tty():
