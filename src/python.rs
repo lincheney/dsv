@@ -176,10 +176,14 @@ impl<'a> GilHandle<'a> {
         }
     }
 
-    pub fn get_builtin(&self, key: Object) -> Option<Object> {
+    pub fn get_builtin_dict(&self) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyEval_GetBuiltins)()).and_then(|builtins| self.dict_get(builtins, key))
+            NonNull::new((self.py.PyEval_GetBuiltins)())
         }
+    }
+
+    pub fn get_builtin(&self, key: Object) -> Option<Object> {
+        self.get_builtin_dict().and_then(|builtins| self.dict_get(builtins, key))
     }
 
     pub fn convert_py_to_bytes(&self, obj: Object) -> &BStr {

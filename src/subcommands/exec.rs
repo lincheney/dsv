@@ -63,6 +63,7 @@ impl Handler {
 
         let globals = py.empty_dict().unwrap();
         let locals = py.empty_dict().unwrap();
+        py.dict_set_string(globals, c"__builtins__", py.get_builtin_dict().unwrap());
         py.exec(TABLE_SCRIPT, globals.as_ptr(), globals.as_ptr()).unwrap();
 
         let table_cls = py.dict_get_string(globals, c"Table").unwrap();
