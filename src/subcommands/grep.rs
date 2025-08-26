@@ -238,7 +238,7 @@ impl Handler {
         };
 
         for (i, col) in row.iter_mut().enumerate() {
-            if allowed_fields.as_ref().is_some_and(|x| x.contains(&i)) {
+            if !allowed_fields.as_ref().is_some_and(|x| x.contains(&i)) {
                 continue
             }
 
