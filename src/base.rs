@@ -658,9 +658,13 @@ impl<W: Writer> Output<W> {
 
     fn on_eof(&mut self) -> Result<bool> {
         let mut header_padding = None;
-        let header = self.gathered_header.clone();
+        let trailer = if let Some(header) = &self.gathered_header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
+            Some(header.clone())
+        } else {
+            None
+        };
 
-        if matches!(self.ofs, Ofs::Pretty) && (if self.gathered_header.is_some() { 1 } else { 0 } + self.gathered_rows.len()) > 0 {
+        if matches!(self.ofs, Ofs::Pretty) && (self.gathered_header.is_some() || !self.gathered_rows.is_empty()) {
             let padding = self.justify(self.gathered_header.as_ref(), &self.gathered_rows);
 
             let padding = if let Some(header) = self.gathered_header.take() {
@@ -677,8 +681,8 @@ impl<W: Writer> Output<W> {
             }
         }
 
-        if let Some(header) = header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
-            self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs)?;
+        if let Some(trailer) = trailer {
+            self.writer.write_header(trailer, header_padding.as_ref(), &self.opts, &self.ofs)?;
         }
         Ok(true)
     }
