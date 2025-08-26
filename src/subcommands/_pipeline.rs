@@ -50,7 +50,14 @@ impl Handler {
             });
         }
 
-        base.opts = opts_receiver.recv().unwrap();
+        base.opts = BaseOptions{
+            ifs: base.opts.ifs.clone(),
+            tsv: base.opts.tsv,
+            csv: base.opts.csv,
+            ssv: base.opts.ssv,
+            plain_ifs: base.opts.plain_ifs,
+            ..opts_receiver.recv().unwrap()
+        };
 
         Ok(Self {
             err_receiver
