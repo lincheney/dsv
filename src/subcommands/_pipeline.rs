@@ -1,5 +1,5 @@
 use anyhow::{Result};
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 use crate::base::*;
 use clap::{Parser, Subcommand};
 
@@ -16,38 +16,45 @@ enum Args {
     Args(Vec<String>),
 }
 
+type WriterFn = Box<dyn Send + FnOnce(Receiver<Message>) -> Result<()>>;
+
+struct Payload {
+    writer: WriterFn,
+    opts: BaseOptions,
+}
+
 pub struct Handler {
-    err_receiver: mpsc::Receiver<Result<()>>,
-    writer_receiver: mpsc::Receiver<Box<dyn Send + FnOnce(mpsc::Receiver<Message>) -> Result<()>>>,
+    err_receiver: Receiver<Result<()>>,
+    writer: Option<WriterFn>,
 }
 
 impl Handler {
     pub fn new(opts: Opts, base: &mut Base, is_tty: bool) -> Result<Self> {
         let Args::Args(args) = opts.args;
 
-        let (writer_sender, writer_receiver) = mpsc::channel();
+        let (payload_sender, payload_receiver) = mpsc::channel();
         let (err_sender, err_receiver) = mpsc::channel();
-        let (opts_sender, opts_receiver) = mpsc::channel();
         for (i, arg) in args.rsplit(|a| a == "!").enumerate() {
             let new_sender = base.sender.clone();
             let receiver;
             (base.sender, receiver) = mpsc::channel();
 
-            let opts_sender = opts_sender.clone();
             let arg = arg.to_owned();
             let scope = base.scope;
             let err_sender = err_sender.clone();
 
             if i == 0 {
                 // last
-                let writer_sender = writer_sender.clone();
+                let payload_sender = payload_sender.clone();
                 scope.spawn(move || {
                     let result = (|| {
                         let args = arg.iter().map(|x| x.as_ref());
                         let (handler, mut base, writer) = super::Subcommands::from_args(args, new_sender, scope, is_tty, true)?;
                         // take opts from the last handler?
-                        writer_sender.send(writer.unwrap()).unwrap();
-                        opts_sender.send(base.opts.clone()).unwrap();
+                        payload_sender.send(Payload {
+                            writer: writer.unwrap(),
+                            opts: base.opts.clone(),
+                        }).unwrap();
                         handler.forward_messages(&mut base, receiver)
                     })();
                     err_sender.send(result).unwrap();
@@ -64,26 +71,27 @@ impl Handler {
             }
         }
 
+        let payload = payload_receiver.recv().unwrap();
         base.opts = BaseOptions{
             ifs: base.opts.ifs.clone(),
             tsv: base.opts.tsv,
             csv: base.opts.csv,
             ssv: base.opts.ssv,
             plain_ifs: base.opts.plain_ifs,
-            ..opts_receiver.recv().unwrap()
+            ..payload.opts
         };
 
         Ok(Self {
             err_receiver,
-            writer_receiver,
+            writer: Some(payload.writer),
         })
     }
 }
 
 impl Processor for Handler {
 
-    fn run(self, base: &mut Base, receiver: mpsc::Receiver<Message>) -> Result<std::process::ExitCode> {
-        let writer = self.writer_receiver.recv().unwrap();
+    fn run(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<std::process::ExitCode> {
+        let writer = self.writer.take().unwrap();
         base.scope.spawn(move || {
             writer(receiver)
         });

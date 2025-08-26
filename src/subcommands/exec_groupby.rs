@@ -122,10 +122,8 @@ impl base::Processor for Handler {
             };
             drop(py);
 
-            if let Some(result) = result {
-                if self.inner.handle_result(base, result)? {
-                    return Ok(true)
-                }
+            if let Some(result) = result && self.inner.handle_result(base, result)? {
+                return Ok(true)
             }
         }
         base.on_eof()
