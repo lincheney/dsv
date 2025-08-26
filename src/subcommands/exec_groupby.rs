@@ -91,7 +91,7 @@ impl base::Processor for Handler {
 
     fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
         let mut header: Option<Vec<_>> = None;
-        for (key, group) in self.groups.iter() {
+        for (key, group) in &self.groups {
             let py = self.inner.py.acquire_gil();
             let header = header.get_or_insert_with(|| {
                 let header = self.column_slicer.slice_with(

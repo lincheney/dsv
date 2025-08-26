@@ -58,7 +58,7 @@ impl Processor for Handler {
 
     fn on_eof(self, base: &mut Base) -> Result<bool> {
         let mut result = Ok(());
-        for r in self.err_receivers.iter() {
+        for r in &self.err_receivers {
             match r.recv().unwrap() {
                 Ok(_) => (),
                 e if result.is_ok() => { result = e; },

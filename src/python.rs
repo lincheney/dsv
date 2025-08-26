@@ -151,7 +151,7 @@ pub struct GilHandle<'a> {
     state: i32,
 }
 
-impl<'a> Drop for GilHandle<'a> {
+impl Drop for GilHandle<'_> {
     fn drop(&mut self) {
         unsafe{
             (self.py.PyGILState_Release)(self.state);
@@ -159,7 +159,7 @@ impl<'a> Drop for GilHandle<'a> {
     }
 }
 
-impl<'a> GilHandle<'a> {
+impl GilHandle<'_> {
     pub fn is_none(&self, obj: Object) -> bool {
         obj == self.py._Py_NoneStruct.0
     }
@@ -198,12 +198,12 @@ impl<'a> GilHandle<'a> {
                 if obj.is_null() {
                     return Err(self.get_exception())
                 }
-                let bytes = (self.py.PyUnicode_AsUTF8AndSize)(obj, &mut size as _);
+                let bytes = (self.py.PyUnicode_AsUTF8AndSize)(obj, std::ptr::from_mut(&mut size));
                 debug_assert!(!bytes.is_null());
                 bytes
             };
 
-            Ok(std::slice::from_raw_parts(bytes as *const u8, size as _).into())
+            Ok(std::slice::from_raw_parts(bytes.cast(), size.try_into()?).into())
         }
     }
 
@@ -233,19 +233,19 @@ impl<'a> GilHandle<'a> {
 
     pub fn to_str(&self, string: &str) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyUnicode_FromStringAndSize)(string.as_ptr() as _, string.len() as _))
+            NonNull::new((self.py.PyUnicode_FromStringAndSize)(string.as_ptr().cast(), string.len() as _))
         }
     }
 
     pub fn to_bytes(&self, string: &BStr) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyBytes_FromStringAndSize)(string.as_ptr() as _, string.len() as _))
+            NonNull::new((self.py.PyBytes_FromStringAndSize)(string.as_ptr().cast(), string.len().try_into().unwrap()))
         }
     }
 
     pub fn empty_list(&self, size: usize) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyList_New)(size as _))
+            NonNull::new((self.py.PyList_New)(size.try_into().unwrap()))
         }
     }
 
@@ -266,7 +266,7 @@ impl<'a> GilHandle<'a> {
         unsafe{
             let list = self.empty_list(iter.len())?;
             for (i, value) in iter.enumerate() {
-                let result = (self.py.PyList_SetItem)(list.as_ptr(), i as _, value.as_ptr());
+                let result = (self.py.PyList_SetItem)(list.as_ptr(), i.try_into().unwrap(), value.as_ptr());
                 debug_assert!(result == 0);
             }
             Some(list)
@@ -293,7 +293,7 @@ impl<'a> GilHandle<'a> {
 
     pub fn dict_get_string(&self, dict: Object, key: &CStr) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyDict_GetItemString)(dict.as_ptr(), key.as_ptr() as _))
+            NonNull::new((self.py.PyDict_GetItemString)(dict.as_ptr(), key.as_ptr().cast()))
         }
     }
 
@@ -306,7 +306,7 @@ impl<'a> GilHandle<'a> {
 
     pub fn dict_set_string(&self, dict: Object, key: &CStr, value: Object) {
         unsafe{
-            let result = (self.py.PyDict_SetItemString)(dict.as_ptr(), key.as_ptr() as _, value.as_ptr());
+            let result = (self.py.PyDict_SetItemString)(dict.as_ptr(), key.as_ptr().cast(), value.as_ptr());
             debug_assert!(result == 0);
         }
     }
@@ -320,8 +320,7 @@ impl<'a> GilHandle<'a> {
     pub fn call_func(&self, func: Object, args: &[Object]) -> Result<Object> {
         unsafe{
             (self.py.PyErr_Clear)();
-            let args: &[Pointer] = std::mem::transmute(args);
-            NonNull::new((self.py.PyObject_Vectorcall)(func.as_ptr(), args.as_ptr(), args.len(), null_mut()))
+            NonNull::new((self.py.PyObject_Vectorcall)(func.as_ptr(), args.as_ptr().cast(), args.len(), null_mut()))
                 .ok_or_else(|| self.get_exception())
         }
     }
@@ -337,7 +336,7 @@ impl<'a> GilHandle<'a> {
         let mut value: Pointer = null_mut();
         let mut tb: Pointer = null_mut();
         unsafe {
-            (self.py.PyErr_Fetch)(&mut typ as _, &mut value as _, &mut tb as _);
+            (self.py.PyErr_Fetch)(std::ptr::from_mut(&mut typ), std::ptr::from_mut(&mut value), std::ptr::from_mut(&mut tb));
             (self.py.PyErr_SetExcInfo)(typ, value, tb);
             let exc = self._exec_code(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
             // then clear it

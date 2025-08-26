@@ -39,7 +39,7 @@ impl base::Processor<MarkdownWriter> for Handler {
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
         if self.drop_header {
-            for h in header.iter_mut() {
+            for h in &mut header {
                 h.clear();
             }
         }
@@ -84,7 +84,7 @@ impl Writer for MarkdownWriter {
 
     fn format_columns(mut row: Vec<BString>, _ofs: &base::Ofs, _ors: &BStr, quote_output: bool) -> base::FormattedRow {
         if quote_output {
-            for col in row.iter_mut() {
+            for col in &mut row {
                 // TODO what about newlines
                 if let std::borrow::Cow::Owned(new) = NEEDS_ESCAPE.replace_all(col, b"\\$0") {
                     *col = new.into();

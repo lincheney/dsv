@@ -48,9 +48,7 @@ impl base::Processor for Handler {
     fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         const ORS: &[u8] = b"\n";
 
-        if !self.got_header {
-            panic!("cannot use sqlite without a header");
-        }
+        assert!(self.got_header, "cannot use sqlite without a header");
         let proc = self.start_proc()?;
         let row = crate::writer::format_columns(row, &base::Ofs::Plain(DELIM.as_bytes()), ORS.into(), true).0;
         proc.stdin.write_all(&row.join(DELIM.as_bytes()))?;

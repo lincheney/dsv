@@ -99,10 +99,10 @@ impl Handler {
             });
 
             Ok(proc.insert(Proc {
-                err_receiver,
                 child,
                 stdin,
                 sender,
+                err_receiver,
             }))
         }
     }

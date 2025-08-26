@@ -37,8 +37,9 @@ impl Handler {
             if do_callbacks.contains(Callbacks::ON_EOF) {
                 let values = header.iter().map(|k| {
                     row.get(k)
-                        .map(|v| v.as_str().map(|s| s.to_owned()).unwrap_or_else(|| v.to_string()))
-                        .unwrap_or_else(String::new)
+                        .map_or_else(String::new, |v| {
+                            v.as_str().map_or_else(|| v.to_string(), |s| s.to_owned())
+                        })
                         .into()
                 }).collect();
                 if self.on_row(base, values)? {

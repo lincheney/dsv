@@ -1,6 +1,5 @@
 use anyhow::Result;
 use crate::base;
-use std::ops::Deref;
 use std::io::BufRead;
 use std::process::ExitCode;
 use std::collections::HashMap;
@@ -79,7 +78,7 @@ impl base::Processor for Handler {
                     if matches!(state.last().map(|x| x.as_slice()), Some(b"td" | b"th")) {
                         if self.opts.inner_html && let Some(last) = current_row.last_mut() {
                             last.push(b'<');
-                            last.push_str(tag.deref());
+                            last.push_str(&*tag);
                             last.push(b'>');
                         }
                         continue
@@ -109,7 +108,7 @@ impl base::Processor for Handler {
                                     for attr in tag.html_attributes().with_checks(false) {
                                         let attr = attr?;
                                         if attr.key.0 == b"rowspan" {
-                                            if let Ok(Ok(span)) = std::str::from_utf8(&attr.value).map(|x| x.parse::<usize>()) && span > 0 {
+                                            if let Ok(Ok(span)) = std::str::from_utf8(&attr.value).map(str::parse::<usize>) && span > 0 {
                                                 add_rowspan(&mut rowspans, current_row.len(), span, b"".into());
                                             } else {
                                                 // print(f'invalid rowspan {rowspan!r}', file=sys.stderr)
@@ -139,7 +138,7 @@ impl base::Processor for Handler {
                         Some(x @ (b"th" | b"td")) if x != name && self.opts.inner_html => {
                             if let Some(last) = current_row.last_mut() {
                                 last.push_str(b"</");
-                                last.push_str(tag.deref());
+                                last.push_str(&*tag);
                                 last.push(b'>');
                             }
                         },

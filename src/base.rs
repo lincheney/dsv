@@ -394,7 +394,7 @@ pub trait Processor<W: Writer=BaseWriter> {
 
     fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<()> where Self: Sized {
         let mut err = Ok(());
-        for msg in receiver.iter() {
+        for msg in &receiver {
             let result = match msg {
                 Message::Row(row) => self.on_row(base, row),
                 Message::Header(header) => self.on_header(base, header),
@@ -465,11 +465,11 @@ impl<'a, 'b> Base<'a, 'b> {
         }
     }
 
-    fn next_ifs(&self, line: &BStr, start: usize, ifs: &Ifs) -> Option<(usize, usize)> {
+    fn next_ifs(line: &BStr, start: usize, ifs: &Ifs) -> Option<(usize, usize)> {
         match ifs {
-            Ifs::Space => self.next_regex_ifs(line, start, &SPACE),
-            Ifs::Pretty => self.next_regex_ifs(line, start, &PPRINT),
-            Ifs::Regex(ifs) => self.next_regex_ifs(line, start, ifs),
+            Ifs::Space => Self::next_regex_ifs(line, start, &SPACE),
+            Ifs::Pretty => Self::next_regex_ifs(line, start, &PPRINT),
+            Ifs::Regex(ifs) => Self::next_regex_ifs(line, start, ifs),
             Ifs::Plain(ifs) => {
                 let idx = start + line[start..].find(ifs)?;
                 Some((idx, idx + ifs.len()))
@@ -477,7 +477,7 @@ impl<'a, 'b> Base<'a, 'b> {
         }
     }
 
-    fn next_regex_ifs(&self, line: &BStr, start: usize, ifs: &Regex) -> Option<(usize, usize)> {
+    fn next_regex_ifs(line: &BStr, start: usize, ifs: &Regex) -> Option<(usize, usize)> {
         let m = ifs.find(&line[start..])?;
         Some((start + m.start(), start + m.end()))
     }
@@ -517,7 +517,7 @@ impl<'a, 'b> Base<'a, 'b> {
             let (value, i) = Self::extract_column(line, 0, quote);
             last.extend_from_slice(&value);
             if let Some(i) = i {
-                start = self.next_ifs(line, i + 1, &self.ifs).unzip().1;
+                start = Self::next_ifs(line, i + 1, &self.ifs).unzip().1;
             } else {
                 return (row, true);
             }
@@ -535,12 +535,12 @@ impl<'a, 'b> Base<'a, 'b> {
                     row.push(value);
                 }
                 if let Some(i) = i {
-                    start = self.next_ifs(line, i + 1, &self.ifs).unzip().1;
+                    start = Self::next_ifs(line, i + 1, &self.ifs).unzip().1;
                 } else {
                     return (row, true);
                 }
             } else {
-                let se = self.next_ifs(line, s, &self.ifs).unzip();
+                let se = Self::next_ifs(line, s, &self.ifs).unzip();
                 if row_full {
                     row.last_mut().unwrap().extend_from_slice(&line[s..se.1.unwrap_or(line.len())]);
                 } else {
@@ -627,14 +627,14 @@ impl<W: Writer> Output<W> {
         }
     }
 
-    fn justify(&self, header: Option<&FormattedRow>, rows: &[GatheredRow]) -> Vec<Vec<usize>> {
-        let empty_vec = FormattedRow(vec![]);
+    fn justify(header: Option<&FormattedRow>, rows: &[GatheredRow]) -> Vec<Vec<usize>> {
         fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a FormattedRow) -> &'a FormattedRow {
             match row {
                 GatheredRow::Row(row) => row,
                 _ => empty_vec,
             }
         }
+        let empty_vec = FormattedRow(vec![]);
         let row_filter = |row| row_filter_fn(row, &empty_vec);
 
         let widths: Vec<Vec<_>> = header.into_iter()
@@ -643,10 +643,10 @@ impl<W: Writer> Output<W> {
             .collect();
 
         let max_col = rows.iter().map(|row| row_filter(row).0.len()).max().unwrap_or(0);
-        let max_col = max_col.max(header.map(|h| h.0.len()).unwrap_or(0));
+        let max_col = max_col.max(header.map_or(0, |h| h.0.len()));
 
         let max_widths: Vec<_> = (0 .. max_col).map(|i|
-            widths.iter().flat_map(|w| w.get(i)).max().cloned().unwrap_or(0)
+            widths.iter().filter_map(|w| w.get(i)).max().copied().unwrap_or(0)
         ).collect();
 
         // don't pad the last column
@@ -665,7 +665,7 @@ impl<W: Writer> Output<W> {
         };
 
         if matches!(self.ofs, Ofs::Pretty) && (self.gathered_header.is_some() || !self.gathered_rows.is_empty()) {
-            let padding = self.justify(self.gathered_header.as_ref(), &self.gathered_rows);
+            let padding = Self::justify(self.gathered_header.as_ref(), &self.gathered_rows);
 
             let padding = if let Some(header) = self.gathered_header.take() {
                 let (first, new_padding) = padding.split_first().unwrap();
@@ -752,7 +752,7 @@ impl<W: Writer> Output<W> {
     }
 
     fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
-        for msg in receiver.iter() {
+        for msg in &receiver {
             match msg {
                 Message::Row(row) => if self.on_row(row, false)? { break },
                 Message::Header(header) => if self.on_header(header)? { break },
@@ -760,7 +760,7 @@ impl<W: Writer> Output<W> {
                 Message::Separator => if self.on_separator()? { break },
                 Message::Raw(value) => if self.on_raw(value)? { break },
                 Message::Ofs(ofs) => if self.on_ofs(ofs) { break },
-            };
+            }
         }
         Ok(())
     }

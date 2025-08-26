@@ -94,7 +94,7 @@ impl Handler {
         }
 
         if opts.common.fixed_strings {
-            for pat in patterns.iter_mut() {
+            for pat in &mut patterns {
                 *pat = regex::escape(pat);
             }
         }

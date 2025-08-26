@@ -80,7 +80,7 @@ impl ColumnSlicer {
             let iter = self.fields.iter()
                 .filter_map(move |field| match field {
                     Field::Range(start, end) => Some(Self::range_for_row(*start, *end, len)),
-                    Field::Index(i) => Some(*i .. *i+1),
+                    Field::Index(i) => Some(*i .. i+1),
                     Field::Name(name) => self.headers.get(name).map(|&i| i .. i+1),
                     Field::Regex(_) => None,
                 }).chain(self.fields.iter()

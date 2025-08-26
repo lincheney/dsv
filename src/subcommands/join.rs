@@ -185,7 +185,7 @@ impl Joiner {
         let mut got_headers = false;
         let mut buffer = vec![];
 
-        for (is_left, msg) in receiver.iter() {
+        for (is_left, msg) in &receiver {
             match msg {
                 Message::Separator => unreachable!(),
                 Message::Raw(_) => unreachable!(),
@@ -207,7 +207,7 @@ impl Joiner {
                             // get common fields
                             let left: HashSet<_> = headers.0.iter().collect();
                             let right: HashSet<_> = headers.1.iter().collect();
-                            let fields: Vec<_> = left.intersection(&right).cloned().cloned().collect();
+                            let fields: Vec<_> = left.intersection(&right).copied().cloned().collect();
                             if fields.is_empty() {
                                 // default join field is the first
                                 slicers.0 = ColumnSlicer::new(&["1".into()], false);
@@ -228,12 +228,12 @@ impl Joiner {
                         let mut right = slicers.1.slice(headers.1, true, true);
 
                         if let Some(rename) = &opts.rename_1 {
-                            for h in left.iter_mut() {
+                            for h in &mut left {
                                 *h = percent_format(rename.as_bytes().into(), h.as_ref());
                             }
                         }
                         if let Some(rename) = &opts.rename_2 {
-                            for h in right.iter_mut() {
+                            for h in &mut right {
                                 *h = percent_format(rename.as_bytes().into(), h.as_ref());
                             }
                         }
@@ -257,7 +257,6 @@ impl Joiner {
                     if !got_headers {
                         // stick it in the buffer for later
                         buffer.push(row);
-                        continue
                     } else if self.on_row(is_left, row, &mut stores, &slicers, base)? {
                         return Ok(())
                     }
@@ -309,7 +308,7 @@ impl Joiner {
         if let Some(left) = left {
             new_row.append(&mut slicers.0.slice(left, true, true));
         }
-        let empty = empty_value.filter(|_| left.is_none()).map(|x| x.as_bytes()).unwrap_or(b"");
+        let empty = empty_value.filter(|_| left.is_none()).map_or(b"" as _, |x| x.as_bytes());
         new_row.resize(new_row.len().max(old_len + self.left_len), empty.into());
 
         let old_len = new_row.len();

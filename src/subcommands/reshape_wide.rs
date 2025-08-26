@@ -58,7 +58,7 @@ impl base::Processor for Handler {
         let new_headers: HashMap<_, _> = new_headers.iter().enumerate().map(|(i, h)| (h, i)).collect();
 
         let mut groups: HashMap<Vec<BString>, Vec<Option<BString>>> = HashMap::new();
-        for mut row in self.rows.into_iter() {
+        for mut row in self.rows {
             let mut indices = self.column_slicer.indices(row.len(), false);
             let group_key = self.column_slicer.slice(&row, true, true);
             let key = indices.next().unwrap();
@@ -82,7 +82,7 @@ impl base::Processor for Handler {
         }
 
         // print the remaining unmatched ones
-        for (key, value) in groups.into_iter() {
+        for (key, value) in groups {
             let row = value.into_iter().map(|x| x.unwrap_or(b"".into())).chain(key).collect();
             if base.on_row(row)? {
                 return Ok(false)

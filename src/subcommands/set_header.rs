@@ -51,7 +51,7 @@ impl base::Processor for Handler {
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
 
-        for [old, new] in self.opts.rename.as_chunks::<2>().0.iter() {
+        for [old, new] in self.opts.rename.as_chunks::<2>().0 {
             let i = if let Ok(i) = old.parse::<usize>() {
                 i - 1
             } else if let Some(i) = header.iter().position(|h| h == old.as_str()) {

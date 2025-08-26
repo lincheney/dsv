@@ -219,7 +219,7 @@ fn display_date(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
             "%Y-%m-%d %H:%M:%S",
             "%Y/%m/%d %H:%M:%S",
             "%d/%m/%y %H:%M:%S",
-        ].iter().filter_map(|f| chrono::DateTime::parse_from_str(c, f).map(|d| d.to_utc()).ok()).next()
+        ].iter().find_map(|f| chrono::DateTime::parse_from_str(c, f).map(|d| d.to_utc()).ok())
         .map(|date| date.timestamp() as f64)
         .or_else(|| {
             let val = c.parse::<f64>().ok()?;

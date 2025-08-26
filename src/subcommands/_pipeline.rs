@@ -70,7 +70,7 @@ impl Processor for Handler {
         base.on_eof()?;
 
         let mut result = Ok(());
-        for err in self.err_receiver.iter() {
+        for err in &self.err_receiver {
             if result.is_ok() {
                 result = result.and(err);
             } else if let Err(e) = err {

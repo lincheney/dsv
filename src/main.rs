@@ -4,7 +4,7 @@ mod column_slicer;
 mod writer;
 mod python;
 use std::io::IsTerminal;
-use std::process::*;
+use std::process::ExitCode;
 use anyhow::Result;
 use clap::{Parser, CommandFactory};
 use base::{Processor};

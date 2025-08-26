@@ -18,7 +18,7 @@ pub fn format_columns<S: AsRef<BStr>>(mut row: Vec<BString>, ofs: &Ofs<S>, ors: 
         let pretty_output = matches!(ofs, Ofs::Pretty);
         let ofs = ofs.as_bstr();
 
-        for col in row.iter_mut() {
+        for col in &mut row {
             if (pretty_output && col.is_empty()) || needs_quoting(col, ofs, ors) {
                 let mut quoted_col = vec![];
                 quoted_col.push(b'"');
@@ -99,7 +99,7 @@ pub trait Writer {
     fn write_separator(&mut self, _padding: Option<&Vec<usize>>, opts: &BaseOptions) -> Result<()> {
         let mut sep: BString;
         let sep = if opts.colour == AutoChoices::Always {
-            let width = termsize::get().map(|size| size.cols).unwrap_or(80) as usize;
+            let width = termsize::get().map_or(80, |size| size.cols) as usize;
             sep = b"\x1b[2m".into();
             sep.push_str(b"-".repeat(width));
             sep.push_str(RESET_COLOUR);
