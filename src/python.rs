@@ -194,11 +194,9 @@ impl GilHandle<'_> {
                 size = (self.py.PyBytes_Size)(obj.as_ptr());
                 (self.py.PyBytes_AsString)(obj.as_ptr())
             } else {
-                let obj = (self.py.PyObject_Str)(obj.as_ptr());
-                if obj.is_null() {
-                    return Err(self.get_exception())
-                }
-                let bytes = (self.py.PyUnicode_AsUTF8AndSize)(obj, std::ptr::from_mut(&mut size));
+                let obj = NonNull::new((self.py.PyObject_Str)(obj.as_ptr()))
+                    .ok_or_else(|| self.get_exception())?;
+                let bytes = (self.py.PyUnicode_AsUTF8AndSize)(obj.as_ptr(), std::ptr::from_mut(&mut size));
                 debug_assert!(!bytes.is_null());
                 bytes
             };
@@ -367,17 +365,17 @@ impl GilHandle<'_> {
         Ok(())
     }
 
-    pub fn iter(&self, obj: Object) -> impl Iterator<Item=Object> {
-        let iter = unsafe{ (self.py.PyObject_GetIter)(obj.as_ptr()) };
-        debug_assert!(!iter.is_null());
+    pub fn iter(&self, obj: Object) -> Result<impl Iterator<Item=Object>> {
+        let iter = NonNull::new(unsafe{ (self.py.PyObject_GetIter)(obj.as_ptr()) })
+            .ok_or_else(|| self.get_exception())?;
 
         let mut item: Option<Object> = None;
-        std::iter::from_fn(move || unsafe {
+        Ok(std::iter::from_fn(move || unsafe {
             if let Some(item) = item {
                 (self.py.Py_DecRef)(item.as_ptr());
             }
-            item = NonNull::new((self.py.PyIter_Next)(iter));
+            item = NonNull::new((self.py.PyIter_Next)(iter.as_ptr()));
             item
-        })
+        }))
     }
 }

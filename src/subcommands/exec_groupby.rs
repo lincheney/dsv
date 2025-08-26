@@ -39,7 +39,7 @@ pub struct Handler {
 
 unsafe impl Send for Handler {}
 
-const POSTPROCESS: &CStr = c"
+const POSTPROCESS: &CStr = /*python*/ c"
 if not isinstance(result, BaseTable) or (isinstance(result, Proxy) and (result.__is_column__() or result.__is_row__())):
     if not isinstance(result, dict):
         result = {default_key: result}

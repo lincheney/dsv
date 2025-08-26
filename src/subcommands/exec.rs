@@ -190,7 +190,7 @@ impl Handler {
                 if !self.got_header && let Some(header) = header && !py.is_none(header) {
                     self.got_header = true;
                     let mut new_header = vec![];
-                    for x in py.iter(header) {
+                    for x in py.iter(header)? {
                         new_header.push(py.convert_py_to_bytes(x)?.to_owned());
                     }
                     if base.on_header(new_header)? {
@@ -200,9 +200,9 @@ impl Handler {
 
                 let rows = py.getattr(table, py.to_str("__data__").unwrap());
                 if let Some(rows) = rows && !py.is_none(rows) {
-                    for row in py.iter(rows) {
+                    for row in py.iter(rows)? {
                         let mut new_row = vec![];
-                        for x in py.iter(row) {
+                        for x in py.iter(row)? {
                             new_row.push(py.convert_py_to_bytes(x)?.to_owned());
                         }
                         if base.on_row(new_row)? {
