@@ -35,7 +35,7 @@ pub struct Handler {
     opts: Opts,
     column_slicer: Option<ColumnSlicer>,
     proc: Option<Proc>,
-    header: Vec<BString>,
+    header: Option<Vec<BString>>,
     ofs: Ofs,
 }
 
@@ -51,7 +51,7 @@ impl Handler {
             opts,
             ofs: Ofs::default(),
             column_slicer,
-            header: vec![],
+            header: None,
         })
     }
 }
@@ -71,26 +71,24 @@ impl Handler {
             let stdin = BufWriter::new(child.stdin.take().unwrap());
             let stdout = BufReader::new(child.stdout.take().unwrap());
 
-            let mut cli_opts = base.opts.clone();
+            let mut base = base.clone();
             match &self.ofs {
-                Ofs::Pretty => cli_opts.pretty = true,
-                Ofs::Plain(ofs) => cli_opts.ofs = Some(ofs.to_string()),
+                Ofs::Pretty => base.opts.pretty = true,
+                Ofs::Plain(ofs) => base.opts.ofs = Some(ofs.to_string()),
             }
-            cli_opts.header = Some(false);
-            let handler = PipeHandler{
+            let header = self.header.take();
+            let mut handler = PipeHandler{
                 receiver,
                 column_slicer: self.column_slicer.clone(),
                 append: !self.opts.append_columns.is_empty(),
                 complement: self.opts.complement,
-                header_len: self.header.len() - self.opts.append_columns.len(),
+                header_len: header.as_ref().map(|h| h.len() - self.opts.append_columns.len()),
             };
-            let header = std::mem::take(&mut self.header);
-            let mut base = base.clone();
 
             base.scope.spawn(move || {
                 let result = (|| {
-                    cli_opts.header = Some(false);
-                    if base.on_header(header)? {
+                    base.opts.header = Some(false);
+                    if let Some(header) = header && handler.on_header(&mut base, header)? {
                         base.on_eof()?;
                     } else {
                         handler.process_file(stdout, &mut base, base::Callbacks::all())?;
@@ -122,7 +120,7 @@ impl base::Processor for Handler {
             slicer.make_header_map(&header);
         }
         header.extend(self.opts.append_columns.iter().map(|x| x.as_bytes().into()));
-        self.header = header;
+        self.header = Some(header);
         Ok(false)
     }
 
@@ -167,7 +165,7 @@ struct PipeHandler {
     column_slicer: Option<ColumnSlicer>,
     complement: bool,
     append: bool,
-    header_len: usize,
+    header_len: Option<usize>,
 }
 
 impl base::Processor for PipeHandler {
@@ -175,8 +173,8 @@ impl base::Processor for PipeHandler {
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
         let mut input = self.receiver.recv().unwrap();
         if self.append {
-            if self.header_len > input.len() {
-                input.resize(self.header_len, b"".into());
+            if let Some(header_len) = self.header_len && header_len > input.len() {
+                input.resize(header_len, b"".into());
             }
             input.append(&mut row);
         } else if let Some(slicer) = &self.column_slicer {
