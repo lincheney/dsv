@@ -360,9 +360,8 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                 };
 
                 if is_header {
-                    let header = row.clone();
-                    base.header = Some(row);
-                    if do_callbacks.contains(Callbacks::ON_HEADER) && let Err(e) = self.on_header(base, header) {
+                    base.header_len = Some(row.len());
+                    if do_callbacks.contains(Callbacks::ON_HEADER) && let Err(e) = self.on_header(base, row) {
                         err = Err(e);
                         break
                     }
@@ -370,10 +369,6 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                     err = Err(e);
                     break
                 }
-
-                // if do_yield {
-                    // yield (row, is_header)
-                // }
 
                 row = vec![];
             }
@@ -449,7 +444,7 @@ impl Processor for DefaultProcessor{}
 pub struct Base<'a, 'b> {
     pub sender: Sender<Message>,
     pub opts: BaseOptions,
-    header: Option<Vec<BString>>,
+    header_len: Option<usize>,
     pub ifs: Ifs,
     pub scope: &'a std::thread::Scope<'a, 'b>,
 }
@@ -460,7 +455,7 @@ impl<'a, 'b> Base<'a, 'b> {
         Self {
             sender,
             opts,
-            header: None,
+            header_len: None,
             ifs: Ifs::Pretty,
             scope,
         }
@@ -485,8 +480,8 @@ impl<'a, 'b> Base<'a, 'b> {
 
     fn parse_line(&self, line: &BStr, mut row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
         let allow_quoted = !self.opts.no_quoting;
-        let maxcols = if self.opts.combine_trailing_columns && let Some(header) = &self.header {
-            Some(header.len())
+        let maxcols = if self.opts.combine_trailing_columns && let Some(header_len) = self.header_len {
+            Some(header_len)
         } else {
             None
         };
@@ -755,7 +750,7 @@ impl<W: Writer> Output<W> {
     pub fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
         let mut file = None;
         let file = &mut file;
-        for msg in &receiver {
+        for msg in receiver {
             match msg {
                 Message::Row(row) => if self.on_row(file, row, false)? { break },
                 Message::Header(header) => if self.on_header(file, header)? { break },

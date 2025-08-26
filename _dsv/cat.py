@@ -29,7 +29,10 @@ class cat(_Base):
 
     def on_eof(self):
         for file in self.opts.files:
-            child = _Base(self.original_opts)
+            if self.header is None and not self.row_count:
+                child = _Base(self.opts)
+            else:
+                child = _Base(self.original_opts)
             child.on_row = self.on_row
             child.on_header = self.on_header
             list(child.process_file(file))
