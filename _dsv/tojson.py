@@ -7,17 +7,11 @@ class tojson(_Base):
     parser = argparse.ArgumentParser()
     parser.set_defaults(drop_header=True, ofs=b',')
 
-    def on_header(self, header):
-        pass
-
-    def on_row(self, row):
+    def format_row(self, data, *args, **kwargs):
         values = {}
-        for i, col in enumerate(row):
+        for i, col in enumerate(data):
             key = i
             if self.header and i < len(self.header):
                 key = self.header[i].decode('utf8')
             values[key] = col.decode('utf8')
-        return super().on_row(values)
-
-    def format_row(self, data, *args, **kwargs):
-        return json.dumps(data).encode('utf8')
+        return json.dumps(values).encode('utf8')

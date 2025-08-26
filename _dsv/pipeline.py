@@ -53,6 +53,7 @@ class pipeline(_Base):
 
         # pipe from left to right
         for src, dst in zip(self.pipeline[:-1], self.pipeline[1:]):
+            src.opts.ofs = b'\t'
 
             def write_output(row, padding=None, is_header=False, dst=dst):
                 if is_header:
