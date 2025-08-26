@@ -38,7 +38,8 @@ impl Handler {
             let err_sender = err_sender.clone();
             scope.spawn(move || {
                 let result = (|| {
-                    let (handler, mut base) = super::Subcommands::from_args(&arg, new_sender, scope, is_tty)?;
+                    let args = arg.iter().map(|x| x.as_ref());
+                    let (handler, mut base) = super::Subcommands::from_args(args, new_sender, scope, last && is_tty)?;
                     // take opts from the last handler?
                     if last {
                         opts_sender.send(base.opts.clone()).unwrap();
