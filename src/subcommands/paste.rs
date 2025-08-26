@@ -1,4 +1,4 @@
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::*;
 use bstr::BString;
@@ -57,16 +57,7 @@ impl Processor for Handler {
     }
 
     fn on_eof(self, base: &mut Base) -> Result<bool> {
-        let mut result = Ok(());
-        for r in &self.err_receivers {
-            match r.recv().unwrap() {
-                Ok(_) => (),
-                e if result.is_ok() => { result = e; },
-                Err(e) => { result = result.context(e); },
-            }
-        }
-        result?;
-
+        crate::utils::chain_errors(self.err_receivers.iter().map(|r| r.recv().unwrap()))?;
         base.on_eof()
     }
 }

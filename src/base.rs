@@ -379,15 +379,10 @@ pub trait Processor<W: Writer=BaseWriter> {
         }
 
         if do_callbacks.contains(Callbacks::ON_EOF) {
-            if let Err(e) = self.on_eof(base) {
-                err = if err.is_ok() {
-                    Err(e)
-                } else {
-                    err.context(e)
-                };
-            }
+            crate::utils::chain_errors([err, self.on_eof(base).map(|_| ())].into_iter())?;
+        } else {
+            err?;
         }
-        err?;
 
         Ok(ExitCode::SUCCESS)
     }

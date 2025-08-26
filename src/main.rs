@@ -3,6 +3,7 @@ mod subcommands;
 mod column_slicer;
 mod writer;
 mod python;
+mod utils;
 use std::io::IsTerminal;
 use std::process::ExitCode;
 use anyhow::Result;

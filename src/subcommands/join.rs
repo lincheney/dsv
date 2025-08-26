@@ -152,16 +152,7 @@ impl Processor for Handler {
 
     fn on_eof(self, _base: &mut Base) -> Result<bool> {
         drop(self.inner.sender);
-        let result1 = self.err_receiver.recv().unwrap();
-        let result2 = self.err_receiver.recv().unwrap();
-
-        match (result1, result2) {
-            (Ok(_), Ok(_)) => (),
-            (r1, Ok(_)) => { r1?; },
-            (Ok(_), r2) => { r2?; },
-            (r1, Err(r)) => { r1.context(r)?; },
-        }
-
+        crate::utils::chain_errors(self.err_receiver.iter())?;
         Ok(false)
     }
 }

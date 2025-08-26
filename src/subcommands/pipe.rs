@@ -2,7 +2,8 @@ use anyhow::{Result, Context};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::{self, Processor, Ofs};
 use bstr::{BString, BStr, ByteVec};
-use std::process::{Child, Command, ChildStdin, Stdio};
+use std::process::{Child, Command, ChildStdin, Stdio, ExitStatus};
+use std::os::unix::process::ExitStatusExt;
 use std::io::{BufReader, BufWriter, Write};
 use crate::column_slicer::ColumnSlicer;
 use clap::{Parser, ArgAction};
@@ -145,16 +146,10 @@ impl base::Processor for Handler {
             drop(sender);
             drop(stdin);
 
-            let result1 = err_receiver.recv().unwrap();
-            let result2 = child.wait();
+            let result1 = err_receiver.recv().unwrap().map(|_| ExitStatus::from_raw(0));
+            let result2 = child.wait().map_err(anyhow::Error::new);
             drop(err_receiver);
-
-            match (result1, result2) {
-                (Ok(_), Ok(_)) => (),
-                (r1, Ok(_)) => { r1?; },
-                (Ok(_), r2) => { r2?; },
-                (r1, Err(r)) => { r1.context(r)?; },
-            }
+            crate::utils::chain_errors([result1, result2].into_iter())?;
         }
         base.on_eof()
     }
