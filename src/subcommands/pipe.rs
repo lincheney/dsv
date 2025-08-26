@@ -142,16 +142,19 @@ impl base::Processor for Handler {
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc {
+        let success = if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc {
             drop(sender);
             drop(stdin);
 
             let result1 = err_receiver.recv().unwrap().map(|_| ExitStatus::from_raw(0));
             let result2 = child.wait().map_err(anyhow::Error::new);
             drop(err_receiver);
-            crate::utils::chain_errors([result1, result2].into_iter())?;
-        }
-        base.on_eof()
+            crate::utils::chain_errors([result1, result2].into_iter())?.success()
+        } else {
+            true
+        };
+        base.on_eof()?;
+        Ok(!success)
     }
 }
 

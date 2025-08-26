@@ -39,4 +39,8 @@ impl base::Processor for Handler {
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         self.inner.on_row(base, row)
     }
+
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        self.inner.on_eof(base)
+    }
 }

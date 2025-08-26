@@ -57,14 +57,17 @@ impl base::Processor for Handler {
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        if let Some(mut proc) = self.proc {
+        let success = if let Some(mut proc) = self.proc {
             drop(proc.stdin.into_inner());
             base.ifs = base::Ifs::Plain(DELIM.into());
 
             base::DefaultProcessor{}.process_file(proc.stdout, base, base::Callbacks::all())?;
-            proc.child.wait()?;
-        }
-        base.on_eof()
+            proc.child.wait()?.success()
+        } else {
+            true
+        };
+        base.on_eof()?;
+        Ok(!success)
     }
 }
 

@@ -378,13 +378,14 @@ pub trait Processor<W: Writer=BaseWriter> {
             }
         }
 
-        if do_callbacks.contains(Callbacks::ON_EOF) {
-            crate::utils::chain_errors([err, self.on_eof(base).map(|_| ())].into_iter())?;
-        } else {
-            err?;
-        }
+        let failed = crate::utils::chain_errors(
+            [
+                Some(err.map(|_| false)),
+                do_callbacks.contains(Callbacks::ON_EOF).then(|| self.on_eof(base)),
+            ].into_iter().flatten()
+        )?;
 
-        Ok(ExitCode::SUCCESS)
+        Ok(if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS })
     }
 
     fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<()> where Self: Sized {

@@ -158,12 +158,12 @@ impl base::Processor for Handler {
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        let result = base.on_eof();
+        base.on_eof()?;
         if self.opts.count {
             let output: BString = format!("{}", self.matched_count).into();
             base.write_raw(output);
         }
-        result
+        Ok(self.matched_count == 0)
     }
 
 
