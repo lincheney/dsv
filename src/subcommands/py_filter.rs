@@ -2,14 +2,14 @@ use anyhow::Result;
 use crate::base;
 use bstr::{BString, ByteVec};
 use clap::{Parser};
-use super::exec;
+use super::py;
 use crate::python;
 
 #[derive(Parser, Default)]
 #[command(about = "filter rows using python")]
 pub struct Opts {
     #[command(flatten)]
-    common: exec::CommonOpts,
+    common: py::CommonOpts,
     #[arg(long, help = "print both matching and non-matching lines")]
     passthru: bool,
 }
@@ -17,18 +17,18 @@ pub struct Opts {
 pub struct Handler {
     passthru: bool,
     colour: bool,
-    inner: exec::Handler,
+    inner: py::Handler,
     all: python::Object,
 }
 
 impl Handler {
     pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
-        let mut exec_opts = exec::Opts::default();
-        exec_opts.common = opts.common;
-        if exec_opts.common.ignore_errors {
-            exec_opts.common.remove_errors = true;
+        let mut py_opts = py::Opts::default();
+        py_opts.common = opts.common;
+        if py_opts.common.ignore_errors {
+            py_opts.common.remove_errors = true;
         }
-        let inner = exec::Handler::new(exec_opts, base, is_tty)?;
+        let inner = py::Handler::new(py_opts, base, is_tty)?;
         let all = {
             let py = inner.py.acquire_gil();
             py.get_builtin(py.to_str("all").unwrap())

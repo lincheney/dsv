@@ -3,7 +3,7 @@ use crate::base;
 use bstr::{BString};
 use std::collections::{HashMap, hash_map::Entry};
 use clap::{Parser, ArgAction};
-use super::exec;
+use super::py;
 use std::ffi::{CStr};
 use crate::column_slicer::ColumnSlicer;
 use crate::python;
@@ -22,13 +22,13 @@ struct OtherOpts {
 #[command(about = "aggregate rows using python")]
 pub struct Opts {
     #[command(flatten)]
-    common: exec::CommonOpts,
+    common: py::CommonOpts,
     #[command(flatten)]
     other: OtherOpts,
 }
 
 pub struct Handler {
-    inner: exec::Handler,
+    inner: py::Handler,
     opts: OtherOpts,
     postprocess: python::Object,
     default_key: python::Object,
@@ -48,9 +48,9 @@ if not isinstance(result, BaseTable) or (isinstance(result, Proxy) and (result._
 
 impl Handler {
     pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
-        let mut exec_opts = exec::Opts::default();
-        exec_opts.common = opts.common;
-        let inner = exec::Handler::new(exec_opts, base, is_tty)?;
+        let mut py_opts = py::Opts::default();
+        py_opts.common = opts.common;
+        let inner = py::Handler::new(py_opts, base, is_tty)?;
         let column_slicer = ColumnSlicer::new(&opts.other.fields, opts.other.regex);
 
         let py = inner.py.acquire_gil();

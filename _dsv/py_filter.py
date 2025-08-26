@@ -1,11 +1,11 @@
 import argparse
 from . import _utils
-from .exec_ import exec_, Vec
+from .py import py, Vec
 
-class exec_filter(exec_):
+class py_filter(py):
     ''' filter rows using python '''
     name = None
-    parser = argparse.ArgumentParser(parents=[exec_.parent])
+    parser = argparse.ArgumentParser(parents=[py.parent])
     parser.add_argument('script', nargs='+', help='python statements to run')
     group = parser.add_mutually_exclusive_group()
     group.add_argument('-I', '--ignore-errors', action='store_true', help='do not abort on python errors')

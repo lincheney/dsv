@@ -2,13 +2,13 @@ import argparse
 from ._base import _Base
 from ._column_slicer import _ColumnSlicer
 from . import _utils
-from .exec_ import exec_
+from .py import py
 from ._table import BaseTable, Proxy
 
-class exec_groupby(_ColumnSlicer, exec_):
+class py_groupby(_ColumnSlicer, py):
     ''' aggregate rows using python '''
     name = None
-    parser = argparse.ArgumentParser(parents=[exec_.parent])
+    parser = argparse.ArgumentParser(parents=[py.parent])
     parser.set_defaults(slurp=True)
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
     parser.add_argument('-k', '--fields', action='append', default=[], help='search only on these fields')

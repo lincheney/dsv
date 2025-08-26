@@ -10,9 +10,8 @@ from ._table import Vec, Table, convert_to_table
 FULL_SLICE = slice(None)
 MISSING = b''
 
-class exec_(_Base):
+class py(_Base):
     ''' run python on each row '''
-    name = 'exec'
 
     parent = argparse.ArgumentParser(add_help=False)
     parent.set_defaults(
