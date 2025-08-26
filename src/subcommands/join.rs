@@ -1,10 +1,24 @@
 use anyhow::{Result, Context};
+use regex::bytes::{Regex, Captures};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::*;
-use bstr::{BString};
+use bstr::{BString, BStr};
 use std::collections::{HashSet, HashMap, hash_map::Entry};
 use crate::column_slicer::ColumnSlicer;
 use clap::{Parser, ArgAction};
+use once_cell::sync::Lazy;
+
+static PERCENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"%.").unwrap());
+
+fn percent_format(format: &BStr, value: &BStr) -> BString {
+    PERCENT_REGEX.replace_all(format, |c: &Captures| {
+        if c.get(0).unwrap().as_bytes().ends_with(b"%") {
+            b"%" as &[u8]
+        } else {
+            value
+        }
+    }).into_owned().into()
+}
 
 #[derive(Parser, Clone)]
 #[command(about = "join lines of two files on a common field")]
@@ -210,14 +224,22 @@ impl Joiner {
 
                         // paste the headers together
                         let mut header = slicers.0.slice(headers.0, false, true);
-                        header.append(&mut slicers.0.slice(headers.0, true, true));
-                        header.append(&mut slicers.1.slice(headers.1, true, true));
+                        let mut left = slicers.0.slice(headers.0, true, true);
+                        let mut right = slicers.1.slice(headers.1, true, true);
 
-                // if self.opts.rename_1 {
-                // left = [self.opts.rename_1 % h for h in left]
-                // }
-                // if self.opts.rename_2:
-                // right = [self.opts.rename_2 % h for h in right]
+                        if let Some(rename) = &opts.rename_1 {
+                            for h in left.iter_mut() {
+                                *h = percent_format(rename.as_bytes().into(), h.as_ref());
+                            }
+                        }
+                        if let Some(rename) = &opts.rename_2 {
+                            for h in right.iter_mut() {
+                                *h = percent_format(rename.as_bytes().into(), h.as_ref());
+                            }
+                        }
+
+                        header.append(&mut left);
+                        header.append(&mut right);
 
                         if base.on_header(header)? {
                             return Ok(())
