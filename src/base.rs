@@ -6,7 +6,7 @@ use crate::writer::{BaseWriter, Writer};
 use std::io::{Read, BufRead, BufReader};
 use bstr::{BStr, BString, ByteSlice};
 use std::process::{ExitCode};
-use anyhow::Result;
+use anyhow::{Result, Context};
 
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 pub const RESET_COLOUR: &str = "\x1b[0m";
@@ -298,6 +298,7 @@ pub trait Processor<W: Writer=BaseWriter> {
         let irs: BString = base.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
 
         let mut eof = false;
+        let mut err = Ok(());
         while !eof {
             let (mut line, offset) = if irs.len() == 1 {
                 reader.read_until(irs[0], &mut buffer).unwrap();
@@ -356,10 +357,12 @@ pub trait Processor<W: Writer=BaseWriter> {
                 if is_header {
                     let header = row.clone();
                     base.header = Some(row);
-                    if do_callbacks.contains(Callbacks::ON_HEADER) && self.on_header(base, header)? {
+                    if do_callbacks.contains(Callbacks::ON_HEADER) && let Err(e) = self.on_header(base, header) {
+                        err = Err(e);
                         break
                     }
-                } else if do_callbacks.contains(Callbacks::ON_ROW) && self.on_row(base, row)? {
+                } else if do_callbacks.contains(Callbacks::ON_ROW) && let Err(e) = self.on_row(base, row) {
+                    err = Err(e);
                     break
                 }
 
@@ -376,23 +379,44 @@ pub trait Processor<W: Writer=BaseWriter> {
         }
 
         if do_callbacks.contains(Callbacks::ON_EOF) {
-            self.on_eof(base)?;
+            if let Err(e) = self.on_eof(base) {
+                err = if err.is_ok() {
+                    Err(e)
+                } else {
+                    err.context(e)
+                };
+            }
         }
+        err?;
 
         Ok(ExitCode::SUCCESS)
     }
 
     fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<()> where Self: Sized {
+        let mut err = Ok(());
         for msg in receiver.iter() {
-            match msg {
-                Message::Row(row) => if self.on_row(base, row)? { break },
-                Message::Header(header) => if self.on_header(base, header)? { break },
-                Message::Eof => { self.on_eof(base)?; break },
-                Message::Separator => (), // do nothing
-                Message::Raw(value) => if base.write_raw(value) { break },
-                Message::Ofs(ofs) => if self.on_ofs(base, ofs) { break },
+            let result = match msg {
+                Message::Row(row) => self.on_row(base, row),
+                Message::Header(header) => self.on_header(base, header),
+                Message::Eof => { break },
+                Message::Separator => Ok(false), // do nothing
+                Message::Raw(value) => if base.write_raw(value) { break } else { Ok(false) },
+                Message::Ofs(ofs) => if self.on_ofs(base, ofs) { break } else { Ok(false) },
+            };
+            match result {
+                Ok(true) => break,
+                Err(e) => { err = Err(e); break; },
+                _ => {},
+            }
+        }
+        if let Err(e) = self.on_eof(base) {
+            err = if err.is_ok() {
+                Err(e)
+            } else {
+                err.context(e)
             };
         }
+        err?;
         Ok(())
     }
 
