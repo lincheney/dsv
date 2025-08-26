@@ -25,6 +25,7 @@ impl Handler {
         grep_opts.patterns = vec![opts.patterns];
         grep_opts.replace = Some(opts.replace);
         grep_opts.common = opts.common;
+        grep_opts.passthru = true;
         Ok(Self{
             inner: grep::Handler::new(grep_opts, base, is_tty)?,
         })
