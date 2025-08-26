@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, Context};
 use crate::base::{self, Processor, Callbacks};
 use std::process::ExitCode;
 use std::io::Read;
@@ -14,10 +14,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
-        // default to output with tab
-        base.opts.ifs.get_or_insert_with(|| "\t".into());
-        base.opts.ofs.get_or_insert_with(|| "\t".into());
+    pub fn new(_opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         Ok(Self {})
     }
 }
@@ -26,7 +23,11 @@ impl Handler {
     fn process_json<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> Result<()> {
         let mut stream = serde_json::Deserializer::from_reader(file).into_iter::<serde_json::Map<_, _>>();
 
-        let header_row = if let Some(header_row) = stream.next() { header_row? } else { return Ok(()) };
+        let header_row = if let Some(header_row) = stream.next() {
+            header_row.context("invalid json")?
+        } else {
+            return Ok(())
+        };
         let header: Vec<_> = header_row.keys().cloned().collect();
         if do_callbacks.contains(Callbacks::ON_HEADER) && self.on_header(base, header.iter().map(|x| x.clone().into()).collect())? {
             return Ok(())
