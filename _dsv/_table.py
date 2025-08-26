@@ -75,8 +75,14 @@ def apply_slice(data, key, flat=False):
     if isinstance(data, slice):
         data = slice_to_list(data)
 
-    if isinstance(key, slice) or (isinstance(key, int) and flat):
-        return data[key]
+    try:
+        if isinstance(key, slice) or (isinstance(key, int) and flat):
+            return data[key]
+    except IndexError:
+        if isinstance(key, slice):
+            return list(itertools.islice(data, key.start, key.stop, key.step))
+        else:
+            return list(itertools.islice(data, key, key+1))
     if isinstance(key, int):
         return (data[key],) if key < len(data) else ()
     else:
