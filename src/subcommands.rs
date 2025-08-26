@@ -64,15 +64,25 @@ macro_rules! add_subcommands {
                 sender: Sender<Message>,
                 scope: &'a std::thread::Scope<'a, 'b>,
                 is_tty: bool,
-        ) -> Result<(Self, Base<'a, 'b>)> {
+                writer: bool,
+        ) -> Result<(Self, Base<'a, 'b>, Option<Box<dyn Send + FnOnce(Receiver<Message>) -> Result<()>>>)> {
 
                 const ARG0: &str = env!("CARGO_PKG_NAME");
                 let mut cli = Cli::parse_from(std::iter::once(ARG0).chain(args));
                 cli.opts.post_process(is_tty);
                 let mut base = Base::new(cli.opts, sender, scope);
-                let handler = match cli.command {
+                let (handler, writer) = match cli.command {
                     $(
-                        Some(Command::$name(opts)) => Self::$name($name::Handler::new(opts, &mut base, is_tty)?),
+                        Some(Command::$name(opts)) => {
+                            let h = Self::$name($name::Handler::new(opts, &mut base, is_tty)?);
+                            let w = if writer {
+                                let cli_opts = base.opts.clone();
+                                Some(Box::new(|r| $name::Handler::make_writer(cli_opts).run(r)) as _)
+                            } else {
+                                None
+                            };
+                            (h, w)
+                        },
                     )*
                     Some(Command::_pipeline(_)) | None => {
                         Cli::command().print_help()?;
@@ -80,7 +90,7 @@ macro_rules! add_subcommands {
                     },
                 };
 
-                Ok((handler, base))
+                Ok((handler, base, writer))
             }
 
             pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) -> Result<()> {

@@ -3,7 +3,7 @@ use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer};
-use std::io::{Read, BufRead, BufReader};
+use std::io::{Read, BufRead, BufReader, Write};
 use bstr::{BStr, BString, ByteSlice};
 use std::process::{ExitCode};
 use anyhow::{Result, Context};
@@ -185,12 +185,17 @@ pub enum GatheredRow {
     Separator,
 }
 
-pub trait Processor<W: Writer=BaseWriter> {
+pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
+
+    fn make_writer(opts: BaseOptions) -> Output::<W> {
+        Output::<W>::new(opts)
+    }
 
     fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
         let opts = base.opts.clone();
+        let mut writer = Self::make_writer(opts);
         base.scope.spawn(move || {
-            Output::<W>::new(opts).run(receiver)
+            writer.run(receiver)
         });
         self.process_file(std::io::stdin().lock(), base, Callbacks::all())
     }
@@ -652,7 +657,7 @@ impl<W: Writer> Output<W> {
     }
 
 
-    fn on_eof(&mut self) -> Result<bool> {
+    fn on_eof(&mut self, file: &mut Option<Box<dyn Write>>) -> Result<bool> {
         let mut header_padding = None;
         let trailer = if let Some(header) = &self.gathered_header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
             Some(header.clone())
@@ -666,36 +671,36 @@ impl<W: Writer> Output<W> {
             let padding = if let Some(header) = self.gathered_header.take() {
                 let (first, new_padding) = padding.split_first().unwrap();
                 header_padding = Some(first.clone());
-                self.writer.write_header(header, header_padding.as_ref(), &self.opts, &self.ofs)?;
+                self.writer.write_header(file, header, header_padding.as_ref(), &self.opts, &self.ofs)?;
                 new_padding
             } else {
                 &padding[..]
             };
 
             for (p, row) in padding.iter().zip(self.gathered_rows.drain(..)) {
-                self.writer.write_row(row, Some(p), &self.opts, &self.ofs)?;
+                self.writer.write_row(file, row, Some(p), &self.opts, &self.ofs)?;
             }
         }
 
         if let Some(trailer) = trailer {
-            self.writer.write_header(trailer, header_padding.as_ref(), &self.opts, &self.ofs)?;
+            self.writer.write_header(file, trailer, header_padding.as_ref(), &self.opts, &self.ofs)?;
         }
         Ok(true)
     }
 
-    fn on_separator(&mut self) -> Result<bool> {
+    fn on_separator(&mut self, file: &mut Option<Box<dyn Write>>) -> Result<bool> {
         self.row_count += 1;
 
         if matches!(self.ofs, Ofs::Pretty) {
             self.gathered_rows.push(GatheredRow::Separator);
         } else {
-            self.writer.write_row(GatheredRow::Separator, None, &self.opts, &self.ofs)?;
+            self.writer.write_row(file, GatheredRow::Separator, None, &self.opts, &self.ofs)?;
         }
 
         Ok(false)
     }
 
-    fn on_row(&mut self, row: Vec<BString>, is_header: bool) -> Result<bool> {
+    fn on_row(&mut self, file: &mut Option<Box<dyn Write>>, row: Vec<BString>, is_header: bool) -> Result<bool> {
         if self.col_count.is_none() {
             self.col_count = Some(row.len());
         }
@@ -712,16 +717,16 @@ impl<W: Writer> Output<W> {
             },
             _ => if is_header {
                 self.gathered_header = Some(row.clone());
-                self.writer.write_header(row, None, &self.opts, &self.ofs)?;
+                self.writer.write_header(file, row, None, &self.opts, &self.ofs)?;
             } else {
-                self.writer.write_row(GatheredRow::Row(row), None, &self.opts, &self.ofs)?;
+                self.writer.write_row(file, GatheredRow::Row(row), None, &self.opts, &self.ofs)?;
             },
         }
 
         Ok(false)
     }
 
-    fn on_header(&mut self, mut header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, file: &mut Option<Box<dyn Write>>, mut header: Vec<BString>) -> Result<bool> {
         if self.opts.drop_header {
             Ok(false)
         } else {
@@ -733,12 +738,12 @@ impl<W: Writer> Output<W> {
                 }
             }
 
-            self.on_row(header, true)
+            self.on_row(file, header, true)
         }
     }
 
-    fn on_raw(&mut self, value: BString) -> Result<bool> {
-        self.writer.write_raw(value.as_ref(), &self.opts, false)?;
+    fn on_raw(&mut self, file: &mut Option<Box<dyn Write>>, value: BString) -> Result<bool> {
+        self.writer.write_raw(file, value.as_ref(), &self.opts, false)?;
         Ok(false)
     }
 
@@ -747,14 +752,16 @@ impl<W: Writer> Output<W> {
         false
     }
 
-    fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
+    pub fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
+        let mut file = None;
+        let file = &mut file;
         for msg in &receiver {
             match msg {
-                Message::Row(row) => if self.on_row(row, false)? { break },
-                Message::Header(header) => if self.on_header(header)? { break },
-                Message::Eof => if self.on_eof()? { break },
-                Message::Separator => if self.on_separator()? { break },
-                Message::Raw(value) => if self.on_raw(value)? { break },
+                Message::Row(row) => if self.on_row(file, row, false)? { break },
+                Message::Header(header) => if self.on_header(file, header)? { break },
+                Message::Eof => if self.on_eof(file)? { break },
+                Message::Separator => if self.on_separator(file)? { break },
+                Message::Raw(value) => if self.on_raw(file, value)? { break },
                 Message::Ofs(ofs) => if self.on_ofs(ofs) { break },
             }
         }

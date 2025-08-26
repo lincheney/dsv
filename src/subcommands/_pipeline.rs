@@ -18,12 +18,14 @@ enum Args {
 
 pub struct Handler {
     err_receiver: mpsc::Receiver<Result<()>>,
+    writer_receiver: mpsc::Receiver<Box<dyn Send + FnOnce(mpsc::Receiver<Message>) -> Result<()>>>,
 }
 
 impl Handler {
     pub fn new(opts: Opts, base: &mut Base, is_tty: bool) -> Result<Self> {
         let Args::Args(args) = opts.args;
 
+        let (writer_sender, writer_receiver) = mpsc::channel();
         let (err_sender, err_receiver) = mpsc::channel();
         let (opts_sender, opts_receiver) = mpsc::channel();
         for (i, arg) in args.rsplit(|a| a == "!").enumerate() {
@@ -31,17 +33,20 @@ impl Handler {
             let receiver;
             (base.sender, receiver) = mpsc::channel();
 
-            let last = i == 0;
             let opts_sender = opts_sender.clone();
             let arg = arg.to_owned();
             let scope = base.scope;
             let err_sender = err_sender.clone();
-            scope.spawn(move || {
-                let result = (|| {
-                    let args = arg.iter().map(|x| x.as_ref());
-                    let (handler, mut base) = super::Subcommands::from_args(args, new_sender, scope, last && is_tty)?;
-                    // take opts from the last handler?
-                    if last {
+
+            if i == 0 {
+                // last
+                let writer_sender = writer_sender.clone();
+                scope.spawn(move || {
+                    let result = (|| {
+                        let args = arg.iter().map(|x| x.as_ref());
+                        let (handler, mut base, writer) = super::Subcommands::from_args(args, new_sender, scope, is_tty, true)?;
+                        // take opts from the last handler?
+                        writer_sender.send(writer.unwrap()).unwrap();
                         opts_sender.send(base.opts.clone()).unwrap();
                     }
                     handler.forward_messages(&mut base, receiver)

@@ -139,7 +139,7 @@ impl Python {
         }
     }
 
-    pub fn acquire_gil(&self) -> GilHandle {
+    pub fn acquire_gil<'a>(&'a self) -> GilHandle<'a> {
         let state = unsafe{ (self.py.PyGILState_Ensure)() };
         GilHandle{ inner: self, state, py: self.py }
     }
