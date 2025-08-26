@@ -112,7 +112,7 @@ pub struct Python {
     get_exception: Object,
 }
 
-fn _compile_code_cstr(py: &PythonLib, code: &CStr, start: StartToken) -> Option<Object> {
+fn compile_code_cstr(py: &PythonLib, code: &CStr, start: StartToken) -> Option<Object> {
     unsafe{
         (py.PyErr_Clear)();
         let code = (py.Py_CompileString)(
@@ -129,7 +129,7 @@ impl Python {
         let py = PythonLib::get(name)?;
         unsafe{
             let state = (py.PyGILState_Ensure)();
-            let get_exception = _compile_code_cstr(py, c"__import__('traceback').format_exc()", StartToken::Eval).unwrap();
+            let get_exception = compile_code_cstr(py, c"__import__('traceback').format_exc()", StartToken::Eval).unwrap();
             (py.PyGILState_Release)(state);
 
             Ok(Self{
@@ -352,7 +352,7 @@ impl GilHandle<'_> {
     }
 
     pub fn compile_code_cstr(&self, code: &CStr, start: StartToken) -> Result<Object> {
-        _compile_code_cstr(self.py, code, start).ok_or_else(|| self.get_exception())
+        compile_code_cstr(self.py, code, start).ok_or_else(|| self.get_exception())
     }
 
     pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Result<Object> {
