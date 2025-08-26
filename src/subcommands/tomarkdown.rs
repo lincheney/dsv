@@ -27,6 +27,7 @@ impl Handler {
         base.opts.numbered_columns = base::AutoChoices::Never;
         let drop_header = base.opts.drop_header;
         base.opts.drop_header = false;
+        base.opts.pretty = true;
 
         Ok(Self {
             drop_header,
