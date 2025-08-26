@@ -161,7 +161,7 @@ pub trait Writer {
         let rgb = self.get_rgb_map().iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
         let ofs = ofs.as_bstr();
         let header_colour = if is_header && colour {
-            opts.header_colour.as_deref().map(|x| x.as_bytes())
+            opts.header_colour.as_deref().map(|x| x.as_bytes()).or(Some(b"\x1b[1;4m"))
         } else {
             None
         };

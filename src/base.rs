@@ -165,9 +165,6 @@ impl BaseOptions {
         }
         self.numbered_columns = self.numbered_columns.resolve(is_tty);
         self.rainbow_columns = self.rainbow_columns.resolve(is_tty);
-        if self.header_colour.is_none() {
-            self.header_colour = Some("\x1b[1;4m".into());
-        }
         if self.header_bg_colour.is_none() {
             self.header_bg_colour = Some("\x1b[48;5;237m".into());
         }
