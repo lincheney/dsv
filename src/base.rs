@@ -334,7 +334,7 @@ pub trait Processor<W: Writer=BaseWriter> {
                 }
                 let (ifs, ofs) = self.determine_delimiters(line.into(), &base.opts);
                 base.ifs = ifs;
-                if do_callbacks.contains(Callbacks::ON_OFS) && base.on_ofs(ofs) {
+                if do_callbacks.contains(Callbacks::ON_OFS) && self.on_ofs(base, ofs) {
                     break
                 }
                 if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {

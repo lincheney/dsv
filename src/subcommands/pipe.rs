@@ -170,6 +170,7 @@ struct PipeHandler {
 
 impl base::Processor for PipeHandler {
     // no headers
+
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
         let mut input = self.receiver.recv().unwrap();
         if self.append {
