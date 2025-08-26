@@ -179,7 +179,15 @@ class grep(_ColumnSlicer):
 
                     if best[0] == best[1]:
                         # empty match
-                        parts.append(row[i][start : best[1] + 1])
+                        if self.opts.replace is not None:
+                            # start colour
+                            if self.grep_colour:
+                                parts.append(self.MATCH_COLOUR)
+                            parts.append(self.do_replace(best[2], b''))
+                            # end colour
+                            if self.grep_colour:
+                                parts.append(self.RESET_COLOUR)
+                        parts.append(row[i][best[0] : best[1] + 1])
                         start = best[1] + 1
 
                     else:
