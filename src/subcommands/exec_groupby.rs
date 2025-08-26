@@ -107,7 +107,7 @@ impl base::Processor for Handler {
             }
             drop(py);
 
-            let result = self.inner.run_python(group.iter(), &[(c"current_key", current_key)])?;
+            let result = self.inner.run_python(group.iter(), &[(c"K", current_key)])?;
             let py = self.inner.py.acquire_gil();
             let result = if self.inner.expr && let Some(result) = result {
                 py.dict_clear(self.inner.locals);
