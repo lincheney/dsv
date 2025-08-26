@@ -223,7 +223,6 @@ impl base::Processor for Handler {
 
 impl Handler {
     fn grep(&mut self, row: &mut [BString]) -> bool {
-        let mut matched = false;
 
         let allowed_fields = if self.opts.common.fields.is_empty() {
             None
@@ -237,27 +236,23 @@ impl Handler {
             Some(&self.allowed_fields.0)
         };
 
-        for (i, col) in row.iter_mut().enumerate() {
-            if allowed_fields.as_ref().is_some_and(|x| !x.contains(&i)) {
-                continue
-            }
+        let mut columns = row.iter_mut()
+            .enumerate()
+            .filter(|(i, _)| allowed_fields.as_ref().is_none_or(|x| x.contains(i)));
 
-            matched = if let Some(replace) = &self.replace {
-                let replace: &[u8] = replace.as_ref();
-                let replaced = self.pattern.replace_all(col, replace);
-                let matched = matches!(replaced, std::borrow::Cow::Owned(_));
-                if matched {
-                    *col = replaced.into_owned().into();
+        let matched = if let Some(replace) = &self.replace {
+            let mut matched = false;
+            for (_, col) in columns {
+                let replaced = self.pattern.replace_all(col, replace.as_bytes());
+                if let std::borrow::Cow::Owned(r) = replaced {
+                    *col = r.into();
+                    matched = true;
                 }
-                matched
-            } else {
-                self.pattern.is_match(col)
-            } || matched;
-
-            if matched && !self.opts.invert_match && self.replace.is_none() {
-                return true
             }
-        }
+            matched
+        } else {
+            columns.any(|(_, col)| self.pattern.is_match(col))
+        };
         matched != self.opts.invert_match
     }
 }
