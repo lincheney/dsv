@@ -143,7 +143,11 @@ impl Writer for MarkdownWriter {
                 })
                 .collect()
         } else {
-            (0..header.0.len()).map(|_| b"---".into()).collect()
+            [b"" as &[u8]].into_iter()
+                .chain((0..header.0.len()).skip(2).map(|_| b"---" as _))
+                .chain([b"" as _])
+                .map(|x| x.into())
+                .collect()
         };
         self.write_output(file, header.0, padding, true, opts, ofs)?;
         self.write_output(file, sep, None, false, opts, ofs)
