@@ -34,7 +34,7 @@ class Parser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if self.state and self.state[-1] in {'th', 'td'}:
             if self.inner_html:
-                self.current_row[-1] += f'<{tag} {' '.join(f'{k}="{html.escape(v)}"' for k, v in attrs)}>'
+                self.current_row[-1] += f'''<{tag} {' '.join(f'{k}="{html.escape(v)}"' for k, v in attrs)}>'''
             return
 
         self.state.append(tag)

@@ -33,7 +33,7 @@ class summary(_Base):
         'pb': 10**15,
         'pib': 2**50,
     }
-    SIZE_REGEX = re.compile(fr'(?i)(\d+(?:\.\d+)?)\s?((?:{'|'.join(SIZE_SUFFIXES)})?)'.encode('utf8'))
+    SIZE_REGEX = re.compile(fr'''(?i)(\d+(?:\.\d+)?)\s?((?:{'|'.join(SIZE_SUFFIXES)})?)'''.encode('utf8'))
 
     def __init__(self, opts):
         super().__init__(opts)
