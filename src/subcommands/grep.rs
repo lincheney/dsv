@@ -116,8 +116,7 @@ impl Handler {
 
         // construct the replace pattern
         // no need to replace if invert and not passthru
-        #[allow(clippy::nonminimal_bool)]
-        let replace = if !(opts.invert_match && opts.passthru) && !opts.count && base.opts.colour == base::AutoChoices::Always {
+        let replace = if (!opts.invert_match || opts.passthru) && !opts.count && base.opts.colour == base::AutoChoices::Always {
             if let Some(mut replace) = opts.replace.take() {
                 replace.insert_str(0, MATCH_COLOUR);
                 replace.push_str(base::RESET_COLOUR);
@@ -255,10 +254,10 @@ impl Handler {
                 self.pattern.is_match(col)
             } || matched;
 
-            if matched != self.opts.invert_match && self.replace.is_none() {
+            if matched && !self.opts.invert_match && self.replace.is_none() {
                 return true
             }
         }
-        matched
+        matched != self.opts.invert_match
     }
 }
