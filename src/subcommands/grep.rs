@@ -125,7 +125,7 @@ impl Handler {
                 Some(format!("{}$1{}", MATCH_COLOUR, base::RESET_COLOUR))
             }
         } else {
-            None
+            opts.replace.take()
         };
 
         Ok(Self {
