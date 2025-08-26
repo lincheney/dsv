@@ -139,7 +139,7 @@ impl Python {
         }
     }
 
-    pub fn acquire_gil<'a>(&'a self) -> GilHandle<'a> {
+    pub fn acquire_gil(&self) -> GilHandle<'_> {
         let state = unsafe{ (self.py.PyGILState_Ensure)() };
         GilHandle{ inner: self, state, py: self.py }
     }
@@ -231,7 +231,7 @@ impl GilHandle<'_> {
 
     pub fn to_str(&self, string: &str) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyUnicode_FromStringAndSize)(string.as_ptr().cast(), string.len() as _))
+            NonNull::new((self.py.PyUnicode_FromStringAndSize)(string.as_ptr().cast(), string.len().try_into().unwrap()))
         }
     }
 
