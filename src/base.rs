@@ -302,12 +302,16 @@ pub trait Processor<W: Writer=BaseWriter> {
 
         let mut eof = false;
         while !eof {
-            let mut line = if irs.len() == 1 {
+            let (mut line, offset) = if irs.len() == 1 {
                 reader.read_until(irs[0], &mut buffer).unwrap();
                 eof = !buffer.ends_with(&irs);
-                &buffer[.. buffer.len() - if eof { 0 } else { 1 }]
+                let mut offset = if eof { 0 } else { 1 };
+                if irs == b"\n" && buffer.ends_with(b"\r\n") {
+                    offset += 1;
+                }
+                (&buffer[.. buffer.len() - offset], offset)
             } else if let Some((left, _)) = buffer.split_once_str::<BString>(&irs) {
-                left
+                (left, irs.len())
             } else {
                 // read some more
                 let buf = reader.fill_buf().unwrap();
@@ -316,14 +320,14 @@ pub trait Processor<W: Writer=BaseWriter> {
                 if !eof {
                     continue
                 }
-                &buffer[..]
+                (&buffer[..], irs.len())
             };
 
             if eof && row.is_empty() && line.is_empty() {
                 break
             }
 
-            let line_len = line.len() + irs.len();
+            let line_len = line.len() + offset;
 
             if ! got_line {
                 got_line = true;
