@@ -64,7 +64,7 @@ impl Handler {
         let globals = py.empty_dict().unwrap();
         let locals = py.empty_dict().unwrap();
         py.dict_set_string(globals, c"__builtins__", py.get_builtin_dict().unwrap());
-        py.exec(TABLE_SCRIPT, globals.as_ptr(), globals.as_ptr()).unwrap();
+        py.exec(TABLE_SCRIPT, Some(c"_table.py"), globals.as_ptr(), globals.as_ptr()).unwrap();
 
         let table_cls = py.dict_get_string(globals, c"Table").unwrap();
         let vec_cls = py.dict_get_string(globals, c"Vec").unwrap();
@@ -74,12 +74,12 @@ impl Handler {
         let prelude = if rest.is_empty() {
             None
         } else {
-            Some(py.compile_code(&rest.join("\n"), python::StartToken::File)?)
+            Some(py.compile_code(&rest.join("\n"), None, python::StartToken::File)?)
         };
 
-        let code = py.compile_code(last, python::StartToken::Eval);
+        let code = py.compile_code(last, None, python::StartToken::Eval);
         let expr = code.is_ok();
-        let code = code.or_else(|_| py.compile_code(last, python::StartToken::File))?;
+        let code = code.or_else(|_| py.compile_code(last, None, python::StartToken::File))?;
         let var_name = py.to_str(&opts.common.var).unwrap();
         let header = py.empty_list(0).unwrap();
         let header_numbers = py.empty_dict().unwrap();
@@ -185,7 +185,7 @@ impl Handler {
         if !py.is_none(result) {
             let table = py.call_func(self.convert_to_table_fn, &[result])?;
             if !py.is_none(table) {
-                let header = py.getattr(table, py.to_str("__headers__").unwrap());
+                let header = py.getattr_string(table, c"__headers__");
 
                 if !self.got_header && let Some(header) = header && !py.is_none(header) {
                     self.got_header = true;
@@ -198,7 +198,7 @@ impl Handler {
                     }
                 }
 
-                let rows = py.getattr(table, py.to_str("__data__").unwrap());
+                let rows = py.getattr_string(table, c"__data__");
                 if let Some(rows) = rows && !py.is_none(rows) {
                     for row in py.iter(rows)? {
                         let mut new_row = vec![];
@@ -217,7 +217,7 @@ impl Handler {
                 }
             } else {
                 py.dict_set(self.locals, py.to_str("X").unwrap(), result);
-                py.exec(c"raise ValueError(X)", self.locals.as_ptr(), self.locals.as_ptr()).unwrap();
+                py.exec(c"raise ValueError(X)", None, self.locals.as_ptr(), self.locals.as_ptr()).unwrap();
             }
         }
         Ok(false)

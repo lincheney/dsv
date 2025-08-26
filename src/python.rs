@@ -1,10 +1,11 @@
 use anyhow::{Result, anyhow};
-use bstr::{BStr};
+use bstr::{BStr, ByteSlice};
 use std::ptr::{NonNull, null_mut};
 use std::ffi::{c_void, CString, CStr};
 use libloading::os::unix::{Library, Symbol, RTLD_GLOBAL, RTLD_LAZY};
 use once_cell::sync::{OnceCell};
 use std::os::raw::c_char;
+use std::sync::atomic;
 
 type Pointer = *mut c_void;
 struct SendPointer(Object);
@@ -56,7 +57,8 @@ define_python_lib!(
     // Py_Finalize: unsafe extern "C" fn(),
     PyDict_GetItemString: unsafe extern "C" fn(Pointer, *const c_char) -> Pointer,
     PyDict_GetItem: unsafe extern "C" fn(Pointer, Pointer) -> Pointer,
-    PyObject_GetAttr: unsafe extern "C" fn(Pointer, Pointer) -> Pointer,
+    // PyObject_GetAttr: unsafe extern "C" fn(Pointer, Pointer) -> Pointer,
+    PyObject_GetAttrString: unsafe extern "C" fn(Pointer, *const c_char) -> Pointer,
     PyDict_New: unsafe extern "C" fn() -> Pointer,
     PyList_New: unsafe extern "C" fn(isize) -> Pointer,
     PyList_SetItem: unsafe extern "C" fn(Pointer, isize, Pointer) -> i32,
@@ -73,6 +75,7 @@ define_python_lib!(
     Py_DecRef: unsafe extern "C" fn(Pointer),
     PyObject_IsTrue: unsafe extern "C" fn(Pointer) -> i32,
     // PyImport_AddModule: unsafe extern "C" fn(*const c_char) -> Pointer,
+    PyImport_ImportModule: unsafe extern "C" fn(*const c_char) -> Pointer,
     PyDict_SetItem: unsafe extern "C" fn(Pointer, Pointer, Pointer) -> i32,
     PyDict_SetItemString: unsafe extern "C" fn(Pointer, *const c_char, Pointer) -> i32,
     PyDict_Clear: unsafe extern "C" fn(Pointer),
@@ -112,12 +115,14 @@ pub struct Python {
     get_exception: Object,
 }
 
-fn compile_code_cstr(py: &PythonLib, code: &CStr, start: StartToken) -> Option<Object> {
+static CODE_COUNTER: atomic::AtomicUsize = atomic::AtomicUsize::new(0);
+
+fn compile_code_cstr(py: &PythonLib, code: &CStr, filename: &CStr, start: StartToken) -> Option<Object> {
     unsafe{
         (py.PyErr_Clear)();
         let code = (py.Py_CompileString)(
             code.as_ptr(),
-            CString::new("<string>").unwrap().as_ptr(),
+            filename.as_ptr(),
             start as _,
         );
         NonNull::new(code)
@@ -129,7 +134,7 @@ impl Python {
         let py = PythonLib::get(name)?;
         unsafe{
             let state = (py.PyGILState_Ensure)();
-            let get_exception = compile_code_cstr(py, c"__import__('traceback').format_exc()", StartToken::Eval).unwrap();
+            let get_exception = compile_code_cstr(py, c"__import__('traceback').format_exc()", c"<string>", StartToken::Eval).unwrap();
             (py.PyGILState_Release)(state);
 
             Ok(Self{
@@ -309,9 +314,15 @@ impl GilHandle<'_> {
         }
     }
 
-    pub fn getattr(&self, obj: Object, key: Object) -> Option<Object> {
+    // pub fn getattr(&self, obj: Object, key: Object) -> Option<Object> {
+        // unsafe{
+            // NonNull::new((self.py.PyObject_GetAttr)(obj.as_ptr(), key.as_ptr()))
+        // }
+    // }
+
+    pub fn getattr_string(&self, obj: Object, key: &CStr) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyObject_GetAttr)(obj.as_ptr(), key.as_ptr()))
+            NonNull::new((self.py.PyObject_GetAttrString)(obj.as_ptr(), key.as_ptr()))
         }
     }
 
@@ -323,8 +334,8 @@ impl GilHandle<'_> {
         }
     }
 
-    pub fn compile_code(&self, code: &str, start: StartToken) -> Result<Object> {
-        self.compile_code_cstr(&CString::new(code).unwrap(), start)
+    pub fn compile_code(&self, code: &str, filename: Option<&CStr>, start: StartToken) -> Result<Object> {
+        self.compile_code_cstr(&CString::new(code).unwrap(), filename, start)
     }
 
     fn get_exception(&self) -> anyhow::Error {
@@ -351,16 +362,44 @@ impl GilHandle<'_> {
         }
     }
 
-    pub fn compile_code_cstr(&self, code: &CStr, start: StartToken) -> Result<Object> {
-        compile_code_cstr(self.py, code, start).ok_or_else(|| self.get_exception())
+    pub fn compile_code_cstr(&self, code: &CStr, filename: Option<&CStr>, start: StartToken) -> Result<Object> {
+        let buf;
+        let filename = match filename {
+            Some(filename) => Some(filename),
+            None => {
+                // load it into the linecache so it shows up in tracebacks
+                let counter = CODE_COUNTER.fetch_add(1, atomic::Ordering::Relaxed);
+                buf = CString::new(format!("<string-{counter}>")).unwrap();
+                (|| {
+                    let linecache = NonNull::new(unsafe{ (self.py.PyImport_ImportModule)(c"linecache".as_ptr()) })?;
+                    let cache = self.getattr_string(linecache, c"cache")?;
+
+                    let filename = self.to_str(std::str::from_utf8(buf.to_bytes()).unwrap()).unwrap();
+                    let lines = self.empty_list(0)?;
+                    for line in code.to_bytes().as_bstr().lines_with_terminator() {
+                        self.list_append(lines, self.to_str(std::str::from_utf8(line).ok()?)?);
+                    }
+                    let list = self.list_from_iter([
+                        self.to_int((code.count_bytes() - 1).try_into().unwrap())?,
+                        self.py._Py_NoneStruct.0,
+                        lines,
+                        filename,
+                    ].into_iter())?;
+                    self.dict_set(cache, filename, list);
+                    Some(buf.as_ref())
+                })()
+            },
+        };
+
+        compile_code_cstr(self.py, code, filename.unwrap_or(c"<string>"), start).ok_or_else(|| self.get_exception())
     }
 
     pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Result<Object> {
         self._exec_code(code, globals, locals).ok_or_else(|| self.get_exception())
     }
 
-    pub fn exec(&self, code: &CStr, globals: Pointer, locals: Pointer) -> Result<()> {
-        let code = self.compile_code_cstr(code, StartToken::File)?;
+    pub fn exec(&self, code: &CStr, filename: Option<&CStr>, globals: Pointer, locals: Pointer) -> Result<()> {
+        let code = self.compile_code_cstr(code, filename, StartToken::File)?;
         self.exec_code(code, globals, locals)?;
         Ok(())
     }
