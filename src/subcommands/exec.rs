@@ -189,8 +189,11 @@ impl Handler {
 
                 if !self.got_header && let Some(header) = header && !py.is_none(header) {
                     self.got_header = true;
-                    let header = py.iter(header).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
-                    if base.on_header(header)? {
+                    let mut new_header = vec![];
+                    for x in py.iter(header) {
+                        new_header.push(py.convert_py_to_bytes(x)?.to_owned());
+                    }
+                    if base.on_header(new_header)? {
                         return Ok(true)
                     }
                 }
@@ -198,14 +201,17 @@ impl Handler {
                 let rows = py.getattr(table, py.to_str("__data__").unwrap());
                 if let Some(rows) = rows && !py.is_none(rows) {
                     for row in py.iter(rows) {
-                        let row = py.iter(row).map(|x| py.convert_py_to_bytes(x).to_owned()).collect();
-                        if base.on_row(row)? {
+                        let mut new_row = vec![];
+                        for x in py.iter(row) {
+                            new_row.push(py.convert_py_to_bytes(x)?.to_owned());
+                        }
+                        if base.on_row(new_row)? {
                             return Ok(true)
                         }
                     }
                 }
             } else if self.expr {
-                let bytes = py.convert_py_to_bytes(result);
+                let bytes = py.convert_py_to_bytes(result)?;
                 if base.write_raw(bytes.to_owned()) {
                     return Ok(true)
                 }

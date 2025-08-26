@@ -186,7 +186,7 @@ impl<'a> GilHandle<'a> {
         self.get_builtin_dict().and_then(|builtins| self.dict_get(builtins, key))
     }
 
-    pub fn convert_py_to_bytes(&self, obj: Object) -> &BStr {
+    pub fn convert_py_to_bytes(&self, obj: Object) -> Result<&BStr> {
         unsafe{
             let mut size = 0isize;
 
@@ -195,13 +195,15 @@ impl<'a> GilHandle<'a> {
                 (self.py.PyBytes_AsString)(obj.as_ptr())
             } else {
                 let obj = (self.py.PyObject_Str)(obj.as_ptr());
-                debug_assert!(!obj.is_null());
+                if obj.is_null() {
+                    return Err(self.get_exception())
+                }
                 let bytes = (self.py.PyUnicode_AsUTF8AndSize)(obj, &mut size as _);
                 debug_assert!(!bytes.is_null());
                 bytes
             };
 
-            std::slice::from_raw_parts(bytes as *const u8, size as _).into()
+            Ok(std::slice::from_raw_parts(bytes as *const u8, size as _).into())
         }
     }
 
@@ -340,7 +342,7 @@ impl<'a> GilHandle<'a> {
             let exc = self._exec_code(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
             // then clear it
             (self.py.PyErr_SetExcInfo)(null_mut(), null_mut(), null_mut());
-            anyhow!(self.convert_py_to_bytes(exc).to_owned())
+            anyhow!(self.convert_py_to_bytes(exc).unwrap().to_owned())
         }
     }
 
