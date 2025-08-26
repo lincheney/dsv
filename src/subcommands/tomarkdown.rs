@@ -36,6 +36,11 @@ impl Handler {
 }
 
 impl base::Processor<MarkdownWriter> for Handler {
+
+    fn make_writer(opts: base::BaseOptions) -> base::Output::<MarkdownWriter> {
+        base::Output::<MarkdownWriter>::new(opts)
+    }
+
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
         if self.drop_header {
@@ -72,8 +77,8 @@ impl Writer for MarkdownWriter {
     fn get_rgb_map(&self) -> &Vec<BString> { self.inner.get_rgb_map() }
     fn get_rgb_map_mut(&mut self) -> &mut Vec<BString> { self.inner.get_rgb_map_mut() }
 
-    fn get_file(&mut self, opts: &base::BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr) {
-        if !self.inner.has_started() && opts.page {
+    fn get_file(&mut self, opts: &base::BaseOptions, has_header: bool) -> Box<dyn Write> {
+        if opts.page {
             let mut command = Command::new("less");
             command.args(["-RX", "--header=2"]);
             self.inner.pipe_to(command)
@@ -116,6 +121,7 @@ impl Writer for MarkdownWriter {
 
     fn write_header(
         &mut self,
+        file: &mut Option<Box<dyn Write>>,
         header: base::FormattedRow,
         padding: Option<&Vec<usize>>,
         opts: &base::BaseOptions,
@@ -139,8 +145,8 @@ impl Writer for MarkdownWriter {
         } else {
             (0..header.0.len()).map(|_| b"---".into()).collect()
         };
-        self.write_output(header.0, padding, true, opts, ofs)?;
-        self.write_output(sep, None, false, opts, ofs)
+        self.write_output(file, header.0, padding, true, opts, ofs)?;
+        self.write_output(file, sep, None, false, opts, ofs)
     }
 
 }

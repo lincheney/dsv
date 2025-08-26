@@ -43,7 +43,6 @@ fn needs_quoting(value: &[u8], ofs: &[u8], ors: &[u8]) -> bool {
 
 pub struct BaseWriter {
     rgb_map: Vec<BString>,
-    inner: Option<Box<dyn Write>>,
     proc: Option<std::process::Child>,
     ors: BString,
 }
@@ -54,7 +53,7 @@ pub trait Writer {
 
     fn get_ors(&self) -> &BStr;
 
-    fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr);
+    fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> Box<dyn Write>;
 
     fn get_rgb_map(&self) -> &Vec<BString>;
     fn get_rgb_map_mut(&mut self) -> &mut Vec<BString>;
@@ -72,31 +71,38 @@ pub trait Writer {
 
     fn write_header(
         &mut self,
+        file: &mut Option<Box<dyn Write>>,
         header: FormattedRow,
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
         if !opts.drop_header {
-            self.write_output(header.0, padding, true, opts, ofs)?;
+            self.write_output(file, header.0, padding, true, opts, ofs)?;
         }
         Ok(())
     }
 
     fn write_row(
         &mut self,
+        file: &mut Option<Box<dyn Write>>,
         row: GatheredRow,
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
         match row {
-            GatheredRow::Row(row) => self.write_output(row.0, padding, false, opts, ofs),
-            GatheredRow::Separator => self.write_separator(padding, opts),
+            GatheredRow::Row(row) => self.write_output(file, row.0, padding, false, opts, ofs),
+            GatheredRow::Separator => self.write_separator(file, padding, opts),
         }
     }
 
-    fn write_separator(&mut self, _padding: Option<&Vec<usize>>, opts: &BaseOptions) -> Result<()> {
+    fn write_separator(
+        &mut self,
+        file: &mut Option<Box<dyn Write>>,
+        _padding: Option<&Vec<usize>>,
+        opts: &BaseOptions,
+    ) -> Result<()> {
         let mut sep: BString;
         let sep = if opts.colour == AutoChoices::Always {
             let width = termsize::get().map_or(80, |size| size.cols) as usize;
@@ -108,20 +114,28 @@ pub trait Writer {
             b"---"
         };
 
-        self.write_raw(sep.into(), opts, false)
+        self.write_raw(file, sep.into(), opts, false)
     }
 
-    fn write_raw(&mut self, string: &BStr, opts: &BaseOptions, is_header: bool) -> Result<()> {
-        self.write_raw_with(opts, is_header, |file| Ok(file.write_all(string)?))
+    fn write_raw(
+        &mut self,
+        file: &mut Option<Box<dyn Write>>,
+        string: &BStr,
+        opts: &BaseOptions,
+        is_header: bool,
+    ) -> Result<()> {
+        self.write_raw_with(file, opts, is_header, |file| Ok(file.write_all(string)?))
     }
 
     fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<()>>(
         &mut self,
+        file: &mut Option<Box<dyn Write>>,
         opts: &BaseOptions,
         is_header: bool,
         func: F,
     ) -> Result<()> {
-        let (file, ors) = self.get_file(opts, is_header);
+        let file = file.get_or_insert_with(|| self.get_file(opts, is_header));
+        let ors = self.get_ors();
         func(file).context("Failed to write row")?;
         file.write_all(ors).context("Failed to write row separator")?;
         file.flush().context("Failed to flush output")?;
@@ -130,6 +144,7 @@ pub trait Writer {
 
     fn write_output(
         &mut self,
+        file: &mut Option<Box<dyn Write>>,
         row: Vec<BString>,
         padding: Option<&Vec<usize>>,
         is_header: bool,
@@ -137,7 +152,7 @@ pub trait Writer {
         ofs: &Ofs,
     ) -> Result<()> {
         let formatted_row = self.format_row(row, padding, is_header, opts, ofs);
-        self.write_raw(formatted_row.as_ref(), opts, is_header)
+        self.write_raw(file, formatted_row.as_ref(), opts, is_header)
     }
 
     fn format_row(
@@ -211,7 +226,6 @@ pub trait Writer {
 impl Writer for BaseWriter {
     fn new(opts: &BaseOptions) -> Self {
         Self {
-            inner: None,
             proc: None,
             rgb_map: vec![],
             ors: opts.get_ors().into(),
@@ -230,8 +244,8 @@ impl Writer for BaseWriter {
         &mut self.rgb_map
     }
 
-    fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> (&mut Box<dyn Write>, &BStr) {
-        if self.inner.is_none() && opts.page {
+    fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> Box<dyn Write> {
+        if opts.page {
             let mut command = Command::new("less");
             command.args(["-RX"]);
             if has_header && !opts.drop_header {
@@ -239,21 +253,16 @@ impl Writer for BaseWriter {
             }
             self.pipe_to(command)
         } else {
-            let file = self.inner.get_or_insert_with(|| Box::new(std::io::stdout().lock()));
-            (file, self.ors.as_ref())
+            Box::new(std::io::stdout().lock())
         }
     }
 }
 
 impl BaseWriter {
-    pub fn has_started(&self) -> bool {
-        self.inner.is_some()
-    }
-
-    pub fn pipe_to(&mut self, mut command: Command) -> (&mut Box<dyn Write>, &BStr) {
+    pub fn pipe_to(&mut self, mut command: Command) -> Box<dyn Write> {
         let mut proc = command.stdin(Stdio::piped()).spawn().expect("Failed to start pager");
         let inner = Box::new(BufWriter::new(proc.stdin.take().expect("Failed to get pager stdin")));
         self.proc = Some(proc);
-        (self.inner.insert(inner), self.ors.as_ref())
+        inner
     }
 }

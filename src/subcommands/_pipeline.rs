@@ -48,11 +48,20 @@ impl Handler {
                         // take opts from the last handler?
                         writer_sender.send(writer.unwrap()).unwrap();
                         opts_sender.send(base.opts.clone()).unwrap();
-                    }
-                    handler.forward_messages(&mut base, receiver)
-                })();
-                err_sender.send(result).unwrap();
-            });
+                        handler.forward_messages(&mut base, receiver)
+                    })();
+                    err_sender.send(result).unwrap();
+                });
+            } else {
+                scope.spawn(move || {
+                    let result = (|| {
+                        let args = arg.iter().map(|x| x.as_ref());
+                        let (handler, mut base, _) = super::Subcommands::from_args(args, new_sender, scope, false, false)?;
+                        handler.forward_messages(&mut base, receiver)
+                    })();
+                    err_sender.send(result).unwrap();
+                });
+            }
         }
 
         base.opts = BaseOptions{
@@ -65,12 +74,22 @@ impl Handler {
         };
 
         Ok(Self {
-            err_receiver
+            err_receiver,
+            writer_receiver,
         })
     }
 }
 
 impl Processor for Handler {
+
+    fn run(self, base: &mut Base, receiver: mpsc::Receiver<Message>) -> Result<std::process::ExitCode> {
+        let writer = self.writer_receiver.recv().unwrap();
+        base.scope.spawn(move || {
+            writer(receiver)
+        });
+        self.process_file(std::io::stdin().lock(), base, Callbacks::all())
+    }
+
     fn on_eof(self, base: &mut Base) -> Result<bool> {
         base.on_eof()?;
         crate::utils::chain_errors(self.err_receiver.iter())?;
