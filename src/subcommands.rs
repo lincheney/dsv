@@ -2,7 +2,7 @@ use std::process::*;
 use std::sync::mpsc::{self, Sender, Receiver};
 use anyhow::Result;
 use crate::base::{Base, Processor, BaseOptions, Message};
-use clap::{Subcommand, Parser};
+use clap::{Subcommand, Parser, CommandFactory};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
@@ -66,31 +66,20 @@ macro_rules! add_subcommands {
                 is_tty: bool,
         ) -> Result<(Self, Base<'a, 'b>)> {
 
-                match args[0].as_str() {
+                let mut cli = Cli::parse_from(args);
+                cli.opts.post_process(is_tty);
+                let mut base = Base::new(cli.opts, sender, scope);
+                let handler = match cli.command {
                     $(
-                        stringify!($name) => {
-
-                            #[derive(Parser)]
-                            struct Cli {
-                                #[command(flatten)]
-                                opts: $name::Opts,
-                                #[command(flatten)]
-                                cli_opts: BaseOptions,
-                            }
-
-                            let mut cli = Cli::parse_from(args);
-                            cli.cli_opts.post_process(is_tty);
-                            let mut base = Base::new(cli.cli_opts, sender, scope);
-                            let handler = $name::Handler::new(cli.opts, &mut base, is_tty)?;
-                            Ok((Self::$name(handler), base))
-                        },
+                        Some(Command::$name(opts)) => Self::$name($name::Handler::new(opts, &mut base, is_tty)?),
                     )*
-                    _ => {
-                        let arg0 = std::env::args().next().unwrap_or("dsv".into());
-                        Cli::parse_from(std::iter::once(&arg0).chain(args));
+                    Some(Command::_pipeline(_)) | None => {
+                        Cli::command().print_help()?;
                         unreachable!();
                     },
-                }
+                };
+
+                Ok((handler, base))
             }
 
             pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) -> Result<()> {
