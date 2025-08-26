@@ -66,7 +66,8 @@ macro_rules! add_subcommands {
                 is_tty: bool,
         ) -> Result<(Self, Base<'a, 'b>)> {
 
-                let mut cli = Cli::parse_from(args);
+                const ARG0: &str = env!("CARGO_PKG_NAME");
+                let mut cli = Cli::parse_from(std::iter::once(ARG0).chain(args.iter().map(|a| a.as_ref())));
                 cli.opts.post_process(is_tty);
                 let mut base = Base::new(cli.opts, sender, scope);
                 let handler = match cli.command {
