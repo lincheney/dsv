@@ -138,17 +138,18 @@ impl base::Processor for Handler {
 
         let proc = self.start_proc(base)?;
         proc.stdin.write_all(&input)?;
+        // proc.stdin.flush()?;
         Ok(proc.sender.send(row).is_err())
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
         if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc {
-            let result1 = err_receiver.recv().unwrap();
-
             drop(sender);
             drop(stdin);
-            drop(err_receiver);
+
+            let result1 = err_receiver.recv().unwrap();
             let result2 = child.wait();
+            drop(err_receiver);
 
             match (result1, result2) {
                 (Ok(_), Ok(_)) => (),
