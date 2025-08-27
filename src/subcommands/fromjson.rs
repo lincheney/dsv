@@ -1,25 +1,103 @@
 use anyhow::{Result, Context};
 use crate::base::{self, Processor, Callbacks};
+use bstr::{BStr, BString};
+use std::collections::HashMap;
 use std::process::ExitCode;
 use std::io::Read;
 use clap::Parser;
 use serde_json;
 
-#[derive(Parser)]
+#[derive(Parser, Debug)]
 #[command(about = "convert from json")]
 pub struct Opts {
+    #[arg(short = 'f', long, num_args = 0..=1, help = "flatten objects and arrays")]
+    flatten: Option<Option<String>>,
 }
 
 pub struct Handler {
+    flatten: Option<String>,
 }
 
 impl Handler {
-    pub fn new(_opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
-        Ok(Self {})
+    pub fn new(opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+        Ok(Self {
+            flatten: opts.flatten.map(|f| f.unwrap_or(".".into())),
+        })
     }
 }
 
+fn flatten_map<'a>(
+    map: &'a serde_json::Map<String, serde_json::Value>,
+    sep: &BStr,
+    parent_key: Option<&BStr>,
+    result: &mut HashMap<BString, &'a serde_json::Value>,
+) {
+
+    for (k, v) in map.iter() {
+        let key: BString = if let Some(p) = parent_key {
+            bstr::concat([p, sep, k.as_str().into()]).into()
+        } else {
+            k.as_bytes().into()
+        };
+        match v {
+            serde_json::Value::Object(map) => flatten_map(map, sep, Some(key.as_ref()), result),
+            serde_json::Value::Array(vec) => flatten_array(vec, sep, Some(key.as_ref()), result),
+            v => { result.insert(key, v); },
+        }
+    }
+}
+
+fn flatten_array<'a>(
+    array: &'a [serde_json::Value],
+    sep: &BStr,
+    parent_key: Option<&BStr>,
+    result: &mut HashMap<BString, &'a serde_json::Value>,
+) {
+
+    for (k, v) in array.iter().enumerate() {
+        let k = format!("{k}").into_bytes();
+        let k: BString = if let Some(p) = parent_key {
+            bstr::concat([p, sep, k.as_slice().into()]).into()
+        } else {
+            k.into()
+        };
+        match v {
+            serde_json::Value::Object(map) => flatten_map(map, sep, Some(k.as_ref()), result),
+            serde_json::Value::Array(vec) => flatten_array(vec, sep, Some(k.as_ref()), result),
+            v => { result.insert(k, v); },
+        }
+    }
+}
+
+fn flatten_to_hashmap<'a>(map: &'a serde_json::Map<String, serde_json::Value>, sep: &BStr) -> HashMap<BString, &'a serde_json::Value> {
+    let mut result = HashMap::new();
+    flatten_map(map, sep, None, &mut result);
+    result
+}
+
 impl Handler {
+
+    fn process_json_row<
+        'a,
+        K: 'static,
+        I: Iterator<Item=&'a K>,
+        F: Fn(&K) -> Option<&'a serde_json::Value>,
+    >(
+        &mut self,
+        base: &mut base::Base,
+        keys: I,
+        get: F,
+    ) -> Result<bool> {
+        let values = keys.map(|k| {
+            get(k)
+                .map_or_else(String::new, |v| {
+                    v.as_str().map_or_else(|| v.to_string(), |s| s.to_owned())
+                })
+                .into()
+        }).collect();
+        self.on_row(base, values)
+    }
+
     fn process_json<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> Result<()> {
         let mut stream = serde_json::Deserializer::from_reader(file).into_iter::<serde_json::Map<_, _>>();
 
@@ -28,22 +106,40 @@ impl Handler {
         } else {
             return Ok(())
         };
-        let header: Vec<_> = header_row.keys().cloned().collect();
-        if do_callbacks.contains(Callbacks::ON_HEADER) && self.on_header(base, header.iter().map(|x| x.clone().into()).collect())? {
-            return Ok(())
-        }
 
-        for row in std::iter::once(Ok(header_row)).chain(stream) {
-            let row = row?;
-            if do_callbacks.contains(Callbacks::ON_EOF) {
-                let values = header.iter().map(|k| {
-                    row.get(k)
-                        .map_or_else(String::new, |v| {
-                            v.as_str().map_or_else(|| v.to_string(), |s| s.to_owned())
-                        })
-                        .into()
-                }).collect();
-                if self.on_row(base, values)? {
+        let do_header = do_callbacks.contains(Callbacks::ON_HEADER);
+        let do_row = do_callbacks.contains(Callbacks::ON_ROW);
+
+        if let Some(sep) = self.flatten.take() {
+            let sep = sep.as_bytes().into();
+            let first_row = flatten_to_hashmap(&header_row, sep);
+            let header: Vec<_> = first_row.keys().cloned().collect();
+            if do_header && self.on_header(base, header)? {
+                return Ok(())
+            }
+
+            if do_row && self.process_json_row(base, first_row.keys(), |k| first_row.get(k).copied())? {
+                return Ok(())
+            }
+            for row in stream {
+                let row = row?;
+                let row = flatten_to_hashmap(&row, sep);
+                if do_row && self.process_json_row(base, first_row.keys(), |k| row.get(k).copied())? {
+                    return Ok(())
+                }
+            }
+
+        } else {
+            let header: Vec<_> = header_row.keys().cloned().map(|x| x.into()).collect();
+            if do_header && self.on_header(base, header)? {
+                return Ok(())
+            }
+            if do_callbacks.contains(Callbacks::ON_ROW) && self.process_json_row(base, header_row.keys(), |k| header_row.get(k))? {
+                return Ok(())
+            }
+            for row in stream {
+                let row = row?;
+                if do_callbacks.contains(Callbacks::ON_ROW) && self.process_json_row(base, header_row.keys(), |k| row.get(k))? {
                     return Ok(())
                 }
             }
