@@ -41,15 +41,15 @@ class pipeline(_Base):
         # input goes to first action
         self.process_file = first.process_file
 
-        # apply guessed ofs on first action to last action
-        def determine_ofs(*args, **kwargs):
-            last.determine_ofs(*args, **kwargs)
-            ofs = b'\t' if last.opts.ofs is self.PRETTY_OUTPUT else last.opts.ofs
-            for p in self.pipeline[:-1]:
-                if p.opts.ofs is None:
-                    p.opts.ofs = ofs
-
-        first.determine_ofs = determine_ofs
+        if first is not last:
+            # apply guessed ofs on first action to last action
+            def determine_ofs(*args, **kwargs):
+                last.determine_ofs(*args, **kwargs)
+                ofs = b'\t' if last.opts.ofs is self.PRETTY_OUTPUT else last.opts.ofs
+                for p in self.pipeline[:-1]:
+                    if p.opts.ofs is None:
+                        p.opts.ofs = ofs
+            first.determine_ofs = determine_ofs
 
         # pipe from left to right
         for src, dst in zip(self.pipeline[:-1], self.pipeline[1:]):
