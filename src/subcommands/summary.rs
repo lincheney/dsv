@@ -109,6 +109,10 @@ impl base::Processor for Handler {
         }
 
         for (i, h) in header.into_iter().enumerate() {
+            if self.col_sep && i > 0 && base.on_separator() {
+                return Ok(true)
+            }
+
             let column: Vec<_> = self.rows.iter().map(|r| r.get(i)).collect();
             // what is it
 
@@ -125,10 +129,6 @@ impl base::Processor for Handler {
                     .or_else(|| display_enum(base, &h, &column, 0.))
                 && result?
             {
-                return Ok(true)
-            }
-
-            if self.col_sep && base.on_separator() {
                 return Ok(true)
             }
         }
