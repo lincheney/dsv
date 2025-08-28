@@ -7,11 +7,15 @@ import statistics
 from collections import Counter
 from ._base import _Base
 from . import _utils
+from ._column_slicer import _ColumnSlicer
 
-class summary(_Base):
+class summary(_ColumnSlicer):
     ''' produce automatic summaries of the data '''
     parser = argparse.ArgumentParser()
     parser.add_argument('--col-sep', choices=('never', 'always', 'auto'), default='auto', help='show a separator between the columns')
+    parser.add_argument('fields', nargs='*', help='select only these fields')
+    parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
+    parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
     parser.set_defaults(ofs=_Base.PRETTY_OUTPUT)
 
     SIZE_SUFFIXES = {
@@ -42,26 +46,26 @@ class summary(_Base):
         self.rows = []
 
     def on_header(self, header):
-        pass
+        self.header_map = self.make_header_map(self.header)
 
     def on_row(self, row):
+        row = self.slice(row, self.opts.complement)
         self.rows.append(row)
 
     def on_eof(self, cutoff=0.8):
-        missing = b''
-        header = self.header or []
-        num_cols = max(len(header), max(map(len, self.rows), default=0))
-
-        if len(header) < num_cols:
-            header += [_utils.to_bytes(i+1) for i in range(len(header), num_cols)]
-
-        columns = list(itertools.zip_longest(*self.rows, fillvalue=missing))
-
         if not super().on_header([b'column', b'type', b'key', b'value']):
 
-            for h, col in zip(header, columns):
-                parsed = _utils.parse_value(col)
+            missing = b''
+            header = self.header or []
+            num_cols = max(len(header), max(map(len, self.rows), default=0))
 
+            if len(header) < num_cols:
+                header += [_utils.to_bytes(i+1) for i in range(len(header), num_cols)]
+
+            header = self.slice(header, self.opts.complement)
+            columns = list(itertools.zip_longest(*self.rows, fillvalue=missing))
+
+            for h, col in zip(header, columns):
                 # what is it
 
                 if self.is_enum(col) >= cutoff:

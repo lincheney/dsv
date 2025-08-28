@@ -3,6 +3,7 @@ use crate::base;
 use regex::bytes::{Regex};
 use bstr::{BString, ByteSlice, BStr};
 use clap::{Parser};
+use crate::column_slicer::ColumnSlicer;
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
 
@@ -63,11 +64,19 @@ fn get_quartiles<T>(values: &[T]) -> (&T, &T, &T) {
 pub struct Opts {
     #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "show a separator between the columns")]
     col_sep: base::AutoChoices,
+    #[arg(help = "select only these fields")]
+    fields: Vec<String>,
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
+    complement: bool,
+    #[arg(short = 'r', long, help = "treat fields as regexes")]
+    regex: bool,
 }
 
 pub struct Handler {
     header: Option<Vec<BString>>,
+    complement: bool,
     rows: Vec<Vec<BString>>,
+    column_slicer: Option<ColumnSlicer>,
     col_sep: bool,
 }
 
@@ -77,6 +86,8 @@ impl Handler {
     pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
         base.opts.pretty = true;
         Ok(Self{
+            complement: opts.complement,
+            column_slicer: (!opts.fields.is_empty()).then(|| ColumnSlicer::new(&opts.fields, opts.regex)),
             col_sep: opts.col_sep.is_on(is_tty),
             header: None,
             rows: vec![],
@@ -87,11 +98,18 @@ impl Handler {
 impl base::Processor for Handler {
 
     fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+        let header = if let Some(slicer) = &mut self.column_slicer {
+            slicer.make_header_map(&header);
+            slicer.slice(&header, self.complement, true)
+        } else {
+            header
+        };
         self.header = Some(header);
         Ok(false)
     }
 
     fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+        let row = self.column_slicer.as_ref().map(|slicer| slicer.slice(&row, self.complement, true)).unwrap_or(row);
         self.rows.push(row);
         Ok(false)
     }
