@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::base;
 use bstr::{BString};
-use std::collections::{HashMap, hash_map::Entry};
+use std::collections::{HashMap};
 use crate::column_slicer::ColumnSlicer;
 use clap::{Parser, ArgAction};
 
@@ -14,30 +14,42 @@ pub struct Opts {
     complement: bool,
     #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(short = 'c', long, overrides_with_all = ["count_column", "group"], action = ArgAction::SetTrue, help = "prefix lines by the number of occurrences")]
+    #[arg(short = 'c', long, action = ArgAction::SetTrue, help = "prefix lines by the number of occurrences")]
     count: bool,
     #[arg(short = 'C', long, help = "name of column to put the count in")]
     count_column: Option<String>,
     #[arg(long, action = ArgAction::SetTrue, help = "show all items, separating groups with an empty line")]
     group: bool,
+    #[arg(long, conflicts_with_all = ["group"], help = "only print duplicate lines, one for each group")]
+    repeated: bool,
+    #[arg(long, conflicts_with_all = ["group"], help = "print all duplicate lines")]
+    repeated_all: bool,
 }
 
+type Rope = Vec<BString>;
 pub struct Handler {
-    opts: Opts,
+    map: HashMap<Rope, (usize, Vec<Rope>)>,
+    gather: bool,
+    repeated: bool,
+    print_early: bool,
     column_slicer: ColumnSlicer,
-    groups: HashMap<Vec<BString>, (usize, Vec<Vec<BString>>)>,
+    opts: Opts,
 }
 
 impl Handler {
     pub fn new(mut opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
-        let column_slicer = ColumnSlicer::new(&opts.fields, opts.regex);
-        if opts.count && opts.count_column.is_none() {
-            opts.count_column = Some("count".into());
+        if opts.count {
+            opts.count_column.get_or_insert_with(|| "count".into());
         }
+
+        let gather = opts.group || opts.repeated_all;
         Ok(Self {
+            map: HashMap::new(),
+            gather,
+            repeated: opts.repeated || opts.repeated_all,
+            print_early: !gather && opts.count_column.is_none(),
+            column_slicer: ColumnSlicer::new(&opts.fields, opts.regex),
             opts,
-            column_slicer,
-            groups: HashMap::new(),
         })
     }
 }
@@ -53,51 +65,43 @@ impl base::Processor for Handler {
 
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
-        match self.groups.entry(key) {
-            Entry::Occupied(mut entry) => {
-                if self.opts.group {
-                    entry.get_mut().1.push(row);
-                } else if self.opts.count_column.is_some() {
-                    entry.get_mut().0 += 1;
-                }
-            },
-            Entry::Vacant(entry) => {
-                if self.opts.group || self.opts.count_column.is_some() {
-                    entry.insert((1, vec![row]));
-                } else {
-                    // don't need a count, don't need a group, print immediately
-                    entry.insert((1, vec![]));
-                    return base.on_row(row)
-                }
-            },
+
+        let entry = self.map.entry(key).or_insert((0, vec![]));
+        entry.0 += 1;
+
+        if self.print_early {
+            if entry.0 == (if self.repeated { 2 } else { 1 }) {
+                return base.on_row(row)
+            }
+        } else if self.gather || entry.1.is_empty() {
+            entry.1.push(row);
         }
+
         Ok(false)
     }
 
-    fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
-        if self.opts.group {
+    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+        if !self.print_early {
             let mut first = true;
-            'outer: for (_count, rows) in self.groups.values_mut() {
-                if !first && base.on_separator() {
+            'outer: for (_, (count, rows)) in self.map.into_iter() {
+                if self.repeated && count < 2 {
+                    continue
+                }
+                if self.opts.group && !first && base.on_separator() {
                     break
                 }
                 first = false;
-                for row in rows.drain(..) {
+                for mut row in rows {
+                    if self.opts.count_column.is_some() {
+                        row.insert(0, format!("{count}").into());
+                    }
                     if base.on_row(row)? {
                         break 'outer
                     }
                 }
             }
-
-        } else if self.opts.count_column.is_some() {
-            for (count, rows) in self.groups.values_mut() {
-                let mut row = rows.swap_remove(0);
-                row.insert(0, format!("{count}").into());
-                if base.on_row(row)? {
-                    break
-                }
-            }
         }
+
         base.on_eof()
     }
 }
