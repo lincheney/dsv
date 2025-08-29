@@ -170,8 +170,8 @@ impl base::Processor for Handler {
 
         let mut types = vec![None; header.len()];
         for (field, typ) in self.types {
-            if let Some(i) = column_slicer.get_single_field_index(field.as_ref()) {
-                types.get_mut(i).map(|t| *t = Some(typ));
+            if let Some(t) = column_slicer.get_single_field_index(field.as_ref()).and_then(|i| types.get_mut(i)) {
+                *t = Some(typ);
             }
         }
 
