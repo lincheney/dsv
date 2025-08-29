@@ -2,6 +2,7 @@ use anyhow::Result;
 use crate::base;
 use bstr::{BString};
 use clap::{Parser, ArgAction};
+use crate::column_slicer::ColumnSlicer;
 
 #[derive(Parser)]
 #[command(about = "set the header labels")]
@@ -51,20 +52,16 @@ impl base::Processor for Handler {
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
 
+        let mut column_slicer = ColumnSlicer::new(&[], false);
+        column_slicer.make_header_map(&header);
         for [old, new] in self.opts.rename.as_chunks::<2>().0 {
-            let i = if let Ok(i) = old.parse::<usize>() {
-                i - 1
-            } else if let Some(i) = header.iter().position(|h| h == old.as_str()) {
-                i
-            } else {
-                continue
-            };
-
-            if let Some(h) = header.get_mut(i) {
-                *h = new.as_str().into();
-            } else {
-                header.resize(i, b"".into());
-                header.push(new.as_str().into());
+            if let Some(i) = column_slicer.get_single_field_index(old) {
+                if let Some(h) = header.get_mut(i) {
+                    *h = new.as_str().into();
+                } else {
+                    header.resize(i, b"".into());
+                    header.push(new.as_str().into());
+                }
             }
         }
 

@@ -2,7 +2,7 @@ use anyhow::{Result};
 use crate::base;
 use regex::bytes::{Regex};
 use bstr::{BString, ByteSlice, BStr};
-use clap::{Parser};
+use clap::{Parser, ArgAction, CommandFactory, error::{ErrorKind, ContextKind, ContextValue}};
 use crate::column_slicer::ColumnSlicer;
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
@@ -70,6 +70,8 @@ pub struct Opts {
     complement: bool,
     #[arg(short = 'r', long, help = "treat fields as regexes")]
     regex: bool,
+    #[arg(short = 't', num_args = 2, action = ArgAction::Append, long, value_names = ["A", "B"], help = "assume field A is type B")]
+    r#type: Vec<String>,
 }
 
 pub struct Handler {
@@ -78,6 +80,16 @@ pub struct Handler {
     rows: Vec<Vec<BString>>,
     column_slicer: Option<ColumnSlicer>,
     col_sep: bool,
+    types: Vec<(String, Type)>,
+}
+
+#[derive(Clone, Copy)]
+enum Type {
+    Date,
+    Enum,
+    Percent,
+    Number,
+    Size,
 }
 
 const CUTOFF: f64 = 0.8;
@@ -85,12 +97,39 @@ const CUTOFF: f64 = 0.8;
 impl Handler {
     pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
         base.opts.pretty = true;
+
+        // verify the types
+        let mut types = vec![];
+        let mut type_map = HashMap::new();
+        type_map.insert("date", Type::Date);
+        type_map.insert("enum", Type::Enum);
+        type_map.insert("percent", Type::Percent);
+        type_map.insert("number", Type::Number);
+        type_map.insert("size", Type::Size);
+
+        for [field, typ] in opts.r#type.as_chunks::<2>().0 {
+            if let Some(&typ) = type_map.get(typ.as_str()) {
+                types.push((field.clone(), typ));
+            } else {
+                let mut allowed: Vec<_> = type_map.keys().map(|k| k.to_string()).collect();
+                allowed.sort();
+
+                let cmd = crate::subcommands::Cli::command();
+                let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(&cmd);
+                err.insert(ContextKind::InvalidArg, ContextValue::String("--type".into()));
+                err.insert(ContextKind::InvalidValue, ContextValue::String(typ.to_owned()));
+                err.insert(ContextKind::ValidValue, ContextValue::Strings(allowed));
+                err.exit();
+            }
+        }
+
         Ok(Self{
             complement: opts.complement,
             column_slicer: (!opts.fields.is_empty()).then(|| ColumnSlicer::new(&opts.fields, opts.regex)),
             col_sep: opts.col_sep.is_on(is_tty),
             header: None,
             rows: vec![],
+            types,
         })
     }
 }
@@ -122,11 +161,21 @@ impl base::Processor for Handler {
         let mut header = self.header.unwrap_or_default();
         let num_cols = self.rows.iter().map(|r| r.len()).max().unwrap_or(0).max(header.len());
 
+        let mut column_slicer = ColumnSlicer::new(&[], false);
+        column_slicer.make_header_map(&header);
+
         if header.len() < num_cols {
             header.extend((header.len() .. num_cols).map(|i| format!("{i}").into()));
         }
 
-        for (i, h) in header.into_iter().enumerate() {
+        let mut types = vec![None; header.len()];
+        for (field, typ) in self.types {
+            if let Some(i) = column_slicer.get_single_field_index(field.as_ref()) {
+                types.get_mut(i).map(|t| *t = Some(typ));
+            }
+        }
+
+        for (i, (h, t)) in header.into_iter().zip(types).enumerate() {
             if self.col_sep && i > 0 && base.on_separator() {
                 return Ok(true)
             }
@@ -138,15 +187,27 @@ impl base::Processor for Handler {
                 if base.on_row(vec![h, b"(empty)".into()])? {
                     return Ok(true)
                 }
+            } else if let Some(t) = t {
+                let result = match t {
+                    Type::Date => display_date(base, &h, &column, 0.),
+                    Type::Number => display_numeric(base, &h, &column, 0.),
+                    Type::Enum => display_enum(base, &h, &column, 0.),
+                    Type::Size => display_size(base, &h, &column, 0.),
+                    Type::Percent => display_percentage(base, &h, &column, 0.),
+                };
+                if let Some(result) = result && result? {
+                    return Ok(true)
+                }
             } else if let Some(result) =
                                 display_enum(base, &h, &column, CUTOFF)
                     .or_else(|| display_date(base, &h, &column, CUTOFF))
                     .or_else(|| display_numeric(base, &h, &column, CUTOFF))
                     .or_else(|| display_percentage(base, &h, &column, CUTOFF))
                     .or_else(|| display_size(base, &h, &column, CUTOFF))
-                    .or_else(|| display_enum(base, &h, &column, 0.))
                 && result?
             {
+                return Ok(true)
+            } else if display_enum(base, &h, &column, 0.).unwrap()? {
                 return Ok(true)
             }
         }

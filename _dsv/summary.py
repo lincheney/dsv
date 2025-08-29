@@ -16,6 +16,7 @@ class summary(_ColumnSlicer):
     parser.add_argument('fields', nargs='*', help='select only these fields')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
     parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
+    parser.add_argument('-t', '--type', nargs=2, action='append', type=_utils.utf8_type, metavar=('A', 'B'), help='assume field A is of type B')
     parser.set_defaults(ofs=_Base.PRETTY_OUTPUT)
 
     SIZE_SUFFIXES = {
@@ -38,15 +39,29 @@ class summary(_ColumnSlicer):
         'pib': 2**50,
     }
     SIZE_REGEX = re.compile(fr'''(?i)(\d+(?:\.\d+)?)\s?((?:{'|'.join(SIZE_SUFFIXES)})?)'''.encode('utf8'))
+    TYPES = ['enum', 'number', 'percent', 'date', 'size']
 
     def __init__(self, opts):
         super().__init__(opts)
         self.opts.col_sep = _utils.resolve_tty_auto(self.opts.col_sep)
         self.sep = self.get_separator()
         self.rows = []
+        self.types = {}
+        for f, t in opts.type:
+            if not any(t == x.encode() for x in self.TYPES):
+                self.parser.error(f"""argument --type: invalid choice: {repr(t).removeprefix('b')} (choose from {', '.join(self.TYPES)})""")
 
     def on_header(self, header):
         self.header_map = self.make_header_map(self.header)
+        for field, type in (self.opts.type or ()):
+            if field.isdigit():
+                i = int(field) - 1
+            else:
+                try:
+                    i = header.index(field)
+                except ValueError:
+                    continue
+            self.types[i] = type.decode()
 
     def on_row(self, row):
         row = self.slice(row, self.opts.complement)
@@ -65,26 +80,28 @@ class summary(_ColumnSlicer):
             header = self.slice(header, self.opts.complement)
             columns = list(itertools.zip_longest(*self.rows, fillvalue=missing))
 
-            for h, col in zip(header, columns):
+            for i, (h, col) in enumerate(zip(header, columns)):
                 # what is it
+                type = self.types.get(i)
+                check_cutoff = cutoff if type is None else 0
 
-                if self.is_enum(col) >= cutoff:
+                if type in (None, 'enum') and self.is_enum(col) >= check_cutoff:
                     if self.display_enum(h, col):
                         break
 
-                elif self.is_date(dates := _utils.parse_datetime(col)) >= cutoff:
+                elif type in (None, 'date') and self.is_date(dates := _utils.parse_datetime(col)) >= check_cutoff:
                     if self.display_date(h, dates):
                         break
 
-                elif self.is_numeric(numbers := _utils.parse_value(col)) >= cutoff:
+                elif type in (None, 'number') and self.is_numeric(numbers := _utils.parse_value(col)) >= check_cutoff:
                     if self.display_numeric(h, numbers):
                         break
 
-                elif self.is_numeric(numbers := _utils.parse_value([c.strip().removesuffix(b'%') for c in col])) >= cutoff:
+                elif type in (None, 'percent') and self.is_numeric(numbers := _utils.parse_value([c.strip().removesuffix(b'%') for c in col])) >= check_cutoff:
                     if self.display_numeric(h, numbers, formatter=self.format_percentage):
                         break
 
-                elif self.is_size(col) >= cutoff:
+                elif type in (None, 'size') and self.is_size(col) >= check_cutoff:
                     if self.display_size(h, col):
                         break
 

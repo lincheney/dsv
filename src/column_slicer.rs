@@ -55,6 +55,14 @@ impl ColumnSlicer {
         self.headers = header.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect();
     }
 
+    pub fn get_single_field_index(&self, field: &str) -> Option<usize> {
+        if let Ok(i) = field.parse::<usize>() {
+            Some(i.saturating_sub(1))
+        } else {
+            self.headers.get(field.as_bytes()).copied()
+        }
+    }
+
     fn range_for_row(start: usize, end: usize, len: usize) -> std::ops::Range<usize> {
         min(start, len) .. min(end, len)
     }
