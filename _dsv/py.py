@@ -90,7 +90,9 @@ class py(_Base):
             if self.opts.remove_errors or (self.opts.ignore_errors and self.expr):
                 vars.pop(self.opts.var, None)
 
-    def do_exec(self, rows, **vars):
+    def do_exec(self, rows, code, expr=None, **vars):
+        if expr is None:
+            expr = self.expr
         if not self.opts.bytes:
             rows = [_utils.parse_value(row) for row in rows]
 
@@ -100,13 +102,13 @@ class py(_Base):
 
         with self.exec_wrapper(vars):
             exec(self.prelude, vars)
-            if self.expr:
-                vars[self.opts.var] = eval(self.code, vars)
+            if expr:
+                vars[self.opts.var] = eval(code, vars)
             else:
-                exec(self.code, vars)
+                exec(code, vars)
 
         result = vars.get(self.opts.var)
-        return self.handle_exec_result(result, vars, table)
+        return result, vars, table
 
     def handle_exec_result(self, result, vars, table):
         if result is None:
@@ -133,7 +135,9 @@ class py(_Base):
 
     def exec_per_row(self, row, **vars):
         self.count = self.count + 1
-        return self.do_exec([row], N=self.count, **vars)
+        result, vars, table = self.do_exec([row], self.code, N=self.count, **vars)
+        return self.handle_exec_result(result, vars, table)
 
     def exec_on_all_rows(self, rows, **vars):
-        return self.do_exec(rows, N=len(rows), **vars)
+        result, vars, table = self.do_exec(rows, self.code, N=len(rows), **vars)
+        return self.handle_exec_result(result, vars, table)

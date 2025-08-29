@@ -60,10 +60,15 @@ define_python_lib!(
     // PyObject_GetAttr: unsafe extern "C" fn(Pointer, Pointer) -> Pointer,
     PyObject_GetAttrString: unsafe extern "C" fn(Pointer, *const c_char) -> Pointer,
     PyDict_New: unsafe extern "C" fn() -> Pointer,
+    PyDict_Next: unsafe extern "C" fn(Pointer, *mut isize, *mut Pointer, *mut Pointer) -> i32,
     PyList_New: unsafe extern "C" fn(isize) -> Pointer,
     PyList_SetItem: unsafe extern "C" fn(Pointer, isize, Pointer) -> i32,
     PyList_Append: unsafe extern "C" fn(Pointer, Pointer) -> i32,
     PyList_Clear: unsafe extern "C" fn(Pointer) -> i32,
+    PyList_Size: unsafe extern "C" fn(Pointer) -> isize,
+    PyTuple_New: unsafe extern "C" fn(isize) -> Pointer,
+    PyTuple_SetItem: unsafe extern "C" fn(Pointer, isize, Pointer) -> i32,
+    // PyTuple_GetItem: unsafe extern "C" fn(Pointer, isize) -> Pointer,
     PyLong_FromSize_t: unsafe extern "C" fn(usize) -> Pointer,
     PyLong_FromSsize_t: unsafe extern "C" fn(isize) -> Pointer,
     PyFloat_FromDouble: unsafe extern "C" fn(f64) -> Pointer,
@@ -263,6 +268,12 @@ impl GilHandle<'_> {
         }
     }
 
+    pub fn empty_tuple(&self, size: usize) -> Option<Object> {
+        unsafe{
+            NonNull::new((self.py.PyTuple_New)(size.try_into().unwrap()))
+        }
+    }
+
     pub fn list_append(&self, list: Object, item: Object) {
         unsafe{
             let result = (self.py.PyList_Append)(list.as_ptr(), item.as_ptr());
@@ -276,6 +287,14 @@ impl GilHandle<'_> {
         }
     }
 
+    pub fn list_len(&self, list: Object) -> usize {
+        unsafe{
+            let len = (self.py.PyList_Size)(list.as_ptr());
+            debug_assert!(len >= 0);
+            len as _
+        }
+    }
+
     pub fn list_from_iter<I: Iterator<Item=Object> + ExactSizeIterator>(&self, iter: I) -> Option<Object> {
         unsafe{
             let list = self.empty_list(iter.len())?;
@@ -286,6 +305,23 @@ impl GilHandle<'_> {
             Some(list)
         }
     }
+
+    pub fn tuple_from_iter<I: Iterator<Item=Object> + ExactSizeIterator>(&self, iter: I) -> Option<Object> {
+        unsafe{
+            let tuple = self.empty_tuple(iter.len())?;
+            for (i, value) in iter.enumerate() {
+                let result = (self.py.PyTuple_SetItem)(tuple.as_ptr(), i.try_into().unwrap(), value.as_ptr());
+                debug_assert!(result == 0);
+            }
+            Some(tuple)
+        }
+    }
+
+    // pub fn tuple_get(&self, tuple: Object, index: usize) -> Option<Object> {
+        // unsafe{
+            // NonNull::new((self.py.PyTuple_GetItem)(tuple.as_ptr(), index as _))
+        // }
+    // }
 
     pub fn empty_dict(&self) -> Option<Object> {
         unsafe{
@@ -429,5 +465,25 @@ impl GilHandle<'_> {
             item = NonNull::new((self.py.PyIter_Next)(iter.as_ptr()));
             item
         }))
+    }
+
+    pub fn dict_iter(&self, dict: Object) -> impl Iterator<Item=(Object, Object)> {
+        let mut key: Pointer = null_mut();
+        let mut value: Pointer = null_mut();
+        let mut pos = 0;
+
+        std::iter::from_fn(move || unsafe {
+            let result = (self.py.PyDict_Next)(
+                dict.as_ptr(),
+                std::ptr::from_mut(&mut pos),
+                std::ptr::from_mut(&mut key),
+                std::ptr::from_mut(&mut value),
+            );
+            if result > 0 {
+                Some((NonNull::new(key).unwrap(), NonNull::new(value).unwrap()))
+            } else {
+                None
+            }
+        })
     }
 }

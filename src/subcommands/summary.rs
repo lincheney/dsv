@@ -301,7 +301,7 @@ fn display_date(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
         ].iter().find_map(|f| chrono::DateTime::parse_from_str(c, f).map(|d| d.to_utc()).ok())
         .map(|date| date.timestamp() as f64)
         .or_else(|| {
-            let val = c.parse::<f64>().ok()?;
+            let val = c.parse().ok()?;
             if val > DATE_YARDSTICK * 1000. {
                 // this is in milliseconds
                 Some(val / 1000.)
@@ -358,14 +358,14 @@ fn get_numeric_stats<F: Fn(f64) -> String>(
 }
 
 fn display_numeric(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
-    let parsed: Vec<_> = column.iter().map(|c| std::str::from_utf8(c.as_ref()?.as_ref()).ok()?.parse::<f64>().ok()).collect();
+    let parsed: Vec<_> = column.iter().map(|c| std::str::from_utf8(c.as_ref()?).ok()?.parse().ok()).collect();
     let stats = get_numeric_stats(&parsed, cutoff, nice_float)?;
     Some(display_stats(base, stats.into_iter().map(|(k, v)| {
         vec![header.clone(), b"numeric".into(), k.into(), v.into()]
     })))
 }
 fn display_percentage(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
-    let parsed: Vec<_> = column.iter().map(|&c| std::str::from_utf8(c?.strip_suffix(b"%")?).ok()?.parse::<f64>().ok()).collect();
+    let parsed: Vec<_> = column.iter().map(|&c| std::str::from_utf8(c?.strip_suffix(b"%")?).ok()?.parse().ok()).collect();
     let stats = get_numeric_stats(&parsed, cutoff, |x| format!("{}%", nice_float(x)))?;
     Some(display_stats(base, stats.into_iter().map(|(k, v)| {
         vec![header.clone(), b"percent".into(), k.into(), v.into()]
