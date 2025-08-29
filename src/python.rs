@@ -165,8 +165,13 @@ impl Drop for GilHandle<'_> {
 }
 
 impl GilHandle<'_> {
+
+    pub fn get_none(&self) -> Object {
+        self.py._Py_NoneStruct.0
+    }
+
     pub fn is_none(&self, obj: Object) -> bool {
-        obj == self.py._Py_NoneStruct.0
+        obj == self.get_none()
     }
 
     pub fn is_truthy(&self, obj: Object) -> bool {
@@ -219,6 +224,12 @@ impl GilHandle<'_> {
     pub fn to_float(&self, value: f64) -> Option<Object> {
         unsafe{
             NonNull::new((self.py.PyFloat_FromDouble)(value))
+        }
+    }
+
+    pub fn to_bool(&self, value: bool) -> Option<Object> {
+        unsafe{
+            NonNull::new((self.py.PyLong_FromSsize_t)(if value { 1 } else { 0 }))
         }
     }
 

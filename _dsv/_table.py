@@ -2,12 +2,21 @@ import sys
 import re
 import datetime
 import itertools
+from functools import cache, wraps
 import operator
 import math
 import statistics
 
 FULL_SLICE = slice(None)
 MISSING = b''
+
+NA_STRING = 'NA'
+class NA:
+    def __repr__(self):
+        return NA_STRING
+    def __bool__(self):
+        return False
+NA = NA()
 
 def to_bytes(x):
     if not isinstance(x, bytes):
@@ -93,9 +102,9 @@ def apply_slice(data, key, flat=False):
 def slice_to_list(key, stop=None):
     return list(range(*key.indices(key.stop if stop is None else stop)))
 
-def convert_to_table(value):
+def convert_to_table(value, na):
     if isinstance(value, Proxy) and not value.__is_row__() and not value.__is_column__():
-        return Table(list(value), value.__headers__)
+        return Table(list(value), value.__headers__, na)
 
     if isinstance(value, Table):
         return value
@@ -108,7 +117,7 @@ def convert_to_table(value):
         columns = [col * (max_rows // len(col)) if col else [MISSING] * max_rows for col in columns]
         data = list(zip(*columns))
         headers = value.keys()
-        return Table(data, headers)
+        return Table(data, headers, na)
 
 class Vectorised:
     def __getattr__(self, key):
@@ -195,18 +204,22 @@ class BaseTable(Vectorised):
         return itertools.chain.from_iterable(self.__data__)
 
     def map(self, fn, col=False):
+        if NA is not None:
+            fn = na_wrapper(fn)
+
         if col:
-            cols = [fn(Vec(col)) for col in zip(*self)]
-            return convert_to_table(dict(zip(self.__headers__, cols)))
+            cols = [NoNaVec(col).map(fn) for col in zip(*self)]
+            return convert_to_table(dict(zip(self.__headers__, cols)), self.__na__)
         else:
-            return Table([Vec(row).map(fn) for row in self], self.__headers__.copy())
+            return Table([NoNaVec(row).map(fn) for row in self], self.__headers__.copy())
 
 
 class Table(BaseTable):
-    def __init__(self, data, headers):
+    def __init__(self, data, headers, na):
         self.__dict__.update(
             __headers__=headers,
             __data__=data,
+            __na__=na,
         )
 
     def __iter__(self):
@@ -354,20 +367,41 @@ class Proxy(BaseTable):
         return super().__flat__()
 
     def map(self, fn, col=False):
+        if self.__parent__.__na__:
+            fn = na_wrapper(fn)
+
         if col and self.__is_column__():
             return fn(self)
         if self.__is_row__() or self.__is_column__():
-            return Vec(self).map(fn)
+            return NoNaVec(self).map(fn)
         return super().map(fn, col)
 
 
-class Vec(Vectorised, list):
+class NoNaVec(Vectorised, list):
+    __na__ = False
+    def __init__(self, *args):
+        super().__init__(*args)
+
     def __flat__(self):
         return self
 
     def map(self, fn):
-        return Vec(map(fn, self))
+        if self.__na__:
+            fn = na_wrapper(fn)
+        return (type)(self)(map(fn, self))
 
+class Vec(NoNaVec):
+    __na__ = True
+
+@cache
+def na_wrapper(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except (AttributeError, TypeError):
+            return NA
+    return wrapper
 
 for arity, scalar, functions in [
     (1, False, (

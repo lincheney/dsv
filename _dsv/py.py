@@ -5,7 +5,7 @@ import linecache
 from contextlib import contextmanager
 from ._base import _Base
 from . import _utils
-from ._table import Vec, Table, convert_to_table
+from ._table import Vec, NoNaVec, Table, convert_to_table
 
 FULL_SLICE = slice(None)
 MISSING = b''
@@ -23,6 +23,7 @@ class py(_Base):
     parent.add_argument('-q', '--quiet', action='store_true', help='do not print errors')
     parent.add_argument('--var', default='X', help='python variable to use to refer to the data (default: %(default)s)')
     parent.add_argument('-b', '--bytes', action='store_true', help='do not auto convert data to int, str etc, treat everything as bytes')
+    parent.add_argument('--no-na', action='store_true', help='do not auto generate NA for invalid operations')
 
     parser = argparse.ArgumentParser(parents=[parent])
     parser.add_argument('script', nargs='+', help='python statements to run')
@@ -94,8 +95,8 @@ class py(_Base):
             rows = [_utils.parse_value(row) for row in rows]
 
         vars['H'] = copy.copy(self.header)
-        vars['Vec'] = Vec
-        table = vars[self.opts.var] = Table(rows, self.header_numbers)
+        vars['Vec'] = NoNaVec if self.opts.no_na else Vec
+        table = vars[self.opts.var] = Table(rows, self.header_numbers, not self.opts.no_na)
 
         with self.exec_wrapper(vars):
             exec(self.prelude, vars)
@@ -111,7 +112,7 @@ class py(_Base):
         if result is None:
             return
 
-        table = convert_to_table(result)
+        table = convert_to_table(result, None)
         if table is not None:
             headers = table.__headers__
             rows = table.__data__

@@ -21,6 +21,8 @@ pub struct CommonOpts {
     pub remove_errors: bool,
     #[arg(short = 'q', long, help = "do not print errors")]
     quiet: bool,
+    #[arg(long, help = "do not auto generate NA for invalid operations")]
+    no_na: bool,
     #[arg(long, long, help = "path to libpython3.so")]
     libpython: Option<String>,
 }
@@ -65,9 +67,12 @@ impl Handler {
         let locals = py.empty_dict().unwrap();
         py.dict_set_string(globals, c"__builtins__", py.get_builtin_dict().unwrap());
         py.exec(TABLE_SCRIPT, Some(c"_table.py"), globals.as_ptr(), globals.as_ptr()).unwrap();
+        if opts.common.no_na {
+            py.dict_set_string(globals, c"NA", py.get_none());
+        }
 
         let table_cls = py.dict_get_string(globals, c"Table").unwrap();
-        let vec_cls = py.dict_get_string(globals, c"Vec").unwrap();
+        let vec_cls = py.dict_get_string(globals, if opts.common.no_na { c"NoNaVec" } else { c"Vec" }).unwrap();
         let convert_to_table_fn = py.dict_get_string(globals, c"convert_to_table").unwrap();
 
         let (last, rest) = opts.common.script.split_last().unwrap();
@@ -139,7 +144,7 @@ impl Handler {
 
         let py = self.py.acquire_gil();
         let rows = py.list_from_iter(rows.map(|row| self.row_to_py(&py, row.as_ref()))).unwrap();
-        let table = py.call_func(self.table_cls, &[rows, self.header_numbers])?;
+        let table = py.call_func(self.table_cls, &[rows, self.header_numbers, py.to_bool(!self.opts.common.no_na).unwrap()])?;
 
         py.dict_clear(self.locals);
         for (k, v) in vars {
@@ -183,7 +188,7 @@ impl Handler {
         let py = self.py.acquire_gil();
 
         if !py.is_none(result) {
-            let table = py.call_func(self.convert_to_table_fn, &[result])?;
+            let table = py.call_func(self.convert_to_table_fn, &[result, py.get_none()])?;
             if !py.is_none(table) {
                 let header = py.getattr_string(table, c"__headers__");
 
