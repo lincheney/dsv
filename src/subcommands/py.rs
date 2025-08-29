@@ -61,7 +61,6 @@ impl Handler {
         let python = python::Python::new(opts.common.libpython.as_ref().map(|x| x.as_ref()))?;
 
         let py = python.acquire_gil();
-        // let main = py.add_module("__main__").unwrap();
 
         let globals = py.empty_dict().unwrap();
         let locals = py.empty_dict().unwrap();

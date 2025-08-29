@@ -376,33 +376,35 @@ impl GilHandle<'_> {
     pub fn compile_code_cstr(&self, code: &CStr, filename: Option<&CStr>, start: StartToken) -> Result<Object> {
         let buf;
         let filename = match filename {
-            Some(filename) => Some(filename),
+            Some(filename) => filename,
             None => {
                 // load it into the linecache so it shows up in tracebacks
                 let counter = CODE_COUNTER.fetch_add(1, atomic::Ordering::Relaxed);
                 buf = CString::new(format!("<string-{counter}>")).unwrap();
-                (|| {
-                    let linecache = NonNull::new(unsafe{ (self.py.PyImport_ImportModule)(c"linecache".as_ptr()) })?;
-                    let cache = self.getattr_string(linecache, c"cache")?;
-
-                    let filename = self.to_str(std::str::from_utf8(buf.to_bytes()).unwrap()).unwrap();
-                    let lines = self.empty_list(0)?;
-                    for line in code.to_bytes().as_bstr().lines_with_terminator() {
-                        self.list_append(lines, self.to_str(std::str::from_utf8(line).ok()?)?);
-                    }
-                    let list = self.list_from_iter([
-                        self.to_int((code.count_bytes() - 1).try_into().unwrap())?,
-                        self.py._Py_NoneStruct.0,
-                        lines,
-                        filename,
-                    ].into_iter())?;
-                    self.dict_set(cache, filename, list);
-                    Some(buf.as_ref())
-                })()
+                &buf
             },
         };
 
-        compile_code_cstr(self.py, code, filename.unwrap_or(c"<string>"), start).ok_or_else(|| self.get_exception())
+        (|| {
+            let linecache = NonNull::new(unsafe{ (self.py.PyImport_ImportModule)(c"linecache".as_ptr()) })?;
+            let cache = self.getattr_string(linecache, c"cache")?;
+
+            let filename = self.to_str(std::str::from_utf8(filename.to_bytes()).unwrap()).unwrap();
+            let lines = self.empty_list(0)?;
+            for line in code.to_bytes().as_bstr().lines_with_terminator() {
+                self.list_append(lines, self.to_str(std::str::from_utf8(line).ok()?)?);
+            }
+            let list = self.list_from_iter([
+                self.to_int((code.count_bytes() - 1).try_into().unwrap())?,
+                self.get_none(),
+                lines,
+                filename,
+            ].into_iter())?;
+            self.dict_set(cache, filename, list);
+            Some(())
+        })();
+
+        compile_code_cstr(self.py, code, filename, start).ok_or_else(|| self.get_exception())
     }
 
     pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Result<Object> {
