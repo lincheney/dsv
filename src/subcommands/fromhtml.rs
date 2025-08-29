@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::collections::HashMap;
 use bstr::{BString, ByteVec};
 use clap::{Parser, ArgAction};
-use quick_xml::{events::Event, reader::Reader};
+use quick_xml::{events::Event, reader::Reader, errors::SyntaxError};
 
 #[derive(Parser, Default)]
 #[command(about = "convert from html table")]
@@ -73,8 +73,8 @@ impl base::Processor for Handler {
 
         loop {
             buffer.clear();
-            match reader.read_event_into(&mut buffer)? {
-                Event::Start(tag) => {
+            match reader.read_event_into(&mut buffer) {
+                Ok(Event::Start(tag)) => {
                     if matches!(state.last().map(|x| x.as_slice()), Some(b"td" | b"th")) {
                         if self.opts.inner_html && let Some(last) = current_row.last_mut() {
                             last.push(b'<');
@@ -131,7 +131,7 @@ impl base::Processor for Handler {
                     }
 
                 },
-                Event::End(tag) => {
+                Ok(Event::End(tag)) => {
                     let name = tag.local_name();
                     let name = name.as_ref();
                     match state.last().map(|x| x.as_slice()) {
@@ -162,7 +162,7 @@ impl base::Processor for Handler {
                         got_header = had_thead;
                     }
                 },
-                Event::Text(text) => {
+                Ok(Event::Text(text)) => {
                     let row_len = current_row.len();
                     if matches!(state.last().map(|x| x.as_slice()), Some(b"td" | b"th")) && let Some(last) = current_row.last_mut() {
                         let text = text.into_inner();
@@ -173,8 +173,11 @@ impl base::Processor for Handler {
                         }
                     }
                 },
-                Event::Eof => break,
-                _ => (),
+                Ok(Event::Eof) => break,
+                Err(quick_xml::errors::Error::Syntax(SyntaxError::UnclosedComment | SyntaxError::UnclosedPIOrXmlDecl | SyntaxError::UnclosedDoctype | SyntaxError::UnclosedCData | SyntaxError::UnclosedTag)) => (),
+
+                Ok(_) => (),
+                Err(e) => Err(e)?,
             }
         }
         if do_callbacks.contains(base::Callbacks::ON_EOF) {
