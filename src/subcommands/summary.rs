@@ -111,7 +111,7 @@ impl Handler {
             if let Some(&typ) = type_map.get(typ.as_str()) {
                 types.push((field.clone(), typ));
             } else {
-                let mut allowed: Vec<_> = type_map.keys().map(|k| k.to_string()).collect();
+                let mut allowed: Vec<_> = type_map.keys().map(|k| (**k).to_string()).collect();
                 allowed.sort();
 
                 let cmd = crate::subcommands::Cli::command();

@@ -411,14 +411,13 @@ impl GilHandle<'_> {
 
     pub fn compile_code_cstr(&self, code: &CStr, filename: Option<&CStr>, start: StartToken) -> Result<Object> {
         let buf;
-        let filename = match filename {
-            Some(filename) => filename,
-            None => {
-                // load it into the linecache so it shows up in tracebacks
-                let counter = CODE_COUNTER.fetch_add(1, atomic::Ordering::Relaxed);
-                buf = CString::new(format!("<string-{counter}>")).unwrap();
-                &buf
-            },
+        let filename = if let Some(filename) = filename {
+            filename
+        } else {
+            // load it into the linecache so it shows up in tracebacks
+            let counter = CODE_COUNTER.fetch_add(1, atomic::Ordering::Relaxed);
+            buf = CString::new(format!("<string-{counter}>")).unwrap();
+            &buf
         };
 
         (|| {

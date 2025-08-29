@@ -83,7 +83,7 @@ impl base::Processor for Handler {
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
         if !self.print_early {
             let mut first = true;
-            'outer: for (_, (count, rows)) in self.map.into_iter() {
+            'outer: for (_, (count, rows)) in self.map {
                 if self.repeated && count < 2 {
                     continue
                 }

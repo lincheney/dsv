@@ -48,7 +48,7 @@ impl base::Processor for Handler {
     }
 
     fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
-        for file in std::mem::take(&mut self.opts.files).iter() {
+        for file in &std::mem::take(&mut self.opts.files) {
             match std::fs::File::open(file) {
                 Ok(file) => {
                     let file = std::io::BufReader::new(file);
