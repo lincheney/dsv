@@ -149,7 +149,7 @@ impl base::Processor for Handler {
             let result1 = err_receiver.recv().unwrap().map(|_| ExitStatus::from_raw(0));
             let result2 = child.wait().map_err(anyhow::Error::new);
             drop(err_receiver);
-            crate::utils::chain_errors([result1, result2].into_iter())?.success()
+            crate::utils::chain_errors([result1, result2])?.success()
         } else {
             true
         };

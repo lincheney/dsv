@@ -108,7 +108,7 @@ impl base::Processor for Handler {
                                     for attr in tag.html_attributes().with_checks(false) {
                                         let attr = attr?;
                                         if attr.key.0 == b"rowspan" {
-                                            if let Ok(Ok(span)) = std::str::from_utf8(&attr.value).map(str::parse::<usize>) && span > 0 {
+                                            if let Ok(Ok(span)) = std::str::from_utf8(&attr.value).map(str::parse) && span > 0 {
                                                 add_rowspan(&mut rowspans, current_row.len(), span, b"".into());
                                             } else {
                                                 eprintln!("invalid rowspan {:?}", attr.value);

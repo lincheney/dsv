@@ -188,7 +188,7 @@ pub enum GatheredRow {
 pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
     fn make_writer(opts: BaseOptions) -> Output::<W> {
-        Output::<W>::new(opts)
+        Output::new(opts)
     }
 
     fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
@@ -245,7 +245,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
     fn guess_delimiter(line: &BStr, default: &BStr) -> Ifs {
         const GOOD_DELIMS: [u8; 2] = [b'\t', b','];
-        const OTHER_DELIMS: [(&[u8; 2], usize); 4] = [(b"  ", 2), (b"  ", 1), (b"| ", 1), (b"; ", 1)];
+        const OTHER_DELIMS: [&str; 4] = ["  ", " ", "|", ";"];
 
         let mut counts: [usize; GOOD_DELIMS.len()] = [0; GOOD_DELIMS.len()];
         for (delim, counts) in GOOD_DELIMS.iter().zip(counts.iter_mut()) {
@@ -258,8 +258,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         }
 
         let mut counts: [usize; OTHER_DELIMS.len()] = [0; OTHER_DELIMS.len()];
-        for ((delim, len), counts) in OTHER_DELIMS.iter().zip(counts.iter_mut()) {
-            let delim = &delim[..*len];
+        for (delim, counts) in OTHER_DELIMS.iter().zip(counts.iter_mut()) {
             *counts = line.split_str(delim).count() - 1;
         }
 
@@ -275,7 +274,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
             } else if best == 0 {
                 Ifs::Pretty
             } else {
-                let delim = OTHER_DELIMS[best].0;
+                let delim = OTHER_DELIMS[best];
                 Ifs::Plain(delim.into())
             };
         }
@@ -313,7 +312,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                     offset += 1;
                 }
                 (&buffer[.. buffer.len() - offset], offset)
-            } else if let Some((left, _)) = buffer.split_once_str::<BString>(&irs) {
+            } else if let Some((left, _)) = buffer.split_once_str(&irs) {
                 (left, irs.len())
             } else {
                 // read some more

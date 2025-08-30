@@ -26,52 +26,34 @@ impl Handler {
     }
 }
 
-fn flatten_map<'a>(
-    map: &'a serde_json::Map<String, serde_json::Value>,
-    sep: &BStr,
-    parent_key: Option<&BStr>,
-    result: &mut HashMap<BString, &'a serde_json::Value>,
-) {
-
-    for (k, v) in map.iter() {
-        let key: BString = if let Some(p) = parent_key {
-            bstr::concat([p, sep, k.as_str().into()]).into()
-        } else {
-            k.as_bytes().into()
-        };
-        match v {
-            serde_json::Value::Object(map) => flatten_map(map, sep, Some(key.as_ref()), result),
-            serde_json::Value::Array(vec) => flatten_array(vec, sep, Some(key.as_ref()), result),
-            v => { result.insert(key, v); },
-        }
-    }
+fn vec_iter<T>(vec: &[T]) -> impl Iterator<Item=(String, &T)> {
+    vec.iter().enumerate().map(|(i, v)| (format!("{i}"), v))
 }
 
-fn flatten_array<'a>(
-    array: &'a [serde_json::Value],
+fn flatten<'a, T: AsRef<[u8]>, I: Iterator<Item=(T, &'a serde_json::Value)>>(
+    iter: I,
     sep: &BStr,
     parent_key: Option<&BStr>,
     result: &mut HashMap<BString, &'a serde_json::Value>,
 ) {
 
-    for (k, v) in array.iter().enumerate() {
-        let k = format!("{k}").into_bytes();
-        let k: BString = if let Some(p) = parent_key {
-            bstr::concat([p, sep, k.as_slice().into()]).into()
+    for (k, v) in iter {
+        let key: BString = if let Some(p) = parent_key {
+            bstr::concat([p, sep, k.as_ref()]).into()
         } else {
-            k.into()
+            k.as_ref().into()
         };
         match v {
-            serde_json::Value::Object(map) => flatten_map(map, sep, Some(k.as_ref()), result),
-            serde_json::Value::Array(vec) => flatten_array(vec, sep, Some(k.as_ref()), result),
-            v => { result.insert(k, v); },
+            serde_json::Value::Object(map) => flatten(map.iter(), sep, Some(key.as_ref()), result),
+            serde_json::Value::Array(vec) => flatten(vec_iter(vec), sep, Some(key.as_ref()), result),
+            v => { result.insert(key, v); },
         }
     }
 }
 
 fn flatten_to_hashmap<'a>(map: &'a serde_json::Map<String, serde_json::Value>, sep: &BStr) -> HashMap<BString, &'a serde_json::Value> {
     let mut result = HashMap::new();
-    flatten_map(map, sep, None, &mut result);
+    flatten(map.iter(), sep, None, &mut result);
     result
 }
 
@@ -99,7 +81,7 @@ impl Handler {
     }
 
     fn process_json<R: Read>(&mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> Result<()> {
-        let mut stream = serde_json::Deserializer::from_reader(file).into_iter::<serde_json::Map<_, _>>();
+        let mut stream = serde_json::Deserializer::from_reader(file).into_iter();
 
         let header_row = if let Some(header_row) = stream.next() {
             header_row.context("invalid json")?
@@ -134,12 +116,12 @@ impl Handler {
             if do_header && self.on_header(base, header)? {
                 return Ok(())
             }
-            if do_callbacks.contains(Callbacks::ON_ROW) && self.process_json_row(base, header_row.keys(), |k| header_row.get(k))? {
+            if do_row && self.process_json_row(base, header_row.keys(), |k| header_row.get(k))? {
                 return Ok(())
             }
             for row in stream {
                 let row = row?;
-                if do_callbacks.contains(Callbacks::ON_ROW) && self.process_json_row(base, header_row.keys(), |k| row.get(k))? {
+                if do_row && self.process_json_row(base, header_row.keys(), |k| row.get(k))? {
                     return Ok(())
                 }
             }

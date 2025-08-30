@@ -38,10 +38,6 @@ impl Handler {
 
 impl base::Processor<MarkdownWriter> for Handler {
 
-    fn make_writer(opts: base::BaseOptions) -> base::Output::<MarkdownWriter> {
-        base::Output::<MarkdownWriter>::new(opts)
-    }
-
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
         self.got_header = true;
         if self.drop_header {

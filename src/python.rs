@@ -295,8 +295,12 @@ impl GilHandle<'_> {
         }
     }
 
-    pub fn list_from_iter<I: Iterator<Item=Object> + ExactSizeIterator>(&self, iter: I) -> Option<Object> {
+    pub fn list_from_iter<I, T>(&self, iter: I) -> Option<Object>
+        where I: IntoIterator<Item=Object, IntoIter=T>,
+            T: Iterator<Item=Object> + ExactSizeIterator,
+    {
         unsafe{
+            let iter = iter.into_iter();
             let list = self.empty_list(iter.len())?;
             for (i, value) in iter.enumerate() {
                 let result = (self.py.PyList_SetItem)(list.as_ptr(), i.try_into().unwrap(), value.as_ptr());
@@ -306,8 +310,12 @@ impl GilHandle<'_> {
         }
     }
 
-    pub fn tuple_from_iter<I: Iterator<Item=Object> + ExactSizeIterator>(&self, iter: I) -> Option<Object> {
+    pub fn tuple_from_iter<I, T>(&self, iter: I) -> Option<Object>
+        where I: IntoIterator<Item=Object, IntoIter=T>,
+            T: Iterator<Item=Object> + ExactSizeIterator,
+    {
         unsafe{
+            let iter = iter.into_iter();
             let tuple = self.empty_tuple(iter.len())?;
             for (i, value) in iter.enumerate() {
                 let result = (self.py.PyTuple_SetItem)(tuple.as_ptr(), i.try_into().unwrap(), value.as_ptr());
@@ -358,6 +366,12 @@ impl GilHandle<'_> {
         unsafe{
             let result = (self.py.PyDict_SetItemString)(dict.as_ptr(), key.as_ptr().cast(), value.as_ptr());
             debug_assert!(result == 0);
+        }
+    }
+
+    pub fn dict_extend<'a, I: IntoIterator<Item=(&'a CStr, Object)>>(&self, dict: Object, iter: I) {
+        for (k, v) in iter {
+            self.dict_set_string(dict, k, v);
         }
     }
 
@@ -434,7 +448,7 @@ impl GilHandle<'_> {
                 self.get_none(),
                 lines,
                 filename,
-            ].into_iter())?;
+            ])?;
             self.dict_set(cache, filename, list);
             Some(())
         })();
@@ -452,7 +466,7 @@ impl GilHandle<'_> {
         Ok(())
     }
 
-    pub fn iter(&self, obj: Object) -> Result<impl Iterator<Item=Object>> {
+    pub fn try_iter(&self, obj: Object) -> Result<impl Iterator<Item=Object>> {
         let iter = NonNull::new(unsafe{ (self.py.PyObject_GetIter)(obj.as_ptr()) })
             .ok_or_else(|| self.get_exception())?;
 

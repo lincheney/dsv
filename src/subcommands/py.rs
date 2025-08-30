@@ -137,11 +137,11 @@ impl Handler {
         py.list_from_iter(row.iter().map(|col| self.bytes_to_py(py, col.as_ref())) ).unwrap()
     }
 
-    pub fn run_python(
+    pub fn run_python<'a, I: IntoIterator<Item=(&'a CStr, python::Object)>>(
         &self,
         py: &python::GilHandle,
         rows: python::Object,
-        vars: &[(&CStr, python::Object)],
+        vars: I,
         code: python::Object,
         prelude: Option<python::Object>,
     ) -> Result<Option<python::Object>> {
@@ -149,12 +149,12 @@ impl Handler {
         let table = py.call_func(self.table_cls, &[rows, self.header_numbers, py.to_bool(!self.opts.common.no_na).unwrap()])?;
 
         py.dict_clear(self.inner.locals);
-        for (k, v) in vars {
-            py.dict_set_string(self.inner.locals, k, *v);
-        }
-        py.dict_set_string(self.inner.locals, c"Vec", self.vec_cls);
-        py.dict_set_string(self.inner.locals, c"H", self.header);
-        py.dict_set_string(self.inner.locals, c"N", py.to_uint(self.count).unwrap());
+        py.dict_extend(self.inner.locals, vars);
+        py.dict_extend(self.inner.locals, [
+            (c"Vec", self.vec_cls),
+            (c"H", self.header),
+            (c"N", py.to_uint(self.count).unwrap()),
+        ]);
         py.dict_set(self.inner.locals, self.var_name, table);
 
         if let Some(prelude) = prelude {
@@ -210,8 +210,8 @@ impl base::Processor for Handler {
         if self.opts.no_slurp {
             self.count += 1;
             let py = self.py.acquire_gil();
-            let rows = py.list_from_iter([self.row_to_py(&py, &row)].into_iter()).unwrap();
-            let result = self.run_python(&py, rows, &[], self.code, self.prelude)?;
+            let rows = py.list_from_iter([self.row_to_py(&py, &row)]).unwrap();
+            let result = self.run_python(&py, rows, [], self.code, self.prelude)?;
             if let Some(result) = result {
                 self.inner.handle_result(&py, base, result)
             } else {
@@ -227,7 +227,7 @@ impl base::Processor for Handler {
         if !self.opts.no_slurp {
             let py = self.py.acquire_gil();
             let rows = py.list_from_iter(self.rows.iter().map(|row| self.row_to_py(&py, row))).unwrap();
-            let result = self.run_python(&py, rows, &[], self.code, self.prelude)?;
+            let result = self.run_python(&py, rows, [], self.code, self.prelude)?;
             if let Some(result) = result && self.inner.handle_result(&py, base, result)? {
                 return Ok(true)
             }
@@ -253,7 +253,7 @@ impl InnerHandler {
                 if !self.got_header && let Some(header) = header && !py.is_none(header) {
                     self.got_header = true;
                     let mut new_header = vec![];
-                    for x in py.iter(header)? {
+                    for x in py.try_iter(header)? {
                         new_header.push(py.convert_py_to_bytes(x)?.to_owned());
                     }
                     if base.on_header(new_header)? {
@@ -263,9 +263,9 @@ impl InnerHandler {
 
                 let rows = py.getattr_string(table, c"__data__");
                 if let Some(rows) = rows && !py.is_none(rows) {
-                    for row in py.iter(rows)? {
+                    for row in py.try_iter(rows)? {
                         let mut new_row = vec![];
-                        for x in py.iter(row)? {
+                        for x in py.try_iter(row)? {
                             new_row.push(py.convert_py_to_bytes(x)?.to_owned());
                         }
                         if base.on_row(new_row)? {

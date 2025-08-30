@@ -229,8 +229,8 @@ impl Handler {
         } else {
             if self.allowed_fields.1 < row.len() {
                 let indices: Vec<_> = (0..row.len()).collect();
-                let fields = self.column_slicer.slice_with::<usize, fn(usize)->usize>(&indices, self.opts.common.complement, None);
-                self.allowed_fields.0 = fields.iter().copied().collect::<HashSet<_>>();
+                let fields = self.column_slicer.slice_with::<_, fn(usize)->usize>(&indices, self.opts.common.complement, None);
+                self.allowed_fields.0 = fields.iter().copied().collect();
                 self.allowed_fields.1 = row.len();
             }
             Some(&self.allowed_fields.0)

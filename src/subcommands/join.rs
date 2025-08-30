@@ -152,7 +152,7 @@ impl Processor for Handler {
 
     fn on_eof(self, _base: &mut Base) -> Result<bool> {
         drop(self.inner.sender);
-        crate::utils::chain_errors(self.err_receiver.iter())?;
+        crate::utils::chain_errors(self.err_receiver)?;
         Ok(false)
     }
 }

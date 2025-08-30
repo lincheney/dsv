@@ -3,7 +3,7 @@ use crate::base;
 use bstr::{BString};
 use clap::{Parser, ArgAction};
 use super::py;
-use std::ffi::{CStr};
+use std::ffi::{CString, CStr};
 use crate::column_slicer::ColumnSlicer;
 use crate::python;
 
@@ -106,10 +106,10 @@ impl base::Processor for Handler {
             self.inner.count = self.rows.len();
             for (i, script) in self.field_scripts.iter().enumerate() {
                 let rows = py.list_from_iter(self.rows.iter().map(|row| self.inner.row_to_py(&py, row))).unwrap();
-                let result = self.inner.run_python(&py, rows, &[], *script, None)?;
+                let result = self.inner.run_python(&py, rows, [], *script, None)?;
 
                 let result = if let Some(result) = result {
-                    Some(py.iter(result)?)
+                    Some(py.try_iter(result)?)
                 } else {
                     None
                 };
@@ -122,7 +122,7 @@ impl base::Processor for Handler {
             }
 
             let keys = keys.into_iter()
-                .map(|key| py.tuple_from_iter(key.into_iter()).unwrap())
+                .map(|key| py.tuple_from_iter(key).unwrap())
                 .collect();
 
             let header = self.opts.fields;
@@ -154,20 +154,21 @@ impl base::Processor for Handler {
             py.list_append(group, row);
         }
 
+        let header: Vec<_> = header.into_iter().map(|h| CString::new(h).unwrap()).collect();
         for (key, group) in py.dict_iter(groups) {
             let current_key = py.empty_dict().unwrap();
-            for (k, v) in header.iter().zip(py.iter(key)?) {
-                py.dict_set_string(current_key, &std::ffi::CString::new(k.clone()).unwrap(), v);
-            }
+            py.dict_extend(current_key, header.iter().map(|h| h.as_ref()).zip(py.try_iter(key)?));
 
             self.inner.count = py.list_len(group);
-            let result = self.inner.run_python(&py, group, &[(c"K", current_key)], self.inner.code, self.inner.prelude)?;
+            let result = self.inner.run_python(&py, group, [(c"K", current_key)], self.inner.code, self.inner.prelude)?;
 
             let result = if self.inner.inner.expr && let Some(result) = result {
                 py.dict_clear(self.inner.inner.locals);
-                py.dict_set_string(self.inner.inner.locals, c"result", result);
-                py.dict_set_string(self.inner.inner.locals, c"default_key", self.default_key);
-                py.dict_set_string(self.inner.inner.locals, c"current_key", current_key);
+                py.dict_extend(self.inner.inner.locals, [
+                    (c"result", result),
+                    (c"default_key", self.default_key),
+                    (c"current_key", current_key),
+                ]);
 
                 py.exec_code(self.postprocess, self.inner.globals.as_ptr(), self.inner.inner.locals.as_ptr())?;
                 py.dict_get_string(self.inner.inner.locals, c"result")

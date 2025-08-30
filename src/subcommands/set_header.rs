@@ -54,7 +54,7 @@ impl base::Processor for Handler {
 
         let mut column_slicer = ColumnSlicer::new(&[], false);
         column_slicer.make_header_map(&header);
-        for [old, new] in self.opts.rename.as_chunks::<2>().0 {
+        for [old, new] in self.opts.rename.as_chunks().0 {
             if let Some(i) = column_slicer.get_single_field_index(old) {
                 if let Some(h) = header.get_mut(i) {
                     *h = new.as_str().into();

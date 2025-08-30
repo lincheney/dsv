@@ -42,7 +42,7 @@ fn parse_size(bytes: &BStr) -> Option<f64> {
     Some(val * mul as f64)
 }
 
-fn make_counter<T: Eq + std::hash::Hash, I: Iterator<Item=T>>(values: I) -> HashMap<T, usize> {
+fn make_counter<T: Eq + std::hash::Hash, I: IntoIterator<Item=T>>(values: I) -> HashMap<T, usize> {
     let mut counts = HashMap::new();
     for c in values {
         counts.entry(c).and_modify(|v| *v += 1).or_insert(1);

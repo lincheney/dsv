@@ -1,7 +1,7 @@
 use anyhow::{Result, Context};
 use std::default::Default;
 
-pub fn chain_errors<T: Default, I: Iterator<Item=Result<T>>>(results: I) -> Result<T> {
+pub fn chain_errors<T: Default, I: IntoIterator<Item=Result<T>>>(results: I) -> Result<T> {
     let mut result = Ok(Default::default());
     for err in results {
         if result.is_ok() {

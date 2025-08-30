@@ -114,7 +114,7 @@ impl ColumnSlicer {
         complement: bool,
         allow_empty: bool,
     ) -> Vec<BString> {
-        self.slice_with::<BString, fn(usize) -> BString>(row, complement, allow_empty.then_some(|_| b"".into()))
+        self.slice_with(row, complement, allow_empty.then_some(|_| b"".into()))
     }
 
     pub fn slice_with<T: Clone, F: Fn(usize) -> T>(
