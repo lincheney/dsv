@@ -39,11 +39,9 @@ impl base::Processor for Handler {
                 Ok(false)
             }
 
-        } else if self.lines == 0 || base.on_row(row)? {
-            Ok(true)
         } else {
             self.count += 1;
-            Ok(self.count >= self.lines)
+            Ok(self.count > self.lines || base.on_row(row)?)
         }
     }
 }

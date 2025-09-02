@@ -360,13 +360,21 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
                 if is_header {
                     base.header_len = Some(row.len());
-                    if do_callbacks.contains(Callbacks::ON_HEADER) && let Err(e) = self.on_header(base, row) {
-                        err = Err(e);
-                        break
+                    if do_callbacks.contains(Callbacks::ON_HEADER) {
+                        match self.on_header(base, row) {
+                            Ok(true) => { break; },
+                            Ok(false) => (),
+                            Err(e) => { err = Err(e); break; },
+                        }
                     }
-                } else if do_callbacks.contains(Callbacks::ON_ROW) && let Err(e) = self.on_row(base, row) {
-                    err = Err(e);
-                    break
+                } else {
+                    if do_callbacks.contains(Callbacks::ON_ROW) {
+                        match self.on_row(base, row) {
+                            Ok(true) => { break; },
+                            Ok(false) => (),
+                            Err(e) => { err = Err(e); break; },
+                        }
+                    }
                 }
 
                 row = vec![];
