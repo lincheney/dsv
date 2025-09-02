@@ -41,7 +41,7 @@ impl base::Processor for Handler {
             } else {
                 vec![]
             };
-            if base.on_header(header)? {
+            if self.on_header(base, header)? {
                 return Ok(true)
             }
         }
@@ -71,7 +71,7 @@ impl base::Processor for Handler {
                 header.clear();
                 header.extend(new);
             } else {
-                header.splice(0..new.len(), new);
+                header.splice(0..header.len().min(new.len()), new);
             }
         }
 
