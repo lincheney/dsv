@@ -211,7 +211,7 @@ class BaseTable(Vectorised):
             cols = [NoNaVec(col).map(fn) for col in zip(*self)]
             return convert_to_table(dict(zip(self.__headers__, cols)), self.__na__)
         else:
-            return Table([NoNaVec(row).map(fn) for row in self], self.__headers__.copy())
+            return Table([NoNaVec(row).map(fn) for row in self], self.__headers__.copy(), self.__na__)
 
 
 class Table(BaseTable):
