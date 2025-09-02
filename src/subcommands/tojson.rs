@@ -18,6 +18,7 @@ impl Handler {
     pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
         base.opts.numbered_columns = base::AutoChoices::Never;
         base.opts.drop_header = false;
+        base.opts.quote_output = false;
         Ok(Self {})
     }
 }
