@@ -7,10 +7,10 @@ use clap::{Parser};
 #[derive(Parser)]
 #[command(about = "print lines that match patterns")]
 pub struct Opts {
-    #[arg(help = "pattern to search for")]
-    patterns: String,
-    #[arg(help = "replaces every match with the given text")]
-    replace: String,
+    #[arg(required_unless_present_any = ["regexp", "file"], help = "pattern to search for")]
+    pattern: Option<String>,
+    #[arg(required_unless_present_all = ["regexp", "pattern"], help = "replaces every match with the given text")]
+    replace: Option<String>,
     #[command(flatten)]
     common: grep::CommonOpts,
 }
@@ -20,10 +20,12 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
         let mut grep_opts = grep::Opts::default();
-        grep_opts.patterns = vec![opts.patterns];
-        grep_opts.replace = Some(opts.replace);
+        // can't make pattern optional and replace required
+        // so if replace is missing, the value is actually in optional
+        grep_opts.replace = Some(opts.replace.or_else(|| opts.pattern.take()).unwrap());
+        grep_opts.patterns = opts.pattern.into_iter().collect();
         grep_opts.common = opts.common;
         grep_opts.passthru = true;
         Ok(Self{

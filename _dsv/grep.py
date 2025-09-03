@@ -53,7 +53,7 @@ class grep(_ColumnSlicer):
         # no need to colour if invert and not passthru
         self.grep_colour = opts.colour and not (opts.invert_match and not opts.passthru)
 
-        self.patterns = opts.patterns = [p.encode('utf8') for p in opts.patterns]
+        self.patterns = opts.patterns = [p.encode('utf8') for p in opts.patterns if p is not None]
         for file in opts.file or ():
             with open(file, 'rb') as file:
                 self.patterns.extend(line.rstrip(b'\r\n') for line in file)

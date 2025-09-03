@@ -85,6 +85,7 @@ impl Handler {
 
         // construct the regex pattern
         let mut patterns = std::mem::take(&mut opts.patterns);
+        patterns.append(&mut opts.common.regexp);
         for file in &opts.common.file {
             let file = std::fs::File::open(file).with_context(|| format!("failed to open {file}"))?;
             let file = BufReader::new(file);
