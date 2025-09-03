@@ -15,6 +15,7 @@ class grep(_ColumnSlicer):
     parent.add_argument('-x', '--field-regexp', action='store_true', help='select only those matches that exactly match the column')
     parent.add_argument('-s', '--case-sensitive', action='store_true', help='search case sensitively')
     parent.add_argument('-m', '--max-count', type=int, default=float('inf'), metavar='NUM', help='show only the first NUM matching rows')
+    parent.add_argument('-o', '--only-matching', action='store_true', help='print only the matched (non-empty) parts of a matching column')
     parent.add_argument('-k', '--fields', action='append', default=[], help='search only on these fields')
     parent.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
     parent.add_argument('--complement', action='store_true', help='exclude, rather than include, field names')
@@ -166,16 +167,17 @@ class grep(_ColumnSlicer):
 
                     if not best:
                         # no matches
-                        if parts:
+                        if parts and not self.opts.only_matching:
                             parts.append(row[i][start:])
                         break
 
-                    if not self.grep_colour and self.opts.replace is None:
+                    if not self.grep_colour and self.opts.replace is None and not self.opts.only_matching:
                         # quit early if we don't need to add colour
                         return None if self.opts.invert_match else row
 
                     # prefix
-                    parts.append(row[i][start : best[0]])
+                    if not self.opts.only_matching:
+                        parts.append(row[i][start : best[0]])
 
                     if best[0] == best[1]:
                         # empty match
@@ -206,7 +208,7 @@ class grep(_ColumnSlicer):
                     if start >= len(col):
                         break
 
-            if parts:
+            if parts or self.opts.only_matching:
                 row[i] = b''.join(parts)
                 matched = True
 

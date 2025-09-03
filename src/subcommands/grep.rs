@@ -24,6 +24,8 @@ pub struct CommonOpts {
     case_sensitive: bool,
     #[arg(short = 'm', long, default_value_t = usize::MAX, value_name = "NUM", help = "show only the first NUM matching rows")]
     max_count: usize,
+    #[arg(short = 'o', long, help = "print only the matched (non-empty) parts of a matching column")]
+    only_matching: bool,
     #[arg(short = 'k', long, action = ArgAction::Append, help = "search only on these fields")]
     fields: Vec<String>,
     #[arg(short = 'r', long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
@@ -128,6 +130,7 @@ impl Handler {
         } else {
             opts.replace.take()
         };
+        opts.common.only_matching = opts.common.only_matching && !opts.count;
 
         Ok(Self {
             opts,
@@ -241,7 +244,23 @@ impl Handler {
             .enumerate()
             .filter(|(i, _)| allowed_fields.as_ref().is_none_or(|x| x.contains(i)));
 
-        let matched = if let Some(replace) = &self.replace {
+        let matched = if self.opts.common.only_matching {
+            let mut matched = false;
+            for (_, col) in columns {
+                let mut newcol: BString = "".into();
+                for m in self.pattern.captures_iter(col) {
+                    if let Some(replace) = &self.replace {
+                        m.expand(replace.as_bytes(), &mut newcol);
+                    } else {
+                        newcol.extend(m.get(0).unwrap().as_bytes());
+                    }
+                    matched = true;
+                }
+                *col = newcol;
+            }
+            matched
+
+        } else if let Some(replace) = &self.replace {
             let mut matched = false;
             for (_, col) in columns {
                 let replaced = self.pattern.replace_all(col, replace.as_bytes());

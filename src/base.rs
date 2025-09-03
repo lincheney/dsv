@@ -367,13 +367,11 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                             Err(e) => { err = Err(e); break; },
                         }
                     }
-                } else {
-                    if do_callbacks.contains(Callbacks::ON_ROW) {
-                        match self.on_row(base, row) {
-                            Ok(true) => { break; },
-                            Ok(false) => (),
-                            Err(e) => { err = Err(e); break; },
-                        }
+                } else if do_callbacks.contains(Callbacks::ON_ROW) {
+                    match self.on_row(base, row) {
+                        Ok(true) => { break; },
+                        Ok(false) => (),
+                        Err(e) => { err = Err(e); break; },
                     }
                 }
 
