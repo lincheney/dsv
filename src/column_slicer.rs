@@ -68,8 +68,8 @@ impl ColumnSlicer {
     }
 
     pub fn indices(&self, len: usize, complement: bool) -> impl Iterator<Item=usize> {
-        enum DualIter<A, B> {
-            A(A), B(B)
+        enum Iter<A, B, C> {
+            A(A), B(B), C(C)
         }
 
         let mut iter = if complement {
@@ -83,7 +83,10 @@ impl ColumnSlicer {
                         Field::Name(name) => self.headers.get(name) == Some(index),
                     })
                 });
-            DualIter::A(iter)
+            Iter::A(iter)
+        } else if self.fields.is_empty() {
+            // actually means you want everything
+            Iter::B(0..len)
         } else {
             let iter = self.fields.iter()
                 .filter_map(move |field| match field {
@@ -97,13 +100,14 @@ impl ColumnSlicer {
                         self.headers.iter().filter(|(k, _)| regex.is_match(k)).map(|(_, &v)| v .. v+1)
                     })
                 ).flatten();
-            DualIter::B(iter)
+            Iter::C(iter)
         };
 
         std::iter::from_fn(move || {
             match &mut iter {
-                DualIter::A(x) => x.next(),
-                DualIter::B(x) => x.next(),
+                Iter::A(x) => x.next(),
+                Iter::B(x) => x.next(),
+                Iter::C(x) => x.next(),
             }
         })
     }
@@ -123,10 +127,6 @@ impl ColumnSlicer {
         complement: bool,
         default: Option<F>,
     ) -> Vec<T> {
-
-        if self.fields.is_empty() {
-            return vec![];
-        }
 
         self.indices(row.len(), complement)
             .filter_map(|i| row.get(i).cloned().or_else(|| default.as_ref().map(|d| d(i))))

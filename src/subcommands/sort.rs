@@ -11,7 +11,7 @@ const ORS: u8 = b'\x00';
 #[derive(Parser)]
 #[command(about = "sort the rows", disable_help_flag = true, disable_version_flag = true)]
 pub struct Opts {
-    #[arg(required_unless_present = "old_style_fields", help = "sort based only on these fields")]
+    #[arg(help = "sort based only on these fields")]
     fields: Vec<String>,
     #[arg(short = 'k', long = "fields", value_name = "fields", help = "sort based only on these fields")]
     old_style_fields: Vec<String>,
