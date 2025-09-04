@@ -47,7 +47,7 @@ class summary(_ColumnSlicer):
         self.sep = self.get_separator()
         self.rows = []
         self.types = {}
-        for f, t in opts.type:
+        for f, t in opts.type or ():
             if not any(t == x.encode() for x in self.TYPES):
                 self.parser.error(f"""argument --type: invalid choice: {repr(t).removeprefix('b')} (choose from {', '.join(self.TYPES)})""")
 

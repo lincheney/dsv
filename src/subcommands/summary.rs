@@ -204,9 +204,10 @@ impl base::Processor for Handler {
                     .or_else(|| display_numeric(base, &h, &column, CUTOFF))
                     .or_else(|| display_percentage(base, &h, &column, CUTOFF))
                     .or_else(|| display_size(base, &h, &column, CUTOFF))
-                && result?
             {
-                return Ok(true)
+                if result? {
+                    return Ok(true)
+                }
             } else if display_enum(base, &h, &column, 0.).unwrap()? {
                 return Ok(true)
             }
