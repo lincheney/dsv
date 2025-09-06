@@ -1,6 +1,8 @@
+import re
 import argparse
 import copy
 from ._column_slicer import _ColumnSlicer
+from . import _utils
 
 class reshape_wide(_ColumnSlicer):
     ''' reshape to wide format '''
@@ -12,6 +14,7 @@ class reshape_wide(_ColumnSlicer):
     parser.add_argument('-f', '--fields', metavar='fields', type=lambda x: x.split(','), dest='old_style_fields', help='select only these fields')
     parser.add_argument('-x', '--complement', action='store_true', help='exclude, rather than include, field names')
     parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
+    parser.add_argument('--format', type=_utils.utf8_type, default=b'{0}_{1}', help='name the new wide columns using this {}-format string')
 
     def __init__(self, opts):
         fields = list(opts.fields)
@@ -37,6 +40,9 @@ class reshape_wide(_ColumnSlicer):
     def on_row(self, row):
         self.__rows.append(row)
 
+    def column_name(self, a, b):
+        return re.sub(br'\{[01]\}', lambda m: a if m.group(0) == b'{0}' else b, self.opts.format)
+
     def on_eof(self):
         long_values = set()
         groups = {}
@@ -50,7 +56,7 @@ class reshape_wide(_ColumnSlicer):
         if self.header is not None:
             header = self.slice(self.header)
             for h in self.wide_slicer.slice(self.header, True):
-                header.extend(b'%s_%s' % (h, v) for v in long_values)
+                header.extend(self.column_name(h, v) for v in long_values)
             if super().on_header(header):
                 return
 

@@ -2,8 +2,22 @@ use anyhow::{Result};
 use crate::base;
 use std::collections::{HashSet, HashMap};
 use crate::column_slicer::ColumnSlicer;
-use bstr::{BString};
+use bstr::{BString, BStr};
 use clap::{Parser};
+use once_cell::sync::Lazy;
+use regex::bytes::{Regex, Captures};
+
+static FORMAT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{[01]\}").unwrap());
+
+fn name_format(format: &BStr, a: &BStr, b: &BStr) -> BString {
+    FORMAT_REGEX.replace_all(format, |c: &Captures| {
+        if c.get(0).unwrap().as_bytes() == b"{0}" {
+            a
+        } else {
+            b
+        }
+    }).into_owned().into()
+}
 
 #[derive(Parser, Default)]
 #[command(about = "reshape to wide format")]
@@ -16,6 +30,8 @@ pub struct Opts {
     complement: bool,
     #[arg(long, help = "treat fields as regexes")]
     regex: bool,
+    #[arg(long, default_value = "{0}_{1}", help = "name the new wide columns using this {}-format string")]
+    format: String,
 }
 
 struct Slicers {
@@ -29,6 +45,7 @@ pub struct Handler {
     wide_header: Option<Vec<BString>>,
     rows: Vec<Vec<BString>>,
     slicers: Slicers,
+    format: BString,
 }
 
 impl Handler {
@@ -42,6 +59,7 @@ impl Handler {
             group_header: None,
             wide_header: None,
             rows: vec![],
+            format: opts.format.into(),
         })
     }
 }
@@ -95,7 +113,7 @@ impl base::Processor for Handler {
                 .chain(
                     wide_header.iter()
                         .flat_map(|h| std::iter::repeat(h).zip(long_values.iter()))
-                        .map(|(h, v)| format!("{h}_{v}").into())
+                        .map(|(h, v)| name_format(self.format.as_ref(), h.as_ref(), v.as_ref()))
                 ).collect();
             if base.on_header(new_headers)? {
                 return Ok(true)

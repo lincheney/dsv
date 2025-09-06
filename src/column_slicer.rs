@@ -67,22 +67,23 @@ impl ColumnSlicer {
         min(start, len) .. min(end, len)
     }
 
+    pub fn matches(&self, index: usize) -> bool {
+        self.fields.is_empty() ||
+        self.fields.iter().any(|field| match field {
+            Field::Range(start, end) => (*start .. *end).contains(&index),
+            Field::Index(i) => *i == index,
+            Field::Regex(regex) => self.headers.iter().any(|(k, &v)| v == index && regex.is_match(k)),
+            Field::Name(name) => self.headers.get(name) == Some(&index),
+        })
+    }
+
     pub fn indices(&self, len: usize, complement: bool) -> impl Iterator<Item=usize> {
         enum Iter<A, B, C> {
             A(A), B(B), C(C)
         }
 
         let mut iter = if complement {
-            let iter = (0..len)
-                .filter(|index| {
-                    !self.fields.is_empty() &&
-                    !self.fields.iter().any(|field| match field {
-                        Field::Range(start, end) => (start .. end).contains(&index),
-                        Field::Index(i) => i == index,
-                        Field::Regex(regex) => self.headers.iter().any(|(k, v)| v == index && regex.is_match(k)),
-                        Field::Name(name) => self.headers.get(name) == Some(index),
-                    })
-                });
+            let iter = (0..len).filter(|&index| !self.matches(index));
             Iter::A(iter)
         } else if self.fields.is_empty() {
             // actually means you want everything
