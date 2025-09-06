@@ -1,40 +1,67 @@
 use anyhow::{Result};
 use crate::base;
-use std::collections::{HashSet, HashMap, hash_map::Entry};
+use std::collections::{HashSet, HashMap};
+use crate::column_slicer::ColumnSlicer;
 use bstr::{BString};
 use clap::{Parser};
 
 #[derive(Parser, Default)]
 #[command(about = "reshape to wide format")]
 pub struct Opts {
-    #[arg(help = "key field")]
-    key: String,
-    #[arg(help = "value field")]
+    #[arg(help = "value field (timevar/wide variable)")]
     value: String,
+    #[arg(help = "fields to group by (idvar/long variable)")]
+    fields: Vec<String>,
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
+    complement: bool,
+    #[arg(long, help = "treat fields as regexes")]
+    regex: bool,
+}
+
+struct Slicers {
+    group: ColumnSlicer,
+    long: ColumnSlicer,
+    complement: bool,
 }
 
 pub struct Handler {
-    header: Option<Vec<BString>>,
-    column_slicer: crate::column_slicer::ColumnSlicer,
+    group_header: Option<Vec<BString>>,
+    wide_header: Option<Vec<BString>>,
     rows: Vec<Vec<BString>>,
+    slicers: Slicers,
 }
 
 impl Handler {
     pub fn new(opts: Opts, _: &mut base::Base, _is_tty: bool) -> Result<Self> {
-        let column_slicer = crate::column_slicer::ColumnSlicer::new(&[opts.key, opts.value], false);
         Ok(Self{
-            column_slicer,
-            header: None,
+            slicers: Slicers{
+                group: ColumnSlicer::new(&opts.fields, opts.regex),
+                long: ColumnSlicer::new([&opts.value], opts.regex),
+                complement: opts.complement,
+            },
+            group_header: None,
+            wide_header: None,
             rows: vec![],
         })
+    }
+}
+
+impl Slicers {
+    fn wide_indices(&self, len: usize) -> impl Iterator<Item=usize> {
+        // things that are not the group or long value
+        let long = self.long.indices(len, false).next();
+        self.group.indices(len, !self.complement)
+            .filter(move |&i| Some(i) != long)
     }
 }
 
 impl base::Processor for Handler {
 
     fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
-        self.column_slicer.make_header_map(&header);
-        self.header = Some(self.column_slicer.slice(&header, true, true));
+        self.slicers.group.make_header_map(&header);
+        self.slicers.long.make_header_map(&header);
+        self.group_header = Some(self.slicers.group.slice(&header, self.slicers.complement, true));
+        self.wide_header = Some(self.slicers.wide_indices(header.len()).map(|i| header[i].clone()).collect());
         Ok(false)
     }
 
@@ -44,48 +71,52 @@ impl base::Processor for Handler {
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        let mut seen = HashSet::new();
-        for row in &self.rows {
-            let i = self.column_slicer.indices(row.len(), false).next().unwrap();
-            seen.insert(row[i].clone());
-        }
+        let empty = BString::new(vec![]);
 
-        let new_headers: Vec<_> = seen.into_iter().chain(self.header.into_iter().flatten()).collect();
-        if base.on_header(new_headers.clone())? {
-            return Ok(true)
-        }
-
-        let new_headers: HashMap<_, _> = new_headers.iter().enumerate().map(|(i, h)| (h, i)).collect();
-
-        let mut groups: HashMap<Vec<BString>, Vec<Option<BString>>> = HashMap::new();
-        for mut row in self.rows {
-            let mut indices = self.column_slicer.indices(row.len(), false);
-            let group_key = self.column_slicer.slice(&row, true, true);
-            let key = indices.next().unwrap();
-            let value = indices.next().unwrap();
-
-            let mut entry = match groups.entry(group_key) {
-                Entry::Occupied(entry) => { entry },
-                Entry::Vacant(entry) => { entry.insert_entry(vec![None; new_headers.len()]) },
+        let mut long_values = HashSet::new();
+        let mut groups = HashMap::new();
+        for row in self.rows {
+            // what if this row has no values?
+            let long_value = if let Some(i) = self.slicers.long.indices(row.len(), false).next() {
+                &row[i]
+            } else {
+                &empty
             };
-            let vec = entry.get_mut();
-            vec[new_headers[&row[key]]] = Some(row.swap_remove(value));
+            long_values.insert(long_value.clone());
 
-            if vec.iter().all(|x| x.is_some()) {
-                // this group is done
-                let (key, value) = entry.remove_entry();
-                let row = value.into_iter().map(|x| x.unwrap()).chain(key).collect();
-                if base.on_row(row)? {
-                    return Ok(true)
-                }
+            let key = self.slicers.group.slice(&row, self.slicers.complement, true);
+            let group = groups.entry(key).or_insert_with(Vec::new);
+            group.push((long_value.clone(), row));
+        }
+        let long_values: Vec<_> = long_values.into_iter().collect();
+
+        if let Some((wide_header, group_header)) = self.wide_header.zip(self.group_header) {
+            let new_headers = group_header.into_iter()
+                .chain(
+                    wide_header.iter()
+                        .flat_map(|h| std::iter::repeat(h).zip(long_values.iter()))
+                        .map(|(h, v)| format!("{h}_{v}").into())
+                ).collect();
+            if base.on_header(new_headers)? {
+                return Ok(true)
             }
         }
 
-        // print the remaining unmatched ones
-        for (key, value) in groups {
-            let row = value.into_iter().map(|x| x.unwrap_or(b"".into())).chain(key).collect();
-            if base.on_row(row)? {
-                return Ok(false)
+        let long_value_map: HashMap<_, _> = long_values.iter().enumerate().map(|(i, v)| (v, i)).collect();
+        for (key, group) in groups {
+            let mut newrow = key;
+            let num_columns = group.iter().map(|(_, row)| row.len()).max().unwrap();
+
+            for i in self.slicers.wide_indices(num_columns) {
+                let start = newrow.len();
+                newrow.extend(std::iter::repeat_n(empty.clone(), long_values.len()));
+                for (long_value, row) in &group {
+                    let x = row.get(i).unwrap_or(&empty).clone();
+                    newrow[start + long_value_map[long_value]] = x;
+                }
+            }
+            if base.on_row(newrow)? {
+                return Ok(true)
             }
         }
 

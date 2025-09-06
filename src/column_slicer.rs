@@ -28,7 +28,7 @@ impl ColumnSlicer {
         }
     }
 
-    pub fn new(fields: &[String], is_regex: bool) -> Self {
+    pub fn new<'a, I: IntoIterator<Item=&'a String>>(fields: I, is_regex: bool) -> Self {
         let mut new_fields = vec![];
 
         for field in fields {
