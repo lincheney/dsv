@@ -107,11 +107,11 @@ impl Handler {
 
         // field overrides word
         let pattern = if opts.common.field_regexp {
-            format!("^({pattern})$")
+            format!("^(?:{pattern})$")
         } else if opts.common.word_regexp {
-            format!("\\b({pattern})\\b")
+            format!("\\b(?:{pattern})\\b")
         } else {
-            format!("({pattern})")
+            format!("(?:{pattern})")
         };
         let pattern = RegexBuilder::new(&pattern)
             .case_insensitive(!opts.common.case_sensitive)
