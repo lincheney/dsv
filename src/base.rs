@@ -4,7 +4,7 @@ use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer};
 use std::io::{Read, BufRead, BufReader, Write};
-use bstr::{BStr, BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{ExitCode};
 use anyhow::{Result, Context};
 
@@ -157,7 +157,7 @@ impl BaseOptions {
             self.irs = Some("\n".into());
         }
         if self.ors.is_none() {
-            self.irs = self.irs.clone();
+            self.ors = self.irs.clone();
         }
         self.colour = self.colour.resolve(is_tty);
         if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
@@ -171,8 +171,8 @@ impl BaseOptions {
         // let ors = opts.ors.as_deref().unwrap_or("\n").into();
     }
 
-    pub fn get_ors(&self) -> &str {
-        self.ors.as_deref().unwrap_or("\n")
+    pub fn get_ors(&self) -> BString {
+        Vec::unescape_bytes(self.ors.as_deref().unwrap_or("\n")).into()
     }
 }
 
@@ -205,7 +205,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
             if regex::escape(ifs) != *ifs && !opts.plain_ifs {
                 Ifs::Regex(Regex::new(ifs).unwrap())
             } else {
-                Ifs::Plain(BString::new(ifs.as_str().into()))
+                Ifs::Plain(crate::utils::unescape_str(ifs).into_owned())
             }
         } else if opts.csv {
             Ifs::Plain(b",".into())
@@ -220,7 +220,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
     fn determine_ofs(&self, ifs: &Ifs, opts: &BaseOptions) -> Ofs {
         if let Some(ofs) = &opts.ofs {
-            return Ofs::Plain(ofs.as_bytes().into())
+            return Ofs::Plain(crate::utils::unescape_str(ofs).into_owned())
         }
         if opts.pretty {
             return Ofs::Pretty
@@ -299,7 +299,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         let mut row = vec![];
         let mut got_row = false;
         let mut got_line = false;
-        let irs: BString = base.opts.irs.as_deref().unwrap_or("\n").as_bytes().into();
+        let irs: BString = Vec::unescape_bytes(base.opts.irs.as_deref().unwrap_or("\n")).into();
 
         let mut eof = false;
         let mut err = Ok(());

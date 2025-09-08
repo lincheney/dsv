@@ -228,7 +228,7 @@ impl Writer for BaseWriter {
         Self {
             proc: None,
             rgb_map: vec![],
-            ors: opts.get_ors().into(),
+            ors: opts.get_ors(),
         }
     }
 
