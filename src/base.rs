@@ -172,7 +172,7 @@ impl BaseOptions {
     }
 
     pub fn get_ors(&self) -> BString {
-        Vec::unescape_bytes(self.ors.as_deref().unwrap_or("\n")).into()
+        crate::utils::unescape_str(self.ors.as_deref().unwrap_or("\n")).into_owned()
     }
 }
 
