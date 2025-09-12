@@ -100,6 +100,8 @@ class xargs(_Base):
             else:
                 self.parser.error(f'error: argument --max-procs/--jobs: invalid value {opts.max_procs!r}')
 
+        self.print_progress_bar()
+
     def start_loop(self):
         if self.thread is None:
             self.thread = threading.Thread(target=lambda: asyncio.run(self.loop()), daemon=True)
@@ -120,6 +122,7 @@ class xargs(_Base):
             else:
                 self.proc_queue.append(row)
                 self.stats.queued = len(self.proc_queue)
+            self.print_progress_bar()
         while self.proc_tasks:
             await asyncio.gather(*self.proc_tasks)
 
@@ -202,6 +205,7 @@ class xargs(_Base):
             row = self.proc_queue.popleft()
             self.stats.queued = len(self.proc_queue)
             self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
+        self.print_progress_bar()
 
     async def read_from_stream(self, logger, stream, stderr: bool, bufsize=4096):
         buf = b''

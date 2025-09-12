@@ -647,6 +647,8 @@ fn proc_loop(
     };
 
     let result = (|| {
+        proc_store.stats.draw_progress_bar(base, &proc_store.opts, false);
+
         let mut poll = mio::Poll::new()?;
         let mut events = mio::Events::with_capacity(255);
         poll.registry().register(&mut receiver, mio::Token(0), mio::Interest::READABLE)?;
