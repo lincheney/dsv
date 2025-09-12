@@ -295,7 +295,15 @@ impl Proc {
         values: &[BString],
     ) -> Result<Vec<BString>> {
 
-        let command = if command.len() == 1 && command[0].contains(' ') {
+        let command = if command.is_empty() {
+            // just print out
+            let mut cmd = vec![
+                b"printf".into(),
+                b"%s\n".into(),
+            ];
+            cmd.extend(values.iter().cloned());
+            cmd
+        } else if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
             vec![
                 b"bash".into(),

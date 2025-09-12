@@ -64,7 +64,7 @@ class xargs(_Base):
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
     parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
     parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
-    parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
+    parser.add_argument('command', nargs='*', type=_utils.utf8_type, help='command and arguments to run')
 
     def should_have_progress_bar(self, fd):
         return _utils.is_tty(fd) and ( _utils.is_tty(1) or not stat.S_ISFIFO(os.fstat(1).st_mode))
@@ -161,7 +161,11 @@ class xargs(_Base):
     async def start_proc(self, row):
         logger = Logger(self.stats.total - self.stats.queued, self, row, self.opts)
         try:
-            formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
+            if self.opts.command:
+                formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
+            else:
+                formatted = ['printf', '%s\n'] + row
+
             if len(self.opts.command) == 1 and b' ' in self.opts.command[0]:
                 formatted = [b'bash', b'-c', formatted[0]]
 
