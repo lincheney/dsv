@@ -15,7 +15,7 @@ pub fn chain_errors<T: Default, I: IntoIterator<Item=Result<T>>>(results: I) -> 
     result
 }
 
-pub fn unescape_str<'a>(val: &'a str) -> Cow<'a, BStr> {
+pub fn unescape_str(val: &'_ str) -> Cow<'_, BStr> {
     if val.contains('\\') {
         Cow::Owned(Vec::unescape_bytes(val).into())
     } else {

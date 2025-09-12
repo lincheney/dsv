@@ -258,7 +258,7 @@ impl Proc {
         opts: &Opts,
     ) -> Result<Self> {
 
-        let mut command = if command.len() == 1 && command[0].contains(' ') {
+        let command = if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
             vec![
                 b"bash".into(),
@@ -276,12 +276,11 @@ impl Proc {
         if opts.verbose >= verbosity::ALL {
             let mut line: BString = b"starting process: ".into();
             line.append(&mut shell_quote(&command));
-            logger.write_line(base, line.into(), true)?;
+            logger.write_line(base, line, true)?;
         }
 
-        let arg0 = std::mem::take(&mut command[0]);
-        let mut child = Command::new(OsString::from_vec(arg0.to_vec()))
-            .args(command[1..].into_iter().map(|c| OsString::from_vec(c.to_vec())))
+        let mut child = Command::new(OsString::from_vec(command[0].to_vec()))
+            .args(command[1..].iter().map(|c| OsString::from_vec(c.to_vec())))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

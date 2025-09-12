@@ -54,10 +54,10 @@ impl base::Processor for Handler {
         let mut header_matches = vec![];
         for (i, h) in header.into_iter().enumerate() {
             if self.column_slicer.matches(i) && let Some(c) = self.format_pattern.captures(&h) {
-                wide_header.insert(c.get(1).map(|m| m.as_bytes()).unwrap_or(b"").to_owned());
+                wide_header.insert(c.get(1).map_or(b"" as _, |m| m.as_bytes()).to_owned());
                 header_matches.push((
-                    c.get(1).or_else(|| c.name("key")).map(|m| m.as_bytes()).unwrap_or(b"").to_owned().into(),
-                    c.get(2).or_else(|| c.name("value")).map(|m| m.as_bytes()).unwrap_or(b"").to_owned().into(),
+                    c.get(1).or_else(|| c.name("key")).map_or(b"" as _, |m| m.as_bytes()).to_owned().into(),
+                    c.get(2).or_else(|| c.name("value")).map_or(b"" as _, |m| m.as_bytes()).to_owned().into(),
                 ));
             } else {
                 group_header.push(h.clone());
