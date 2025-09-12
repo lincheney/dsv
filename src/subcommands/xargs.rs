@@ -59,6 +59,8 @@ pub struct Opts {
     rainbow_rows: base::AutoChoices,
     #[arg(short, long, action = ArgAction::Count, help = "enable verbose logging")]
     verbose: u8,
+    #[arg(long, help = "print the job to run but do not run the job")]
+    dry_run: bool,
     #[arg(trailing_var_arg = true, help = "command and arguments to run")]
     command: Vec<String>,
 }
@@ -287,36 +289,29 @@ impl Proc {
         Ok(result.into_owned().into())
     }
 
-    fn new(
-        token: EventMarker,
-        command: &[String],
-        keys: Option<&HashMap<BString, usize>>,
-        registry: &mio::Registry,
-        base: &mut base::Base,
-        logger: &mut Logger,
-        opts: &Opts,
-    ) -> Result<Self> {
-
+    fn format_args(command: &[String], keys: Option<&HashMap<BString, usize>>, values: &[BString]) -> Result<Vec<BString>> {
         let command = if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
             vec![
                 b"bash".into(),
                 b"-c".into(),
-                Self::format_arg(command[0].as_bytes().into(), keys, &logger.row)?,
+                Self::format_arg(command[0].as_bytes().into(), keys, values)?,
             ]
         } else {
             let mut cmd = vec![];
             for c in command {
-                cmd.push(Self::format_arg(c.as_bytes().into(), keys, &logger.row)?);
+                cmd.push(Self::format_arg(c.as_bytes().into(), keys, values)?);
             }
             cmd
         };
+        Ok(command)
+    }
 
-        if opts.verbose >= verbosity::ALL {
-            let mut line: BString = b"starting process: ".into();
-            line.append(&mut shell_quote(&command));
-            logger.write_line(base, line, true)?;
-        }
+    fn new(
+        token: EventMarker,
+        command: &[BString],
+        registry: &mio::Registry,
+    ) -> Result<Self> {
 
         let mut child = Command::new(OsString::from_vec(command[0].to_vec()))
             .args(command[1..].iter().map(|c| OsString::from_vec(c.to_vec())))
@@ -537,33 +532,41 @@ impl ProcStore {
             dirty: false,
             colour: if base.opts.colour.is_on(base.opts.is_stdout_tty) && self.opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
                 Some((
-                    get_rgb(token, None, Some(0.6)),
-                    get_rgb(token, None, Some(0.2)),
+                    get_rgb(token-1, None, Some(0.5)),
+                    get_rgb(token-1, None, Some(0.2)),
                 ))
             } else {
                 None
             },
         };
-        let result = Proc::new(
-            EventMarker(token),
-            &self.opts.command,
-            self.keys.as_ref(),
-            registry,
-            base,
-            &mut logger,
-            &self.opts,
-        );
-        match result {
-            Ok(proc) => {
-                self.inner.insert(token, (proc, logger));
-            },
-            Err(e) => {
-                self.stats.finished += 1;
-                let line = e.to_string();
-                if logger.write_line(base, line.into(), true)? {
-                    return Ok(true)
-                }
-            },
+        let command = Proc::format_args(&self.opts.command, self.keys.as_ref(), &logger.row)?;
+        if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
+            let mut line: BString = b"starting process: ".into();
+            line.append(&mut shell_quote(&command));
+            logger.write_line(base, line, true)?;
+        }
+
+        if self.opts.dry_run {
+            self.stats.succeeded += 1;
+            self.stats.finished += 1;
+        } else {
+            let result = Proc::new(
+                EventMarker(token),
+                &command,
+                registry,
+            );
+            match result {
+                Ok(proc) => {
+                    self.inner.insert(token, (proc, logger));
+                },
+                Err(e) => {
+                    self.stats.finished += 1;
+                    let line = e.to_string();
+                    if logger.write_line(base, line.into(), true)? {
+                        return Ok(true)
+                    }
+                },
+            }
         }
         Ok(self.stats.draw_progress_bar(base, &self.opts, false))
     }

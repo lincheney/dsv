@@ -35,8 +35,8 @@ class Logger:
         self.keys = keys
         self.opts = opts
         if self.opts.rainbow_rows:
-            self.dark_colour = self.parent.get_rgb(id, sat=0.6)
-            self.light_colour = self.parent.get_rgb(id, sat=0.2)
+            self.dark_colour = self.parent.get_rgb(id-1, sat=0.5)
+            self.light_colour = self.parent.get_rgb(id-1, sat=0.2)
 
     def log_output(self, values, stderr: bool):
         for v in values:
@@ -62,6 +62,7 @@ class xargs(_Base):
     parser.add_argument('--progress-bar', choices=('never', 'always', 'auto'), nargs='?', help='print a trailer')
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
+    parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
     parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
 
     def should_have_progress_bar(self, fd):
@@ -158,25 +159,29 @@ class xargs(_Base):
             if len(self.opts.command) == 1 and b' ' in self.opts.command[0]:
                 formatted = [b'bash', b'-c', formatted[0]]
 
-            if self.opts.verbose >= Verbosity.ALL:
+            if self.opts.dry_run or self.opts.verbose >= Verbosity.ALL:
                 logger.log_output([b'starting process: ' + shell_quote(formatted)], True)
 
-            proc = await asyncio.create_subprocess_exec(
-                *formatted,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                limit=float('inf'),
-            )
-            await asyncio.gather(
-                self.read_from_stream(logger, proc.stdout, False),
-                self.read_from_stream(logger, proc.stderr, True),
-            )
-            code = await proc.wait()
-            if self.opts.verbose >= Verbosity.ALL or (self.opts.verbose >= Verbosity.EXIT_CODE and code != 0):
-                logger.log_output([b'exited with %i' % code], True)
-            if code == 0:
+            if self.opts.dry_run:
                 self.stats.succeeded += 1
+
+            else:
+                proc = await asyncio.create_subprocess_exec(
+                    *formatted,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    limit=float('inf'),
+                )
+                await asyncio.gather(
+                    self.read_from_stream(logger, proc.stdout, False),
+                    self.read_from_stream(logger, proc.stderr, True),
+                )
+                code = await proc.wait()
+                if self.opts.verbose >= Verbosity.ALL or (self.opts.verbose >= Verbosity.EXIT_CODE and code != 0):
+                    logger.log_output([b'exited with %i' % code], True)
+                if code == 0:
+                    self.stats.succeeded += 1
         except (OSError, IOError, FormattingError) as e:
             logger.log_output([e], True)
         self.stats.finished += 1
