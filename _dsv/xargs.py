@@ -64,6 +64,7 @@ class xargs(_Base):
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
     parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
     parser.add_argument('--no-tag', action='store_false', dest='tag', help="don't tag lines with the input rows")
+    parser.add_argument('-k', '--column', type=_utils.utf8_type, default=b'output', help="new header column name")
     parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
     parser.add_argument('command', nargs='*', type=_utils.utf8_type, help='command and arguments to run')
 
@@ -223,6 +224,7 @@ class xargs(_Base):
         self.header_map = _ColumnSlicer.make_header_map(header)
         if not self.opts.tag:
             header.clear()
+        header.append(self.opts.column)
         return super().on_header(header)
 
     def on_row(self, row):

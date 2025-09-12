@@ -62,6 +62,8 @@ pub struct Opts {
     dry_run: bool,
     #[arg(long = "no-tag", action = ArgAction::SetFalse, help = "don't tag lines with the input rows")]
     tag: bool,
+    #[arg(short = 'k', long, default_value = "output", help = "new header column name")]
+    column: String,
     #[arg(trailing_var_arg = true, help = "command and arguments to run")]
     command: Vec<String>,
 }
@@ -562,35 +564,41 @@ impl ProcStore {
                 None
             },
         };
-        let command = Proc::format_args(&self.placeholder_regex, &self.opts.command, self.keys.as_ref(), &logger.row)?;
-        if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
-            let mut line: BString = b"starting process: ".into();
-            line.append(&mut shell_quote(&command));
-            logger.write_line(base, line, true)?;
+        let result = (|| {
+            let command = Proc::format_args(&self.placeholder_regex, &self.opts.command, self.keys.as_ref(), &logger.row)?;
+            if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
+                let mut line: BString = b"starting process: ".into();
+                line.append(&mut shell_quote(&command));
+                logger.write_line(base, line, true)?;
+            }
+
+            if self.opts.dry_run {
+                self.stats.succeeded += 1;
+                self.stats.finished += 1;
+                Ok(None)
+            } else {
+                Proc::new(
+                    EventMarker(token),
+                    &command,
+                    registry,
+                ).map(Option::Some)
+            }
+        })();
+
+        match result {
+            Ok(Some(proc)) => {
+                self.inner.insert(token, (proc, logger));
+            },
+            Ok(None) => (),
+            Err(e) => {
+                self.stats.finished += 1;
+                let line = e.to_string();
+                if logger.write_line(base, line.into(), true)? {
+                    return Ok(true)
+                }
+            },
         }
 
-        if self.opts.dry_run {
-            self.stats.succeeded += 1;
-            self.stats.finished += 1;
-        } else {
-            let result = Proc::new(
-                EventMarker(token),
-                &command,
-                registry,
-            );
-            match result {
-                Ok(proc) => {
-                    self.inner.insert(token, (proc, logger));
-                },
-                Err(e) => {
-                    self.stats.finished += 1;
-                    let line = e.to_string();
-                    if logger.write_line(base, line.into(), true)? {
-                        return Ok(true)
-                    }
-                },
-            }
-        }
         Ok(self.stats.draw_progress_bar(base, &self.opts, false))
     }
 
@@ -677,6 +685,7 @@ fn proc_loop(
                                 if !proc_store.opts.tag {
                                     h.clear();
                                 }
+                                h.push(proc_store.opts.column.clone().into());
                                 if base.on_header(h)? {
                                     return Ok(())
                                 }
