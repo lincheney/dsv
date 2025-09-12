@@ -164,8 +164,8 @@ pub struct BaseOptions {
 }
 
 impl BaseOptions {
-    pub fn post_process(&mut self) {
-        self.is_stdout_tty = std::io::stdout().is_terminal();
+    pub fn post_process(&mut self, is_stdout_tty: Option<bool>) {
+        self.is_stdout_tty = is_stdout_tty.unwrap_or_else(|| std::io::stdout().is_terminal());
         self.is_stderr_tty = std::io::stderr().is_terminal();
 
         if self.no_header {

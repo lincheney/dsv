@@ -28,7 +28,7 @@ impl std::ops::Deref for Object {
 }
 impl Object {
     fn new(ptr: *mut c_void) -> Option<Self> {
-        NonNull::new(ptr).map(|p| Self(p))
+        NonNull::new(ptr).map(Self)
     }
 }
 

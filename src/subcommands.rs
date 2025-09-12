@@ -38,7 +38,7 @@ macro_rules! add_subcommands {
         ) -> Result<ExitCode> {
             std::thread::scope(|scope| {
                 let (sender, receiver) = mpsc::channel();
-                cli_opts.post_process();
+                cli_opts.post_process(None);
                 let mut base = Base::new(cli_opts.clone(), sender, scope);
                 match subcommand {
                     $(
@@ -62,11 +62,12 @@ macro_rules! add_subcommands {
                 args: I,
                 sender: Sender<Message>,
                 scope: &'a std::thread::Scope<'a, 'b>,
+                is_stdout_tty: bool,
         ) -> Result<(Self, Base<'a, 'b>)> {
 
                 const ARG0: &str = env!("CARGO_PKG_NAME");
                 let mut cli = Cli::parse_from(std::iter::once(ARG0).chain(args));
-                cli.opts.post_process();
+                cli.opts.post_process(Some(is_stdout_tty));
                 let mut base = Base::new(cli.opts, sender, scope);
                 let handler = match cli.command {
                     $(

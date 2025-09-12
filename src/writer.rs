@@ -5,9 +5,14 @@ use std::process::{Command, Stdio};
 use anyhow::{Result};
 use colorutils_rs::Hsv;
 
-fn get_rgb(i: usize, step: f32) -> BString {
-    let hue = (step * i as f32) % 1.0;
-    let hsv = Hsv{ h: hue * 360.0, s: 0.3, v: 1.0 };
+const STEP: f32 = 0.647;
+pub fn get_rgb(i: usize, step: Option<f32>, saturation: Option<f32>) -> BString {
+    let hue = (step.unwrap_or(STEP) * i as f32) % 1.0;
+    let hsv = Hsv{
+        h: hue * 360.0,
+        s: saturation.unwrap_or(0.3),
+        v: 1.0,
+    };
     let rgb = hsv.to_rgb8();
     format!("\x1b[38;2;{};{};{}m", rgb.r, rgb.g, rgb.b).as_bytes().into()
 }
@@ -60,8 +65,12 @@ pub trait Writer {
 
     fn set_rgb(&mut self, state: &mut WriterState, count: usize) {
         for i in state.rgb_map.len() .. count {
-            state.rgb_map.push(get_rgb(i, 0.647));
+            state.rgb_map.push(get_rgb(i, None, None));
         }
+    }
+
+    fn get_rgb<'a>(&self, state: &'a WriterState, _row: &[BString]) -> impl Iterator<Item=&'a BStr> {
+        state.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()))
     }
 
     fn format_columns(row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> FormattedRow {
@@ -222,7 +231,7 @@ pub trait Writer {
         let mut parts = BString::new(vec![]);
         let tmp_padding = vec![];
         let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
-        let rgb = state.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
+        let rgb = self.get_rgb(state, &row);
         let ofs = ofs.as_bstr();
         let header_colour = if is_header && colour {
             opts.header_colour.as_deref().map(|x| x.as_bytes()).or(Some(b"\x1b[1;4m"))

@@ -1,3 +1,4 @@
+use crate::writer::{get_rgb};
 use crate::column_slicer::{make_header_map};
 use regex::bytes::{Regex, Captures};
 use once_cell::sync::Lazy;
@@ -54,6 +55,8 @@ pub struct Opts {
     jobs: Option<String>,
     #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "print a progress bar")]
     progress_bar: base::AutoChoices,
+    #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "enable rainbow rows")]
+    rainbow_rows: base::AutoChoices,
     #[arg(short, long, action = ArgAction::Count, help = "enable verbose logging")]
     verbose: u8,
     #[arg(trailing_var_arg = true, help = "command and arguments to run")]
@@ -193,13 +196,20 @@ impl EventMarker {
 
 struct Logger {
     row: Vec<BString>,
+    colour: Option<(BString, BString)>,
     dirty: bool,
 }
 
 impl Logger {
-    fn write_line(&mut self, base: &base::Base, line: BString, stderr: bool) -> Result<bool> {
+    fn write_line(&mut self, base: &base::Base, mut line: BString, stderr: bool) -> Result<bool> {
         self.dirty = true;
         let mut row = self.row.clone();
+        if let Some((dark, light)) = &self.colour {
+            if !row.is_empty() {
+                row[0].insert_str(0, dark);
+            }
+            line.insert_str(0, light);
+        }
         row.push(line);
         if stderr {
             Ok(base.write_stderr(row))
@@ -521,8 +531,19 @@ impl ProcStore {
         registry: &mio::Registry,
     ) -> Result<bool> {
 
-        let token = self.stats.started() + 1;
-        let mut logger = Logger{ row: values, dirty: false };
+        let token = self.stats.started();
+        let mut logger = Logger{
+            row: values,
+            dirty: false,
+            colour: if base.opts.colour.is_on(base.opts.is_stdout_tty) && self.opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
+                Some((
+                    get_rgb(token, None, Some(0.6)),
+                    get_rgb(token, None, Some(0.2)),
+                ))
+            } else {
+                None
+            },
+        };
         let result = Proc::new(
             EventMarker(token),
             &self.opts.command,
@@ -662,6 +683,11 @@ impl Handler {
                     .unwrap_or(false)
             )
         });
+
+        opts.rainbow_rows = opts.rainbow_rows.resolve(base.opts.colour.is_on(base.opts.is_stdout_tty) && base.opts.is_stdout_tty);
+        if opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
+            base.opts.rainbow_columns = base::AutoChoices::Never;
+        }
 
         let job_limit = opts.jobs.as_ref().or(opts.max_procs.as_ref()).map_or(1, |jobs| {
             if let Ok(j) = jobs.parse::<usize>() {

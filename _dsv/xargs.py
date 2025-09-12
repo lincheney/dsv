@@ -30,15 +30,24 @@ class ProcStats:
     queued = 0
 
 class Logger:
-    def __init__(self, parent, keys):
+    def __init__(self, id, parent, keys, opts):
         self.parent = parent
         self.keys = keys
+        self.opts = opts
+        if self.opts.rainbow_rows:
+            self.dark_colour = self.parent.get_rgb(id, sat=0.6)
+            self.light_colour = self.parent.get_rgb(id, sat=0.2)
 
     def log_output(self, values, stderr: bool):
         for v in values:
             if not isinstance(v, bytes):
                 v = str(v).encode()
-            _Base.on_row(self.parent, self.keys + [v], stderr=stderr)
+            row = self.keys.copy()
+            if self.opts.rainbow_rows:
+                row[0] = self.dark_colour + row[0]
+                v = self.light_colour + v
+            row.append(v)
+            _Base.on_row(self.parent, row, stderr=stderr)
         self.parent.print_progress_bar()
 
 class Verbosity:
@@ -51,8 +60,9 @@ class xargs(_Base):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '-j', '--max_procs', '--jobs', help='run up to num processes at a time, default is 1')
     parser.add_argument('--progress-bar', choices=('never', 'always', 'auto'), nargs='?', help='print a trailer')
-    parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
+    parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
+    parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
 
     def should_have_progress_bar(self, fd):
         return _utils.is_tty(fd) and ( _utils.is_tty(1) or not stat.S_ISFIFO(os.fstat(1).st_mode))
@@ -61,6 +71,10 @@ class xargs(_Base):
         opts.command.extend(map(_utils.utf8_type, opts.extras))
         opts.extras = ()
         opts.progress_bar = _utils.resolve_tty_auto(opts.progress_bar or 'auto', fd=2, checker=self.should_have_progress_bar)
+        opts.rainbow_rows = opts.colour and _utils.resolve_tty_auto(opts.rainbow_rows or 'auto')
+        if opts.rainbow_rows:
+            opts.rainbow_columns = 'never'
+
         super().__init__(opts)
         self.header_map = {}
         self.thread = None
@@ -138,7 +152,7 @@ class xargs(_Base):
         raise FormattingError(f'invalid placeholder: {text!r}')
 
     async def start_proc(self, row):
-        logger = Logger(self, row)
+        logger = Logger(self.stats.total - self.stats.queued, self, row, self.opts)
         try:
             formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
             if len(self.opts.command) == 1 and b' ' in self.opts.command[0]:
@@ -197,8 +211,8 @@ class xargs(_Base):
         self.queue.put(None)
         if self.thread:
             self.thread.join()
-        self.print_progress_bar(newline=True)
         super().on_eof()
+        self.print_progress_bar(newline=True)
 
     def print_progress_bar(self, newline=False, width=40):
         if not self.opts.progress_bar:

@@ -48,6 +48,7 @@ def make_parser(**kwargs):
     group.add_argument('--header-bg-colour', type=_utils.utf8_type, help='ansi escape code for the header background')
     group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow columns')
     group.add_argument('-Q', '--no-quoting', action='store_true', help='do not handle quotes from input')
+    group.add_argument('--no-quote-output', action='store_false', dest='quote_output', help="don't quote output")
     return parser
 
 def make_main_parser(sub_mapping={}, handlers=None, help=None, argument_default=None):
@@ -125,8 +126,6 @@ class _Base:
             opts.irs = b'\n'
         if opts.ors is None:
             opts.ors = opts.irs
-        if not hasattr(opts, 'quote_output'):
-            opts.quote_output = True
 
         opts.trailer = opts.trailer or 'auto'
         opts.stderr_colour = not opts.page and os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto', fd=2)
@@ -345,8 +344,8 @@ class _Base:
 
         return row, False
 
-    def get_rgb(self, i, step=0.647): # cycle every 17 columns
-        r, g, b = colorsys.hsv_to_rgb(step * i % 1, 0.3, 1)
+    def get_rgb(self, i, step=0.647, sat=0.3): # cycle every 17 columns
+        r, g, b = colorsys.hsv_to_rgb(step * i % 1, sat, 1)
         return b'\x1b[38;2;%i;%i;%im' % (r*255, g*255, b*255)
 
     @staticmethod

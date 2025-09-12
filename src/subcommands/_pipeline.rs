@@ -29,13 +29,18 @@ impl Handler {
         let (err_sender, err_receiver) = mpsc::channel();
 
         let mut handlers = vec![];
-        for arg in args.rsplit(|a| a == "!") {
+        for (i, arg) in args.rsplit(|a| a == "!").enumerate() {
             let new_sender = base.sender.clone();
             let receiver;
             (base.sender, receiver) = mpsc::channel();
 
             let arg = arg.iter().map(|x| x.as_ref());
-            let (handler, base) = super::Subcommands::from_args(arg, new_sender, base.scope)?;
+            let (handler, base) = super::Subcommands::from_args(
+                arg,
+                new_sender,
+                base.scope,
+                base.opts.is_stdout_tty && i == 0,
+            )?;
             handlers.push((handler, base, receiver));
         }
 
@@ -63,6 +68,7 @@ impl Handler {
             });
         }
 
+        eprintln!("DEBUG(invite)\t{}\t= {:?}", stringify!(base.opts.pretty), base.opts.pretty);
         base.opts = BaseOptions{
             ifs: base.opts.ifs.clone(),
             tsv: base.opts.tsv,
