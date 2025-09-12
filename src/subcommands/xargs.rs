@@ -447,7 +447,7 @@ impl ProcStats {
 
         let [(succeeded, _), (failed, _), (running, _), (queued, _)] = bars;
 
-        let colour = base.opts.colour == base::AutoChoices::Always;
+        let colour = base.opts.stderr_colour;
         let mut bar = format!(
             concat!(
                 "{clear}[{succeeded_colour}{0:",
@@ -658,7 +658,7 @@ impl Handler {
             base.opts.is_stderr_tty && (
                 base.opts.is_stdout_tty
                 || fstat(std::io::stdout().as_fd())
-                    .map(|s| SFlag::S_IFREG.intersects(SFlag::from_bits_truncate(s.st_mode)))
+                    .map(|s| !SFlag::S_IFIFO.intersects(SFlag::from_bits_truncate(s.st_mode)))
                     .unwrap_or(false)
             )
         });

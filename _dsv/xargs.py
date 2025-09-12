@@ -55,7 +55,7 @@ class xargs(_Base):
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
 
     def should_have_progress_bar(self, fd):
-        return _utils.is_tty(fd) and ( _utils.is_tty(1) or stat.S_ISREG(os.fstat(1).st_mode))
+        return _utils.is_tty(fd) and ( _utils.is_tty(1) or not stat.S_ISFIFO(os.fstat(1).st_mode))
 
     def __init__(self, opts):
         opts.command.extend(map(_utils.utf8_type, opts.extras))
