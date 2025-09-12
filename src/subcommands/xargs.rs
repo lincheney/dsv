@@ -1,7 +1,6 @@
 use crate::writer::{get_rgb};
 use crate::column_slicer::{make_header_map};
 use regex::bytes::{Regex, Captures};
-use once_cell::sync::Lazy;
 use std::path::Path;
 use anyhow::{Result};
 use std::sync::{mpsc};
@@ -18,8 +17,6 @@ use nix::sys::stat::{fstat, SFlag};
 use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
 use nix::sys::signal::{kill, SIGTERM};
 use std::borrow::Cow;
-
-static PLACEHOLDERS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{|\}\}|\{[^}]*}").unwrap());
 
 fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
     let mut new: BString = b"".into();
@@ -49,6 +46,8 @@ mod verbosity {
 #[derive(Parser, Default, Clone)]
 #[command(about = "build and execute command lines ")]
 pub struct Opts {
+    #[arg(short = 'I', long, default_value = "{}", help = "use the replacement string instead of {}")]
+    replace_str: String,
     #[arg(short = 'p', long, help = "run up to num processes at a time, the default is 1")]
     max_procs: Option<String>,
     #[arg(short, long, overrides_with = "max_procs", help = "run up to num processes at a time, the default is 1")]
@@ -244,44 +243,44 @@ impl Proc {
     }
 
     fn format_arg(
+        placeholder_regex: &Regex,
         format: &BStr,
         keys: Option<&HashMap<BString, usize>>,
         values: &[BString],
     ) -> Result<BString> {
 
         let mut err = Ok(());
-        let result = PLACEHOLDERS.replace_all(format, |c: &Captures| -> Cow<[u8]> {
-            match c.get(0).unwrap().as_bytes() {
-                b"{{" => b"{".into(),
-                b"}}" => b"}".into(),
-                x => {
-                    let inner = &x[1..x.len()-1];
-                    let len = inner.len();
-                    let as_path = |i: usize| Path::new(OsStr::from_bytes(&values[i]));
+        let result = placeholder_regex.replace_all(format, |c: &Captures| -> Cow<[u8]> {
+            if let Some(c) = c.get(1).or(c.get(2)) {
+                return c.as_bytes()[..1].to_owned().into()
+            }
 
-                    if let Some(i) = Self::lookup_key_index(keys, inner) {
-                        values[i].as_bytes().into()
+            let text = c.get(0).unwrap().as_bytes();
+            let inner = &text[1..text.len()-1];
+            let len = inner.len();
+            let as_path = |i: usize| Path::new(OsStr::from_bytes(&values[i]));
 
-                    } else if inner.ends_with(b".") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
-                        as_path(i).with_extension("").into_os_string().into_encoded_bytes().into()
+            if let Some(i) = Self::lookup_key_index(keys, inner) {
+                values[i].as_bytes().into()
 
-                    } else if inner.ends_with(b"/") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
-                        as_path(i).file_name().map_or(b"" as _, |p| p.as_encoded_bytes()).into()
+            } else if inner.ends_with(b".") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
+                as_path(i).with_extension("").into_os_string().into_encoded_bytes().into()
 
-                    } else if inner.ends_with(b"//") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
-                        as_path(i).parent().map_or(b"" as _, |p| p.as_os_str().as_encoded_bytes()).into()
+            } else if inner.ends_with(b"/") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
+                as_path(i).file_name().map_or(b"" as _, |p| p.as_encoded_bytes()).into()
 
-                    } else if inner.ends_with(b"/.") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
-                        as_path(i).file_name()
-                            .map(|path| Path::new(path).with_extension(""))
-                            .map_or(b"".into(), |p| p.into_os_string().into_encoded_bytes().into())
+            } else if inner.ends_with(b"//") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
+                as_path(i).parent().map_or(b"" as _, |p| p.as_os_str().as_encoded_bytes()).into()
 
-                    } else {
-                        let x: &BStr = x.into();
-                        err = Err(anyhow::anyhow!("invalid placeholder: {x:?}"));
-                        b"".into()
-                    }
-                },
+            } else if inner.ends_with(b"/.") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
+                as_path(i).file_name()
+                    .map(|path| Path::new(path).with_extension(""))
+                    .map_or(b"".into(), |p| p.into_os_string().into_encoded_bytes().into())
+
+            } else {
+                let x: &BStr = text.into();
+                err = Err(anyhow::anyhow!("invalid placeholder: {x:?}"));
+                b"".into()
             }
         });
 
@@ -289,18 +288,24 @@ impl Proc {
         Ok(result.into_owned().into())
     }
 
-    fn format_args(command: &[String], keys: Option<&HashMap<BString, usize>>, values: &[BString]) -> Result<Vec<BString>> {
+    fn format_args(
+        placeholder_regex: &Regex,
+        command: &[String],
+        keys: Option<&HashMap<BString, usize>>,
+        values: &[BString],
+    ) -> Result<Vec<BString>> {
+
         let command = if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
             vec![
                 b"bash".into(),
                 b"-c".into(),
-                Self::format_arg(command[0].as_bytes().into(), keys, values)?,
+                Self::format_arg(placeholder_regex, command[0].as_bytes().into(), keys, values)?,
             ]
         } else {
             let mut cmd = vec![];
             for c in command {
-                cmd.push(Self::format_arg(c.as_bytes().into(), keys, values)?);
+                cmd.push(Self::format_arg(placeholder_regex, c.as_bytes().into(), keys, values)?);
             }
             cmd
         };
@@ -484,11 +489,11 @@ impl ProcStats {
     }
 }
 
-#[derive(Default)]
 struct ProcStore {
     opts: Opts,
     queue: VecDeque<Vec<BString>>,
     job_limit: usize,
+    placeholder_regex: Regex,
     inner: HashMap<usize, (Proc, Logger)>,
     stats: ProcStats,
     keys: Option<HashMap<BString, usize>>,
@@ -539,7 +544,7 @@ impl ProcStore {
                 None
             },
         };
-        let command = Proc::format_args(&self.opts.command, self.keys.as_ref(), &logger.row)?;
+        let command = Proc::format_args(&self.placeholder_regex, &self.opts.command, self.keys.as_ref(), &logger.row)?;
         if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
             let mut line: BString = b"starting process: ".into();
             line.append(&mut shell_quote(&command));
@@ -620,12 +625,17 @@ fn proc_loop(
     send_notify: mpsc::Sender<()>,
     opts: Opts,
     job_limit: usize,
+    placeholder_regex: Regex,
 ) -> Result<()> {
 
     let mut proc_store = ProcStore{
         opts,
         job_limit,
-        ..ProcStore::default()
+        placeholder_regex,
+        inner: HashMap::new(),
+        stats: ProcStats::default(),
+        keys: None,
+        queue: VecDeque::new(),
     };
 
     let result = (|| {
@@ -713,13 +723,33 @@ impl Handler {
             }
         });
 
+        if !matches!(opts.replace_str.len(), 1 | 2) {
+            let cmd = crate::subcommands::Cli::command();
+            let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(&cmd);
+            err.insert(ContextKind::InvalidArg, ContextValue::String("--replace-str".into()));
+            err.insert(ContextKind::InvalidValue, ContextValue::String(opts.replace_str));
+            err.insert(ContextKind::ValidValue, ContextValue::Strings(vec!["a string with 1-2 chars".into()]));
+            err.exit();
+        }
+        let left = &opts.replace_str[0..1];
+        let right = opts.replace_str.get(1..2).unwrap_or(left);
+        let regex = format!(r"({l}{l})|({r}{r})|{l}[^{r}]*{r}", l = regex::escape(left), r = regex::escape(right));
+        let placeholder_regex = Regex::new(&regex).unwrap();
+
         let (sender, receiver) = mio_channel::channel();
         let (err_sender, err_receiver) = mpsc::channel();
         let (send_notify, recv_notify) = mpsc::channel();
 
         let mut base = base.clone();
         base.scope.spawn(move || {
-            let result = proc_loop(&mut base, receiver, send_notify, opts, job_limit);
+            let result = proc_loop(
+                &mut base,
+                receiver,
+                send_notify,
+                opts,
+                job_limit,
+                placeholder_regex,
+            );
             err_sender.send(result).unwrap();
         });
         recv_notify.recv().unwrap();

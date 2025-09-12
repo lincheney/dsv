@@ -63,6 +63,7 @@ class xargs(_Base):
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
     parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
+    parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
     parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
 
     def should_have_progress_bar(self, fd):
@@ -75,15 +76,20 @@ class xargs(_Base):
         opts.rainbow_rows = opts.colour and _utils.resolve_tty_auto(opts.rainbow_rows or 'auto')
         if opts.rainbow_rows:
             opts.rainbow_columns = 'never'
+        if len(opts.replace_str) not in (1, 2):
+            opts.parser.error('-I/--replace-str: should be 1-2 chars')
 
         super().__init__(opts)
         self.header_map = {}
         self.thread = None
         self.queue = Queue()
         self.proc_queue = deque()
-        self.placeholder_regex = re.compile(rb"\{\{|\}\}|\{[^}]*}")
         self.stats = ProcStats()
         self.proc_tasks = set()
+
+        l = re.escape(opts.replace_str[0]).encode()
+        r = re.escape(opts.replace_str[1:] or opts.replace_str[0]).encode()
+        self.placeholder_regex = re.compile(rb"(%s%s)|(%s%s)|%s[^%s]*%s" % (l, l, r, r, l, r, r))
 
         self.job_limit = 1
         if opts.max_procs:
@@ -109,7 +115,7 @@ class xargs(_Base):
             if row is None:
                 break
             self.stats.total += 1
-            if len(self.proc_tasks) < self.job_limit:
+            if self.job_limit == 0 or len(self.proc_tasks) < self.job_limit:
                 self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
             else:
                 self.proc_queue.append(row)
@@ -126,28 +132,28 @@ class xargs(_Base):
             return self.header_map[text]
 
     def format_arg(self, match, row):
-        text = match.group(0)
-        if text == b'{{':
-            return b'{'
-        elif text == b'}}':
-            return b'}'
+        if match.group(1) is not None:
+            return match.group(1)[:1]
+        if match.group(2) is not None:
+            return match.group(2)[:1]
 
-        i = self.get_format_arg_index(text[1:-1])
+        text = match.group(0)[1:-1]
+        i = self.get_format_arg_index(text)
         if i is not None:
             return row[i]
 
-        i = self.get_format_arg_index(text[1:-2])
+        i = self.get_format_arg_index(text[:-1])
         if i is not None:
-            if text.endswith(b'.}'):
+            if text.endswith(b'.'):
                 return os.path.splitext(row[i])[0]
-            if text.endswith(b'/}'):
+            if text.endswith(b'/'):
                 return os.path.basename(row[i])
 
         i = self.get_format_arg_index(text[1:-3])
         if i is not None:
-            if text.endswith(b'//}'):
+            if text.endswith(b'//'):
                 return os.path.dirname(row[i])
-            if text.endswith(b'/.}'):
+            if text.endswith(b'/.'):
                 return os.path.splitext(os.path.basename(row[i]))[0]
 
         raise FormattingError(f'invalid placeholder: {text!r}')

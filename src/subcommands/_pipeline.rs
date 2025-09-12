@@ -68,7 +68,6 @@ impl Handler {
             });
         }
 
-        eprintln!("DEBUG(invite)\t{}\t= {:?}", stringify!(base.opts.pretty), base.opts.pretty);
         base.opts = BaseOptions{
             ifs: base.opts.ifs.clone(),
             tsv: base.opts.tsv,
