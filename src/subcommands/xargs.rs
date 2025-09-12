@@ -5,8 +5,8 @@ use std::path::Path;
 use anyhow::{Result};
 use std::sync::{mpsc};
 use crate::base;
-use std::ffi::{OsString};
-use std::os::unix::{ffi::OsStringExt, process::ExitStatusExt};
+use std::ffi::{OsString, OsStr};
+use std::os::unix::{ffi::OsStringExt, ffi::OsStrExt, process::ExitStatusExt};
 use std::collections::{VecDeque, HashMap, hash_map::Entry};
 use std::os::fd::{AsFd, RawFd, AsRawFd};
 use std::process::{Child, Command, Stdio, ChildStdout, ChildStderr};
@@ -18,6 +18,8 @@ use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
 use nix::sys::signal::{kill, SIGTERM};
 use std::borrow::Cow;
 
+static PLACEHOLDERS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{|\}\}|\{[^}]*}").unwrap());
+
 fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
     let mut new: BString = b"".into();
     for (i, val) in values.into_iter().enumerate() {
@@ -26,7 +28,7 @@ fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
         }
 
         let val = val.as_ref();
-        if val.iter().all(|c| matches!(c, b'-' | b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')) {
+        if !val.is_empty() && val.iter().all(|c| matches!(c, b'-' | b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')) {
             new.push_str(val);
         } else {
             new.push(b'\'');
@@ -166,8 +168,6 @@ impl<R: Read+AsFd> BufferedReader<R> {
     }
 }
 
-static PLACEHOLDERS: Lazy<Regex> = Lazy::new(|| Regex::new(r"\{\{|\}\}|\{[^}]*}").unwrap());
-
 #[derive(Copy, Clone)]
 struct EventMarker(usize);
 #[derive(Debug, Clone, Copy)]
@@ -244,11 +244,26 @@ impl Proc {
                 b"}}" => b"}".into(),
                 x => {
                     let inner = &x[1..x.len()-1];
+                    let len = inner.len();
+                    let as_path = |i: usize| Path::new(OsStr::from_bytes(&values[i]));
+
                     if let Some(i) = Self::lookup_key_index(keys, inner) {
                         values[i].as_bytes().into()
-                    } else if inner.ends_with(b".") && let Some(i) = Self::lookup_key_index(keys, &inner[..inner.len()-1]) {
-                        let path = Path::new(&OsString::from_vec(values[i].to_vec())).with_extension("");
-                        path.into_os_string().into_encoded_bytes().into()
+
+                    } else if inner.ends_with(b".") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
+                        as_path(i).with_extension("").into_os_string().into_encoded_bytes().into()
+
+                    } else if inner.ends_with(b"/") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
+                        as_path(i).file_name().map_or(b"" as _, |p| p.as_encoded_bytes()).into()
+
+                    } else if inner.ends_with(b"//") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
+                        as_path(i).parent().map_or(b"" as _, |p| p.as_os_str().as_encoded_bytes()).into()
+
+                    } else if inner.ends_with(b"/.") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
+                        as_path(i).file_name()
+                            .map(|path| Path::new(path).with_extension(""))
+                            .map_or(b"".into(), |p| p.into_os_string().into_encoded_bytes().into())
+
                     } else {
                         let x: &BStr = x.into();
                         err = Err(anyhow::anyhow!("invalid placeholder: {x:?}"));

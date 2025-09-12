@@ -18,7 +18,7 @@ class FormattingError(Exception):
 def shell_quote(values):
     return b' '.join(
         b"'" + val.replace(b"'", b"'\\''") + b"'"
-        if re.search(rb'[^-a-zA-Z0-9_]', val) else
+        if not val or re.search(rb'[^-a-zA-Z0-9_]', val) else
         val
         for val in values
     )
@@ -120,9 +120,20 @@ class xargs(_Base):
         i = self.get_format_arg_index(text[1:-1])
         if i is not None:
             return row[i]
+
         i = self.get_format_arg_index(text[1:-2])
-        if i is not None and text.endswith(b'.}'):
-            return os.path.splitext(row[i])[0]
+        if i is not None:
+            if text.endswith(b'.}'):
+                return os.path.splitext(row[i])[0]
+            if text.endswith(b'/}'):
+                return os.path.basename(row[i])
+
+        i = self.get_format_arg_index(text[1:-3])
+        if i is not None:
+            if text.endswith(b'//}'):
+                return os.path.dirname(row[i])
+            if text.endswith(b'/.}'):
+                return os.path.splitext(os.path.basename(row[i]))[0]
 
         raise FormattingError(f'invalid placeholder: {text!r}')
 
