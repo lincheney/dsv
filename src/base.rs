@@ -713,7 +713,7 @@ impl<W: Writer> Output<W> {
         if let Some(trailer) = trailer {
             self.writer.write_header(state, trailer, header_padding.as_ref(), &self.opts, &self.ofs)?;
         }
-        Ok(true)
+        Ok(false)
     }
 
     fn on_separator(&mut self, state: &mut WriterState) -> Result<bool> {

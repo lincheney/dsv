@@ -568,21 +568,20 @@ fn proc_loop(
     job_limit: usize,
 ) -> Result<()> {
 
-    let mut poll = mio::Poll::new()?;
-    let mut events = mio::Events::with_capacity(255);
-
-    poll.registry().register(&mut receiver, mio::Token(0), mio::Interest::READABLE)?;
-
     let mut proc_store = ProcStore{
         opts,
         job_limit,
         ..ProcStore::default()
     };
-    let mut got_eof = false;
-    // im ready
-    send_notify.send(()).unwrap();
 
     let result = (|| {
+        let mut poll = mio::Poll::new()?;
+        let mut events = mio::Events::with_capacity(255);
+        poll.registry().register(&mut receiver, mio::Token(0), mio::Interest::READABLE)?;
+        let mut got_eof = false;
+        // im ready
+        send_notify.send(()).unwrap();
+
         while !got_eof || !proc_store.is_empty() {
             poll.poll(&mut events, None)?;
             for event in &events {
@@ -618,6 +617,7 @@ fn proc_loop(
         Ok(())
     })();
 
+    let _ = base.on_eof();
     proc_store.stats.draw_progress_bar(base, &proc_store.opts, true);
     result
 }
@@ -652,7 +652,6 @@ impl Handler {
         let mut base = base.clone();
         base.scope.spawn(move || {
             let result = proc_loop(&mut base, receiver, send_notify, opts, job_limit);
-            let _ = base.on_eof();
             err_sender.send(result).unwrap();
         });
         recv_notify.recv().unwrap();

@@ -113,12 +113,15 @@ class xargs(_Base):
     async def start_proc(self, row):
         logger = Logger(self, row)
         try:
-            command = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
+            formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
+            if len(self.opts.command) == 1 and b' ' in self.opts.command[0]:
+                formatted = [b'bash', b'-c', formatted[0]]
+
             if self.opts.verbose >= Verbosity.ALL:
-                logger.log_output([b'starting process: ' + shell_quote(command)], True)
+                logger.log_output([b'starting process: ' + shell_quote(formatted)], True)
 
             proc = await asyncio.create_subprocess_exec(
-                *command,
+                *formatted,
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
