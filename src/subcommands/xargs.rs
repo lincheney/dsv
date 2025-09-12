@@ -1,6 +1,7 @@
 use crate::column_slicer::{make_header_map};
 use regex::bytes::{Regex, Captures};
 use once_cell::sync::Lazy;
+use std::path::Path;
 use anyhow::{Result};
 use std::sync::{mpsc};
 use crate::base;
@@ -15,6 +16,7 @@ use clap::{Parser, CommandFactory, ArgAction, error::{ErrorKind, ContextKind, Co
 use nix::sys::stat::{fstat, SFlag};
 use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
 use nix::sys::signal::{kill, SIGTERM};
+use std::borrow::Cow;
 
 fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
     let mut new: BString = b"".into();
@@ -217,6 +219,18 @@ struct Proc {
 
 impl Proc {
 
+    fn lookup_key_index(keys: Option<&HashMap<BString, usize>>, val: &[u8]) -> Option<usize> {
+        if val.is_empty() {
+            Some(0)
+        } else if let Ok(x) = std::str::from_utf8(val) && let Ok(x) = x.parse::<usize>() {
+            Some(x)
+        } else if let Some(&x) = keys.and_then(|keys| keys.get(val)) {
+            Some(x)
+        } else {
+            None
+        }
+    }
+
     fn format_arg(
         format: &BStr,
         keys: Option<&HashMap<BString, usize>>,
@@ -224,17 +238,17 @@ impl Proc {
     ) -> Result<BString> {
 
         let mut err = Ok(());
-        let result = PLACEHOLDERS.replace_all(format, |c: &Captures| -> &BStr {
+        let result = PLACEHOLDERS.replace_all(format, |c: &Captures| -> Cow<[u8]> {
             match c.get(0).unwrap().as_bytes() {
                 b"{{" => b"{".into(),
                 b"}}" => b"}".into(),
                 x => {
-                    if x == b"{}" {
-                        values[0].as_ref()
-                    } else if let Ok(x) = std::str::from_utf8(&x[1..x.len()-1]) && let Ok(x) = x.parse::<usize>() {
-                        values[x].as_ref()
-                    } else if let Some(&x) = keys.and_then(|keys| keys.get(&x[1..x.len()-1])) {
-                        values[x].as_ref()
+                    let inner = &x[1..x.len()-1];
+                    if let Some(i) = Self::lookup_key_index(keys, inner) {
+                        values[i].as_bytes().into()
+                    } else if inner.ends_with(b".") && let Some(i) = Self::lookup_key_index(keys, &inner[..inner.len()-1]) {
+                        let path = Path::new(&OsString::from_vec(values[i].to_vec())).with_extension("");
+                        path.into_os_string().into_encoded_bytes().into()
                     } else {
                         let x: &BStr = x.into();
                         err = Err(anyhow::anyhow!("invalid placeholder: {x:?}"));
@@ -389,11 +403,12 @@ impl ProcStats {
         }
 
         const WIDTH: usize = 40;
+        let total = self.total.max(1);
         let mut bars = [
-            divmod(WIDTH * self.succeeded, self.total),
-            divmod(WIDTH * self.failed(), self.total),
-            divmod(WIDTH * self.running(), self.total),
-            divmod(WIDTH * self.queued, self.total),
+            divmod(WIDTH * self.succeeded, total),
+            divmod(WIDTH * self.failed(), total),
+            divmod(WIDTH * self.running(), total),
+            divmod(WIDTH * self.queued, total),
         ];
         for b in &mut bars {
             if b.0 == 0 && b.1 > 0 {

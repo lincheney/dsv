@@ -12,6 +12,9 @@ from . import _utils
 from ._column_slicer import _ColumnSlicer
 from ._base import _Base
 
+class FormattingError(Exception):
+    pass
+
 def shell_quote(values):
     return b' '.join(
         b"'" + val.replace(b"'", b"'\\''") + b"'"
@@ -99,20 +102,29 @@ class xargs(_Base):
         while self.proc_tasks:
             await asyncio.gather(*self.proc_tasks)
 
+    def get_format_arg_index(self, text):
+        if not text:
+            return 0
+        elif text.isdigit():
+            return int(text)
+        elif text in self.header_map:
+            return self.header_map[text]
+
     def format_arg(self, match, row):
         text = match.group(0)
         if text == b'{{':
             return b'{'
         elif text == b'}}':
             return b'}'
-        elif text == b'{}':
-            return row[0]
-        elif text[1:-1].isdigit():
-            return row[int(text[1:-1])]
-        elif text[1:-1] in self.header_map:
-            return row[self.header_map[text[1:-1]]]
-        else:
-            raise ValueError(f'invalid placeholder: {text!r}')
+
+        i = self.get_format_arg_index(text[1:-1])
+        if i is not None:
+            return row[i]
+        i = self.get_format_arg_index(text[1:-2])
+        if i is not None and text.endswith(b'.}'):
+            return os.path.splitext(row[i])[0]
+
+        raise FormattingError(f'invalid placeholder: {text!r}')
 
     async def start_proc(self, row):
         logger = Logger(self, row)
@@ -140,7 +152,7 @@ class xargs(_Base):
                 logger.log_output([b'exited with %i' % code], True)
             if code == 0:
                 self.stats.succeeded += 1
-        except OSError as e:
+        except (OSError, IOError, FormattingError) as e:
             logger.log_output([e], True)
         self.stats.finished += 1
 
@@ -184,11 +196,12 @@ class xargs(_Base):
         stats = self.stats
         failed = stats.finished - stats.succeeded
         running = stats.total - stats.finished - stats.queued
+        total = max(1, stats.total)
         bars = [
-            divmod(width * stats.succeeded, stats.total),
-            divmod(width * failed, stats.total),
-            divmod(width * running, stats.total),
-            divmod(width * stats.queued, stats.total),
+            divmod(width * stats.succeeded, total),
+            divmod(width * failed, total),
+            divmod(width * running, total),
+            divmod(width * stats.queued, total),
         ]
         for i, b in enumerate(bars):
             if b[0] == 0 and b[1] > 0:
