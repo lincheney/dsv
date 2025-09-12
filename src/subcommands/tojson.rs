@@ -1,8 +1,8 @@
 use anyhow::Result;
 use crate::base;
-use crate::writer::{Writer, BaseWriter};
+use crate::writer::{Writer, BaseWriter, WriterState};
 use std::io::Write;
-use bstr::{BString, BStr};
+use bstr::{BString};
 use clap::Parser;
 use serde_json;
 
@@ -38,17 +38,13 @@ impl Writer for JsonWriter {
         }
     }
 
-    fn get_ors(&self) -> &BStr { self.inner.get_ors() }
-    fn get_rgb_map(&self) -> &Vec<BString> { self.inner.get_rgb_map() }
-    fn get_rgb_map_mut(&mut self) -> &mut Vec<BString> { self.inner.get_rgb_map_mut() }
-
     fn get_file(&mut self, opts: &base::BaseOptions, has_header: bool) -> Box<dyn Write> {
         self.inner.get_file(opts, has_header)
     }
 
     fn write_output(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         row: Vec<BString>,
         _padding: Option<&Vec<usize>>,
         _is_header: bool,
@@ -61,12 +57,15 @@ impl Writer for JsonWriter {
 
         let output = keys.zip(values).collect();
         let output = serde_json::Value::Object(output);
-        self.write_raw_with(file, opts, false, |file| Ok(serde_json::to_writer(file, &output)?))
+        self.write_raw_with(state, opts, false, |mut file| {
+            serde_json::to_writer(&mut file, &output)?;
+            Ok(file)
+        })
     }
 
     fn write_header(
         &mut self,
-        _file: &mut Option<Box<dyn Write>>,
+        _state: &mut WriterState,
         header: base::FormattedRow,
         _padding: Option<&Vec<usize>>,
         _opts: &base::BaseOptions,

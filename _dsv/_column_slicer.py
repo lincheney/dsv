@@ -17,7 +17,8 @@ class _ColumnSlicer(_Base):
                 if opts.regex:
                     opts.fields[i] = re.compile(opts.fields[i])
 
-    def make_header_map(self, header):
+    @classmethod
+    def make_header_map(cls, header):
         return {k: i for i, k in enumerate(header)}
 
     def on_header(self, header):

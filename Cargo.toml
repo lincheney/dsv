@@ -16,3 +16,7 @@ serde_json = { version = "1.0.142", features = ["preserve_order"] }
 termsize = "0.1.9"
 libloading = "0.8.0"
 chrono = { version = "0.4.41", features = ["alloc"] }
+mio_channel = "0.2.0"
+mio = { version = "1.0.4", features = ["os-ext"] }
+libc = "0.2.175"
+mio-pidfd = "0.4.0"

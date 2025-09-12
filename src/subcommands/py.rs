@@ -275,7 +275,7 @@ impl InnerHandler {
                 }
             } else if self.expr {
                 let bytes = py.convert_py_to_bytes(result)?;
-                if base.write_raw(bytes.to_owned()) {
+                if base.write_raw(bytes.to_owned(), true) {
                     return Ok(true)
                 }
             } else {

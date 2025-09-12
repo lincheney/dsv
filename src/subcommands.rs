@@ -135,4 +135,5 @@ add_subcommands!(
     tomarkdown,
     totsv,
     uniq,
+    xargs,
 );

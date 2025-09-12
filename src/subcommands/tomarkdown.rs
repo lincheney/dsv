@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crate::base;
-use crate::writer::{Writer, BaseWriter};
+use crate::writer::{Writer, BaseWriter, WriterState};
 use once_cell::sync::Lazy;
 use regex::bytes::Regex;
 use bstr::{BString, BStr, ByteSlice};
@@ -70,10 +70,6 @@ impl Writer for MarkdownWriter {
         }
     }
 
-    fn get_ors(&self) -> &BStr { self.inner.get_ors() }
-    fn get_rgb_map(&self) -> &Vec<BString> { self.inner.get_rgb_map() }
-    fn get_rgb_map_mut(&mut self) -> &mut Vec<BString> { self.inner.get_rgb_map_mut() }
-
     fn get_file(&mut self, opts: &base::BaseOptions, has_header: bool) -> Box<dyn Write> {
         if opts.page {
             let mut command = Command::new("less");
@@ -107,18 +103,19 @@ impl Writer for MarkdownWriter {
 
     fn format_row(
         &mut self,
+        state: &mut WriterState,
         row: Vec<BString>,
         padding: Option<&Vec<usize>>,
         is_header: bool,
         opts: &base::BaseOptions,
         _ofs: &base::Ofs,
     ) -> BString {
-        self.inner.format_row(row, padding, is_header, opts, &self.ofs)
+        self.inner.format_row(state, row, padding, is_header, opts, &self.ofs)
     }
 
     fn write_header(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         header: base::FormattedRow,
         padding: Option<&Vec<usize>>,
         opts: &base::BaseOptions,
@@ -146,8 +143,8 @@ impl Writer for MarkdownWriter {
                 .map(|x| x.into())
                 .collect()
         };
-        self.write_output(file, header.0, padding, true, opts, ofs)?;
-        self.write_output(file, sep, None, false, opts, ofs)
+        self.write_output(state, header.0, padding, true, opts, ofs)?;
+        self.write_output(state, sep, None, false, opts, ofs)
     }
 
 }

@@ -79,6 +79,7 @@ Note:
 * `tomarkdown`: convert to markdown table
 * `totsv`: convert to tsv
 * `uniq`: like `sort | uniq ...`
+* `xargs`: like `xargs` and GNU `parallel`
 
 ## rust vs python
 

@@ -2,7 +2,7 @@ use crate::base::*;
 use std::io::{Write, BufWriter};
 use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{Command, Stdio};
-use anyhow::{Result, Context};
+use anyhow::{Result};
 use colorutils_rs::Hsv;
 
 fn get_rgb(i: usize, step: f32) -> BString {
@@ -41,27 +41,26 @@ fn needs_quoting(value: &[u8], ofs: &[u8], ors: &[u8]) -> bool {
     value.contains(&b'"') || value.windows(ofs.len()).any(|window| window == ofs) || value.windows(ors.len()).any(|window| window == ors)
 }
 
+#[derive(Default)]
+pub struct WriterState {
+    pub file: Option<Box<dyn Write>>,
+    pub rgb_map: Vec<BString>,
+    pub ors: BString,
+}
+
 pub struct BaseWriter {
-    rgb_map: Vec<BString>,
     proc: Option<std::process::Child>,
-    ors: BString,
 }
 
 pub trait Writer {
 
     fn new(opts: &BaseOptions) -> Self;
 
-    fn get_ors(&self) -> &BStr;
-
     fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> Box<dyn Write>;
 
-    fn get_rgb_map(&self) -> &Vec<BString>;
-    fn get_rgb_map_mut(&mut self) -> &mut Vec<BString>;
-
-    fn set_rgb(&mut self, count: usize) {
-        let rgb_map = self.get_rgb_map_mut();
-        for i in rgb_map.len() .. count {
-            rgb_map.push(get_rgb(i, 0.647));
+    fn set_rgb(&mut self, state: &mut WriterState, count: usize) {
+        for i in state.rgb_map.len() .. count {
+            state.rgb_map.push(get_rgb(i, 0.647));
         }
     }
 
@@ -71,35 +70,36 @@ pub trait Writer {
 
     fn write_header(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         header: FormattedRow,
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
         if !opts.drop_header {
-            self.write_output(file, header.0, padding, true, opts, ofs)?;
+            self.write_output(state, header.0, padding, true, opts, ofs)?;
         }
         Ok(())
     }
 
     fn write_row(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         row: GatheredRow,
         padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
         match row {
-            GatheredRow::Row(row) => self.write_output(file, row.0, padding, false, opts, ofs),
-            GatheredRow::Separator => self.write_separator(file, padding, opts),
+            GatheredRow::Row(row) => self.write_output(state, row.0, padding, false, opts, ofs),
+            GatheredRow::Stderr(row) => self.write_stderr(state, row.0, padding, opts, ofs),
+            GatheredRow::Separator => self.write_separator(state, padding, opts),
         }
     }
 
     fn write_separator(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         _padding: Option<&Vec<usize>>,
         opts: &BaseOptions,
     ) -> Result<()> {
@@ -114,49 +114,98 @@ pub trait Writer {
             b"---"
         };
 
-        self.write_raw(file, sep.into(), opts, false)
+        self.write_raw(state, sep.into(), true, opts, false)
     }
 
     fn write_raw(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
-        string: &BStr,
+        state: &mut WriterState,
+        string: BString,
+        ors: bool,
         opts: &BaseOptions,
         is_header: bool,
     ) -> Result<()> {
-        self.write_raw_with(file, opts, is_header, |file| Ok(file.write_all(string)?))
+        let file = state.file.get_or_insert_with(|| self.get_file(opts, is_header));
+        self.write_to_file(file, if ors { Some(state.ors.as_ref()) } else { None }, string)
     }
 
-    fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<()>>(
+    fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<&mut Box<dyn Write>>>(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         opts: &BaseOptions,
         is_header: bool,
         func: F,
     ) -> Result<()> {
-        let file = file.get_or_insert_with(|| self.get_file(opts, is_header));
-        let ors = self.get_ors();
-        func(file).context("Failed to write row")?;
-        file.write_all(ors).context("Failed to write row separator")?;
-        file.flush().context("Failed to flush output")?;
-        Ok(())
+        let file = state.file.get_or_insert_with(|| self.get_file(opts, is_header));
+        self.write_to_file_with(file, state.ors.as_ref(), func)
     }
 
     fn write_output(
         &mut self,
-        file: &mut Option<Box<dyn Write>>,
+        state: &mut WriterState,
         row: Vec<BString>,
         padding: Option<&Vec<usize>>,
         is_header: bool,
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(row, padding, is_header, opts, ofs);
-        self.write_raw(file, formatted_row.as_ref(), opts, is_header)
+        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs);
+        self.write_raw(state, formatted_row, true, opts, is_header)
     }
 
+    fn write_raw_stderr(
+        &mut self,
+        state: &mut WriterState,
+        string: BString,
+        ors: bool,
+        _opts: &BaseOptions,
+    ) -> Result<()> {
+        let mut file = std::io::stderr().lock();
+        self.write_to_file(&mut file, if ors { Some(state.ors.as_ref()) } else { None }, string)
+    }
+
+    fn write_stderr(
+        &mut self,
+        state: &mut WriterState,
+        row: Vec<BString>,
+        padding: Option<&Vec<usize>>,
+        opts: &BaseOptions,
+        ofs: &Ofs,
+    ) -> Result<()> {
+        let formatted_row = self.format_row(state, row, padding, false, opts, ofs);
+        self.write_raw_stderr(state, formatted_row, true, opts)
+    }
+
+    fn write_to_file<W: Write>(
+        &mut self,
+        mut file: W,
+        ors: Option<&BStr>,
+        mut value: BString,
+    ) -> Result<()> {
+        if let Some(ors) = ors {
+            value.push_str(ors);
+        }
+        file.write_all(value.as_ref())?;
+        file.flush()?;
+        Ok(())
+    }
+
+    fn write_to_file_with<W: Write, F: Fn(W) -> Result<W>>(
+        &mut self,
+        file: W,
+        ors: &BStr,
+        value: F,
+    ) -> Result<()> {
+        let mut file = value(file)?;
+        file.write_all(ors)?;
+        file.flush()?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     fn format_row(
         &mut self,
+        state: &mut WriterState,
         row: Vec<BString>,
         padding: Option<&Vec<usize>>,
         is_header: bool,
@@ -167,13 +216,13 @@ pub trait Writer {
 
         if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
-            self.set_rgb(row.len());
+            self.set_rgb(state, row.len());
         }
 
         let mut parts = BString::new(vec![]);
         let tmp_padding = vec![];
         let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
-        let rgb = self.get_rgb_map().iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
+        let rgb = state.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()));
         let ofs = ofs.as_bstr();
         let header_colour = if is_header && colour {
             opts.header_colour.as_deref().map(|x| x.as_bytes()).or(Some(b"\x1b[1;4m"))
@@ -224,24 +273,10 @@ pub trait Writer {
 
 
 impl Writer for BaseWriter {
-    fn new(opts: &BaseOptions) -> Self {
+    fn new(_opts: &BaseOptions) -> Self {
         Self {
             proc: None,
-            rgb_map: vec![],
-            ors: opts.get_ors(),
         }
-    }
-
-    fn get_ors(&self) -> &BStr {
-        self.ors.as_ref()
-    }
-
-    fn get_rgb_map(&self) -> &Vec<BString> {
-        &self.rgb_map
-    }
-
-    fn get_rgb_map_mut(&mut self) -> &mut Vec<BString> {
-        &mut self.rgb_map
     }
 
     fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> Box<dyn Write> {

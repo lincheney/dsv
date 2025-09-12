@@ -6,6 +6,10 @@ use std::collections::HashMap;
 
 static FIELD_REGEX: Lazy<regex::Regex> = Lazy::new(|| regex::Regex::new(r"^(\d+)?-(\d+)?$").unwrap());
 
+pub fn make_header_map(header: &[BString]) -> HashMap<BString, usize> {
+    header.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect()
+}
+
 #[derive(Clone)]
 pub struct ColumnSlicer {
     fields: Vec<Field>,
@@ -52,7 +56,7 @@ impl ColumnSlicer {
     }
 
     pub fn make_header_map(&mut self, header: &[BString]) {
-        self.headers = header.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect();
+        self.headers = make_header_map(header);
     }
 
     pub fn get_single_field_index(&self, field: &str) -> Option<usize> {

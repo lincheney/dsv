@@ -179,8 +179,10 @@ impl Joiner {
         for (is_left, msg) in &receiver {
             match msg {
                 Message::Separator => unreachable!(),
-                Message::Raw(_) => unreachable!(),
+                Message::Raw(_, _) => unreachable!(),
                 Message::Eof => (),
+                Message::Stderr(_) => unreachable!(),
+                Message::RawStderr(_, _) => unreachable!(),
                 Message::Ofs(ofs) => if is_left && base.on_ofs(ofs) {
                     return Ok(())
                 },

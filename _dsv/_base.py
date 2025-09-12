@@ -134,6 +134,8 @@ class _Base:
         opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'auto')
         opts.header_colour = opts.header_colour or b'\x1b[1;4m'
         opts.header_bg_colour = opts.header_bg_colour or b'\x1b[48;5;237m'
+        if _utils.stdout_is_tty():
+            opts.ors = b'\x1b[K' + opts.ors
 
         for k, v in kwargs.items():
             setattr(opts, k, v)
@@ -406,13 +408,19 @@ class _Base:
                 self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
                 self.outfile = self.outfile_proc.stdin
             else:
-                self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
-                self.outfile = self.outfile_proc.stdin
+                self.outfile = sys.stdout.buffer
+                #  self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
+                #  self.outfile = self.outfile_proc.stdin
 
-    def write_output(self, row, padding=None, is_header=False):
-        self.start_outfile()
-        self.outfile.write(self.format_row(row, padding) + self.opts.ors)
-        self.outfile.flush()
+    def write_output(self, row, padding=None, stderr=False):
+        if stderr:
+            outfile = sys.stderr.buffer
+        else:
+            self.start_outfile()
+            outfile = self.outfile
+        row = self.format_row(row, padding) + self.opts.ors
+        outfile.write(row)
+        outfile.flush()
 
     def on_header(self, header, padding=None) -> bool:
         if not self.opts.drop_header:
@@ -433,7 +441,7 @@ class _Base:
                 header[-1] += self.RESET_COLOUR
             return _Base.on_row(self, header, padding, is_header=True)
 
-    def on_row(self, row, padding=None, is_header=False) -> bool:
+    def on_row(self, row, padding=None, is_header=False, stderr=False) -> bool:
         if self.__numcols is None:
             self.__numcols = len(row)
             self.__rgb_map = [self.get_rgb(i) for i in range(self.__numcols)]
@@ -442,7 +450,7 @@ class _Base:
         if self.opts.ofs is self.PRETTY_OUTPUT:
             self.__gathered_rows.append(self.format_columns(row, self.PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
         else:
-            return self.write_output(row, padding, is_header)
+            return self.write_output(row, padding, stderr)
 
     def justify(self, rows: list[bytes]):
         # get width of each column
