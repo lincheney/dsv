@@ -37,7 +37,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(mut opts: Opts, _base: &mut base::Base) -> Result<Self> {
         if opts.count {
             opts.count_column.get_or_insert_with(|| "count".into());
         }

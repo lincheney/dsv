@@ -3,7 +3,7 @@ use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer, WriterState};
-use std::io::{Read, BufRead, BufReader};
+use std::io::{Read, BufRead, BufReader, IsTerminal};
 use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{ExitCode};
 use anyhow::{Result, Context};
@@ -148,12 +148,19 @@ pub struct BaseOptions {
     pub quote_output: bool,
 
     #[clap(skip)]
-    pub is_tty: bool,
+    pub is_stdout_tty: bool,
+    #[clap(skip)]
+    pub is_stderr_tty: bool,
+    #[clap(skip)]
+    pub stderr_colour: bool,
+    #[clap(skip)]
+    pub stderr_rainbow_columns: bool,
 }
 
 impl BaseOptions {
-    pub fn post_process(&mut self, is_tty: bool) {
-        self.is_tty = is_tty;
+    pub fn post_process(&mut self) {
+        self.is_stdout_tty = std::io::stdout().is_terminal();
+        self.is_stderr_tty = std::io::stderr().is_terminal();
 
         if self.no_header {
             self.header = Some(false);
@@ -166,12 +173,15 @@ impl BaseOptions {
         if self.ors.is_none() {
             self.ors = self.irs.clone();
         }
-        self.colour = self.colour.resolve(is_tty);
+        self.stderr_colour = !self.page && self.colour.is_on(self.is_stderr_tty);
+        self.colour = self.colour.resolve(self.is_stdout_tty);
         if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
             self.colour = AutoChoices::Never;
+            self.stderr_colour = false;
         }
-        self.numbered_columns = self.numbered_columns.resolve(is_tty);
-        self.rainbow_columns = self.rainbow_columns.resolve(is_tty);
+        self.numbered_columns = self.numbered_columns.resolve(self.is_stdout_tty);
+        self.stderr_rainbow_columns = !self.page && self.rainbow_columns.is_on(self.is_stderr_tty);
+        self.rainbow_columns = self.rainbow_columns.resolve(self.is_stdout_tty);
         if self.header_bg_colour.is_none() {
             self.header_bg_colour = Some("\x1b[48;5;237m".into());
         }
@@ -783,7 +793,7 @@ impl<W: Writer> Output<W> {
 
     pub fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
         let mut state = WriterState{ ors: self.opts.get_ors(), ..WriterState::default() };
-        if self.opts.is_tty {
+        if self.opts.is_stdout_tty {
             state.ors.insert_str(0, b"\x1b[K");
         }
         for msg in receiver {

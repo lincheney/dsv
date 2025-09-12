@@ -19,7 +19,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(_opts: Opts, base: &mut base::Base) -> Result<Self> {
         base.opts.no_header = false;
         base.opts.header = Some(true);
         base.opts.irs = Some("\n".into());

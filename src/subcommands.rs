@@ -34,18 +34,17 @@ macro_rules! add_subcommands {
         pub fn run<F: Fn(&mut Base, Receiver<Message>) -> Result<ExitCode>>(
             subcommand: Option<Command>,
             mut cli_opts: BaseOptions,
-            is_tty: bool,
             default: F,
         ) -> Result<ExitCode> {
             std::thread::scope(|scope| {
                 let (sender, receiver) = mpsc::channel();
-                cli_opts.post_process(is_tty);
+                cli_opts.post_process();
                 let mut base = Base::new(cli_opts.clone(), sender, scope);
                 match subcommand {
                     $(
-                        Some(Command::$name(opts)) => $name::Handler::new(opts, &mut base, is_tty)?.run(&mut base, receiver),
+                        Some(Command::$name(opts)) => $name::Handler::new(opts, &mut base)?.run(&mut base, receiver),
                     )*
-                    Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts, &mut base, is_tty)?.run(&mut base, receiver),
+                    Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts, &mut base)?.run(&mut base, receiver),
                     None => default(&mut base, receiver),
                 }
             })
@@ -63,18 +62,17 @@ macro_rules! add_subcommands {
                 args: I,
                 sender: Sender<Message>,
                 scope: &'a std::thread::Scope<'a, 'b>,
-                is_tty: bool,
                 writer: bool,
         ) -> Result<(Self, Base<'a, 'b>, Option<Box<dyn Send + FnOnce(Receiver<Message>) -> Result<()>>>)> {
 
                 const ARG0: &str = env!("CARGO_PKG_NAME");
                 let mut cli = Cli::parse_from(std::iter::once(ARG0).chain(args));
-                cli.opts.post_process(is_tty);
+                cli.opts.post_process();
                 let mut base = Base::new(cli.opts, sender, scope);
                 let (handler, writer) = match cli.command {
                     $(
                         Some(Command::$name(opts)) => {
-                            let h = Self::$name($name::Handler::new(opts, &mut base, is_tty)?);
+                            let h = Self::$name($name::Handler::new(opts, &mut base)?);
                             let w = if writer {
                                 let cli_opts = base.opts.clone();
                                 Some(Box::new(|r| $name::Handler::make_writer(cli_opts).run(r)) as _)

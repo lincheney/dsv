@@ -19,8 +19,8 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
-        opts.row_sep = opts.row_sep.resolve(is_tty);
+    pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
+        opts.row_sep = opts.row_sep.resolve(base.opts.is_stdout_tty);
         if base.opts.ofs.is_none() {
             base.opts.pretty = true;
         }

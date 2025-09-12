@@ -20,7 +20,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
         let mut grep_opts = grep::Opts::default();
         // can't make pattern optional and replace required
         // so if replace is missing, the value is actually in optional
@@ -29,7 +29,7 @@ impl Handler {
         grep_opts.common = opts.common;
         grep_opts.passthru = true;
         Ok(Self{
-            inner: grep::Handler::new(grep_opts, base, is_tty)?,
+            inner: grep::Handler::new(grep_opts, base)?,
         })
     }
 }

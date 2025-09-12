@@ -22,13 +22,13 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base) -> Result<Self> {
         let mut py_opts = py::Opts::default();
         py_opts.common = opts.common;
         if py_opts.common.ignore_errors {
             py_opts.common.remove_errors = true;
         }
-        let inner = py::Handler::new(py_opts, base, is_tty)?;
+        let inner = py::Handler::new(py_opts, base)?;
         let all = {
             let py = inner.py.acquire_gil();
             py.get_builtin(py.to_str("all").unwrap())

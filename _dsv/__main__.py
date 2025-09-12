@@ -13,7 +13,7 @@ def main():
     opts, extras = parser.parse_known_args(args)
 
     # print help if no input file
-    if _utils.stdin_is_tty():
+    if _utils.is_tty(0):
         sub_mapping.get(opts.handler, parser).print_help()
         return
 

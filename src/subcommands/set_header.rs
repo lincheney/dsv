@@ -23,7 +23,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut base::Base) -> Result<Self> {
         Ok(Self {
             opts,
             got_header: false,

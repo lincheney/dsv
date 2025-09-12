@@ -27,66 +27,7 @@ class Logger:
             if not isinstance(v, bytes):
                 v = str(v).encode()
             _Base.on_row(self.parent, self.keys + [v], stderr=stderr)
-        self.print_progress_bar()
-
-    def print_progress_bar(self, newline=False, width=40):
-        if not self.parent.opts.progress_bar:
-            return
-
-        stats = self.parent.stats
-        failed = stats.finished - stats.succeeded
-        running = stats.total - stats.finished - stats.queued
-        bars = [
-            divmod(width * stats.succeeded, stats.total),
-            divmod(width * failed, stats.total),
-            divmod(width * running, stats.total),
-            divmod(width * stats.queued, stats.total),
-        ]
-        for i, b in enumerate(bars):
-            if b[0] == 0 and b[1] > 0:
-                bars[i] = (1, 0)
-
-        while True:
-            current_width = sum(x for x, y in bars)
-            if current_width >= width:
-                break
-            i, (x, y) = max(enumerate(bars), key=lambda ixy: ixy[1][1])
-            if y == 0:
-                bars[3] = (width - current_width, 0)
-                break
-            #  round this one up
-            bars[i] = (x + 1, 0)
-
-        colour = self.parent.opts.colour
-        vars = dict(
-            succeeded_colour =  "\x1b[32m" if colour else "",
-            failed_colour =  "\x1b[31m"  if colour else "",
-            clear =  "\x1b[0m" if colour else "",
-            succeeded_len = bars[0][0],
-            failed_len = bars[1][0],
-            running_len = bars[2][0],
-            queued_len = bars[3][0],
-            finished = stats.finished,
-            total = stats.total,
-            failed = failed,
-        )
-
-        bar = ''.join((
-            "{clear}[{succeeded_colour}{0:",
-            "=",
-            ">{succeeded_len}}{failed_colour}{0:",
-            "=",
-            ">{failed_len}}{clear}{0:",
-            "=",
-            ">{running_len}}{clear}{0:",
-            " ",
-            ">{queued_len}}] ({finished} / {total}) ({failed} failed)\r",
-        )).format('', **vars)
-
-        if newline:
-            bar += '\n'
-        sys.stderr.buffer.write(bar.encode())
-        sys.stderr.buffer.flush()
+        self.parent.print_progress_bar()
 
 class xargs(_Base):
     ''' build and execute command lines '''
@@ -208,4 +149,64 @@ class xargs(_Base):
         self.queue.put(None)
         if self.thread:
             self.thread.join()
+        self.print_progress_bar(newline=True)
         super().on_eof()
+
+    def print_progress_bar(self, newline=False, width=40):
+        if not self.opts.progress_bar:
+            return
+
+        stats = self.stats
+        failed = stats.finished - stats.succeeded
+        running = stats.total - stats.finished - stats.queued
+        bars = [
+            divmod(width * stats.succeeded, stats.total),
+            divmod(width * failed, stats.total),
+            divmod(width * running, stats.total),
+            divmod(width * stats.queued, stats.total),
+        ]
+        for i, b in enumerate(bars):
+            if b[0] == 0 and b[1] > 0:
+                bars[i] = (1, 0)
+
+        while True:
+            current_width = sum(x for x, y in bars)
+            if current_width >= width:
+                break
+            i, (x, y) = max(enumerate(bars), key=lambda ixy: ixy[1][1])
+            if y == 0:
+                bars[3] = (width - current_width, 0)
+                break
+            #  round this one up
+            bars[i] = (x + 1, 0)
+
+        colour = self.opts.colour
+        vars = dict(
+            succeeded_colour =  "\x1b[32m" if colour else "",
+            failed_colour =  "\x1b[31m"  if colour else "",
+            clear =  "\x1b[0m" if colour else "",
+            succeeded_len = bars[0][0],
+            failed_len = bars[1][0],
+            running_len = bars[2][0],
+            queued_len = bars[3][0],
+            finished = stats.finished,
+            total = stats.total,
+            failed = failed,
+        )
+
+        bar = ''.join((
+            "{clear}[{succeeded_colour}{0:",
+            "=",
+            ">{succeeded_len}}{failed_colour}{0:",
+            "=",
+            ">{failed_len}}{clear}{0:",
+            "=",
+            ">{running_len}}{clear}{0:",
+            " ",
+            ">{queued_len}}] ({finished} / {total}) ({failed} failed)\r",
+        )).format('', **vars)
+
+        if newline:
+            bar += '\n'
+        sys.stderr.buffer.write(bar.encode())
+        sys.stderr.buffer.flush()

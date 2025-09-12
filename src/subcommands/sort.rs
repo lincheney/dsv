@@ -58,7 +58,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(mut opts: Opts, _base: &mut base::Base) -> Result<Self> {
         opts.fields.extend(opts.old_style_fields.iter().flat_map(|x| x.split(',')).map(|x| x.into()));
         let column_slicer = ColumnSlicer::new(&opts.fields, opts.regex);
         Ok(Self {

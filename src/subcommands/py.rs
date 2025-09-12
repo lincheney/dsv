@@ -61,7 +61,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, _base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut base::Base) -> Result<Self> {
         let python = python::Python::new(opts.common.libpython.as_ref().map(|x| x.as_ref()))?;
 
         let py = python.acquire_gil();

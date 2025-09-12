@@ -49,7 +49,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, _: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, _: &mut base::Base) -> Result<Self> {
         Ok(Self{
             slicers: Slicers{
                 group: ColumnSlicer::new(&opts.fields, opts.regex),

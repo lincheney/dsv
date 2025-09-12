@@ -95,7 +95,7 @@ enum Type {
 const CUTOFF: f64 = 0.8;
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut base::Base, is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base) -> Result<Self> {
         base.opts.pretty = true;
 
         // verify the types
@@ -126,7 +126,7 @@ impl Handler {
         Ok(Self{
             complement: opts.complement,
             column_slicer: (!opts.fields.is_empty()).then(|| ColumnSlicer::new(&opts.fields, opts.regex)),
-            col_sep: opts.col_sep.is_on(is_tty),
+            col_sep: opts.col_sep.is_on(base.opts.is_stdout_tty),
             header: None,
             rows: vec![],
             types,

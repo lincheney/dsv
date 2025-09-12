@@ -69,7 +69,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts, base: &mut Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut Base) -> Result<Self> {
         if !opts.fields.is_empty() {
             opts.left_fields = opts.fields.clone();
             opts.right_fields = std::mem::take(&mut opts.fields);

@@ -21,7 +21,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(_opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(_opts: Opts, base: &mut base::Base) -> Result<Self> {
         base.opts.header_colour.get_or_insert_with(|| "\x1b[1m".into());
         base.opts.trailer = base::AutoChoices::Never;
         base.opts.numbered_columns = base::AutoChoices::Never;
@@ -109,8 +109,9 @@ impl Writer for MarkdownWriter {
         is_header: bool,
         opts: &base::BaseOptions,
         _ofs: &base::Ofs,
+        colour: bool,
     ) -> BString {
-        self.inner.format_row(state, row, padding, is_header, opts, &self.ofs)
+        self.inner.format_row(state, row, padding, is_header, opts, &self.ofs, colour)
     }
 
     fn write_header(

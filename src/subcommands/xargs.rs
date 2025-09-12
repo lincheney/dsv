@@ -346,7 +346,7 @@ impl ProcStats {
     fn running(&self) -> usize { self.started() - self.finished }
 
     fn draw_progress_bar(&self, base: &mut base::Base, opts: &Opts, newline: bool) -> bool {
-        if !opts.progress_bar.is_on(base.opts.is_tty) {
+        if !opts.progress_bar.is_on(base.opts.is_stderr_tty) {
             return false
         }
 
@@ -577,7 +577,7 @@ fn proc_loop(
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base) -> Result<Self> {
         let (sender, receiver) = mio_channel::channel();
         let (err_sender, err_receiver) = mpsc::channel();
         let (send_notify, recv_notify) = mpsc::channel();

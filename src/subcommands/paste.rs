@@ -18,7 +18,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut Base) -> Result<Self> {
 
         let mut receivers = vec![];
         let mut err_receivers = vec![];

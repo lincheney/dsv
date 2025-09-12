@@ -29,7 +29,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut Base, is_tty: bool) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut Base) -> Result<Self> {
         let Args::Args(args) = opts.args;
 
         let (payload_sender, payload_receiver) = mpsc::channel();
@@ -49,7 +49,7 @@ impl Handler {
                 scope.spawn(move || {
                     let result = (|| {
                         let args = arg.iter().map(|x| x.as_ref());
-                        let (handler, mut base, writer) = super::Subcommands::from_args(args, new_sender, scope, is_tty, true)?;
+                        let (handler, mut base, writer) = super::Subcommands::from_args(args, new_sender, scope, true)?;
                         // take opts from the last handler?
                         payload_sender.send(Payload {
                             writer: writer.unwrap(),
@@ -63,7 +63,7 @@ impl Handler {
                 scope.spawn(move || {
                     let result = (|| {
                         let args = arg.iter().map(|x| x.as_ref());
-                        let (handler, mut base, _) = super::Subcommands::from_args(args, new_sender, scope, false, false)?;
+                        let (handler, mut base, _) = super::Subcommands::from_args(args, new_sender, scope, false)?;
                         handler.forward_messages(&mut base, receiver)
                     })();
                     err_sender.send(result).unwrap();

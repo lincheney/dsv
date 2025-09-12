@@ -8,12 +8,8 @@ from functools import cache
 from ._table import to_bytes, parse_datetime
 
 @cache
-def stdin_is_tty():
-    return os.isatty(0)
-
-@cache
-def stdout_is_tty():
-    return os.isatty(1)
+def is_tty(fd):
+    return os.isatty(fd)
 
 def utf8_type(x):
     return x.encode('utf8')
@@ -25,8 +21,8 @@ def regex_arg_type(regex):
         raise argparse.ArgumentTypeError(f'{value} does not match: {regex}')
     return wrapped
 
-def resolve_tty_auto(x: str):
-    return x == 'always' or (x == 'auto' and stdout_is_tty())
+def resolve_tty_auto(x: str, fd=1):
+    return x == 'always' or (x == 'auto' and is_tty(fd))
 
 def remove_ansi_colour(value: bytes):
     if b'\x1b[' in value or b'\x1b]' in value:

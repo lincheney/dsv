@@ -92,7 +92,7 @@ class _Base:
         self.outfile = outfile
 
         # setup subprocess outfiles later
-        if not self.outfile and not _utils.stdout_is_tty():
+        if not self.outfile and not _utils.is_tty(1):
             self.outfile = sys.stdout.buffer
 
         if self.opts.extras:
@@ -129,12 +129,13 @@ class _Base:
             opts.quote_output = True
 
         opts.trailer = opts.trailer or 'auto'
+        opts.stderr_colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
         opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
         opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'auto')
         opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'auto')
         opts.header_colour = opts.header_colour or b'\x1b[1;4m'
         opts.header_bg_colour = opts.header_bg_colour or b'\x1b[48;5;237m'
-        if _utils.stdout_is_tty():
+        if _utils.is_tty(1):
             opts.ors = b'\x1b[K' + opts.ors
 
         for k, v in kwargs.items():
@@ -369,7 +370,7 @@ class _Base:
                         row[i] = b'"' + col.replace(b'"', b'""') + b'"'
         return row
 
-    def format_row(self, row, padding=None):
+    def format_row(self, row, colour: bool, padding=None):
         ofs = self.opts.ofs
         row = self.format_columns(row, ofs, self.opts.ors, self.opts.quote_output)
 
@@ -379,7 +380,7 @@ class _Base:
                 if p > 0:
                     row[i] += b' ' * p
 
-        if self.opts.colour and self.opts.rainbow_columns:
+        if colour and self.opts.rainbow_columns:
             # colour each column differently
 
             if len(row) > len(self.__rgb_map):
@@ -418,7 +419,7 @@ class _Base:
         else:
             self.start_outfile()
             outfile = self.outfile
-        row = self.format_row(row, padding) + self.opts.ors
+        row = self.format_row(row, self.opts.stderr_colour if stderr else self.opts.colour, padding) + self.opts.ors
         outfile.write(row)
         outfile.flush()
 
@@ -497,11 +498,11 @@ class _Base:
                         break
 
         # show a trailer if too much data
-        if self.out_header and (self.opts.trailer == 'always' or (_utils.stdout_is_tty() and self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):
+        if self.out_header and (self.opts.trailer == 'always' or (_utils.is_tty(1) and self.opts.trailer == 'auto' and self.row_count > shutil.get_terminal_size().lines)):
             _Base.on_header(self, self.out_header, header_padding)
 
     def get_separator(self):
-        if _utils.stdout_is_tty():
+        if _utils.is_tty(1):
             return Separator((b'\x1b[2m' + b'-' * shutil.get_terminal_size().columns,))
         else:
             return Separator((b'---',))

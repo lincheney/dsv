@@ -73,7 +73,7 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(mut opts: Opts, base: &mut base::Base, _is_tty: bool) -> Result<Self> {
+    pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
         if opts.passthru {
             opts.before_context = None;
             opts.after_context = None;

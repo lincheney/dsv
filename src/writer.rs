@@ -149,7 +149,7 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs);
+        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs, opts.colour.is_on(false));
         self.write_raw(state, formatted_row, true, opts, is_header)
     }
 
@@ -172,7 +172,7 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(state, row, padding, false, opts, ofs);
+        let formatted_row = self.format_row(state, row, padding, false, opts, ofs, opts.stderr_colour);
         self.write_raw_stderr(state, formatted_row, true, opts)
     }
 
@@ -211,8 +211,8 @@ pub trait Writer {
         is_header: bool,
         opts: &BaseOptions,
         ofs: &Ofs,
+        colour: bool,
     ) -> BString {
-        let colour = opts.colour == AutoChoices::Always;
 
         if colour && opts.rainbow_columns == AutoChoices::Always {
             // colour each column differently
