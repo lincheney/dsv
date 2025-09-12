@@ -21,8 +21,8 @@ def regex_arg_type(regex):
         raise argparse.ArgumentTypeError(f'{value} does not match: {regex}')
     return wrapped
 
-def resolve_tty_auto(x: str, fd=1):
-    return x == 'always' or (x == 'auto' and is_tty(fd))
+def resolve_tty_auto(x: str, fd=1, checker=is_tty):
+    return x == 'always' or (x == 'auto' and checker(fd))
 
 def remove_ansi_colour(value: bytes):
     if b'\x1b[' in value or b'\x1b]' in value:

@@ -2,6 +2,7 @@ import sys
 import os
 import subprocess
 import re
+import stat
 import asyncio
 import argparse
 from collections import deque
@@ -50,10 +51,13 @@ class xargs(_Base):
     parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
 
+    def should_have_progress_bar(self, fd):
+        return _utils.is_tty(fd) and ( _utils.is_tty(1) or stat.S_ISREG(os.fstat(1).st_mode))
+
     def __init__(self, opts):
         opts.command.extend(map(_utils.utf8_type, opts.extras))
         opts.extras = ()
-        opts.progress_bar = _utils.resolve_tty_auto(opts.progress_bar or 'auto')
+        opts.progress_bar = _utils.resolve_tty_auto(opts.progress_bar or 'auto', fd=2, checker=self.should_have_progress_bar)
         super().__init__(opts)
         self.header_map = {}
         self.thread = None

@@ -7,11 +7,14 @@ use crate::base;
 use std::ffi::{OsString};
 use std::os::unix::{ffi::OsStringExt, process::ExitStatusExt};
 use std::collections::{VecDeque, HashMap, hash_map::Entry};
-use std::os::fd::{RawFd, AsRawFd};
+use std::os::fd::{AsFd, RawFd, AsRawFd};
 use std::process::{Child, Command, Stdio, ChildStdout, ChildStderr};
 use std::io::{Read};
 use bstr::{BString, BStr, ByteSlice, ByteVec};
 use clap::{Parser, CommandFactory, ArgAction, error::{ErrorKind, ContextKind, ContextValue}};
+use nix::sys::stat::{fstat, SFlag};
+use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
+use nix::sys::signal::{kill, SIGTERM};
 
 fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
     let mut new: BString = b"".into();
@@ -71,15 +74,15 @@ struct BufferedReader<R> {
     used: usize,
 }
 
-impl<R: Read+AsRawFd> BufferedReader<R> {
+impl<R: Read+AsFd> BufferedReader<R> {
     fn new(inner: R, token: mio::Token, registry: &mio::Registry) -> Result<Self> {
-        let fd = inner.as_raw_fd();
-        unsafe {
-            if libc::fcntl(fd, libc::F_SETFL, libc::O_NONBLOCK) != 0 || libc::fcntl(fd, libc::F_SETFD, libc::FD_CLOEXEC) != 0 {
-                return Err(std::io::Error::last_os_error())?;
-            }
+        let fd = inner.as_fd();
+        if fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK)).is_err()
+        || fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).is_err() {
+            return Err(std::io::Error::last_os_error())?;
         }
 
+        let fd = fd.as_raw_fd();
         registry.register(&mut mio::unix::SourceFd(&fd), token, mio::Interest::READABLE)?;
         Ok(Self{
             fd: Some(fd),
@@ -357,9 +360,7 @@ impl Proc {
 impl Drop for Proc {
     fn drop(&mut self) {
         if let Some((child, _pidfd)) = &mut self.child {
-            unsafe {
-                libc::kill(child.id() as _, libc::SIGTERM);
-            }
+            let _ = kill(nix::unistd::Pid::from_raw(child.id() as _), SIGTERM);
             let _ = child.kill();
             let _ = child.wait();
         }
@@ -384,7 +385,7 @@ impl ProcStats {
     fn running(&self) -> usize { self.started() - self.finished }
 
     fn draw_progress_bar(&self, base: &mut base::Base, opts: &Opts, newline: bool) -> bool {
-        if !opts.progress_bar.is_on(base.opts.is_stderr_tty) {
+        if !opts.progress_bar.is_on(false) {
             return false
         }
 
@@ -623,10 +624,15 @@ fn proc_loop(
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut base::Base) -> Result<Self> {
-        let (sender, receiver) = mio_channel::channel();
-        let (err_sender, err_receiver) = mpsc::channel();
-        let (send_notify, recv_notify) = mpsc::channel();
+    pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
+        opts.progress_bar = opts.progress_bar.resolve_if(|| {
+            base.opts.is_stderr_tty && (
+                base.opts.is_stdout_tty
+                || fstat(std::io::stdout().as_fd())
+                    .map(|s| SFlag::S_IFREG.intersects(SFlag::from_bits_truncate(s.st_mode)))
+                    .unwrap_or(false)
+            )
+        });
 
         let job_limit = opts.jobs.as_ref().or(opts.max_procs.as_ref()).map_or(1, |jobs| {
             if let Ok(j) = jobs.parse::<usize>() {
@@ -648,6 +654,10 @@ impl Handler {
                 err.exit();
             }
         });
+
+        let (sender, receiver) = mio_channel::channel();
+        let (err_sender, err_receiver) = mpsc::channel();
+        let (send_notify, recv_notify) = mpsc::channel();
 
         let mut base = base.clone();
         base.scope.spawn(move || {

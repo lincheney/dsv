@@ -82,6 +82,14 @@ impl AutoChoices {
         }
     }
 
+    pub fn resolve_if<F: Fn() -> bool>(self, is_tty: F) -> Self {
+        if self.is_on_if(is_tty) {
+            Self::Always
+        } else {
+            Self::Never
+        }
+    }
+
     pub fn is_on(self, is_tty: bool) -> bool {
         match self {
             Self::Always => true,
@@ -90,7 +98,7 @@ impl AutoChoices {
         }
     }
 
-    fn is_on_if<F: Fn() -> bool>(self, is_tty: F) -> bool {
+    pub fn is_on_if<F: Fn() -> bool>(self, is_tty: F) -> bool {
         match self {
             Self::Always => true,
             Self::Never => false,
