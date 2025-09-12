@@ -21,7 +21,7 @@ pub struct Opts {
     append_columns: Vec<String>,
     #[arg(short = 'q', long, action = ArgAction::SetTrue, help = "do not do CSV quoting on the input")]
     no_quote_input: bool,
-    #[arg(help = "command to pipe rows through")]
+    #[arg(trailing_var_arg = true, help = "command to pipe rows through")]
     command: Vec<String>,
 }
 

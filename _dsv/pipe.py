@@ -18,6 +18,8 @@ class pipe(_ColumnSlicer):
     parser.add_argument('command', nargs='+', help='command to pipe rows through')
 
     def __init__(self, opts):
+        opts.command.extend(opts.extras)
+        opts.extras = ()
         super().__init__(opts)
         self.queue = deque()
 
