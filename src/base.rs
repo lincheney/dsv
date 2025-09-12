@@ -188,8 +188,6 @@ impl BaseOptions {
             self.stderr_colour = false;
         }
         self.numbered_columns = self.numbered_columns.resolve(self.is_stdout_tty);
-        self.stderr_rainbow_columns = !self.page && self.rainbow_columns.is_on(self.is_stderr_tty);
-        self.rainbow_columns = self.rainbow_columns.resolve(self.is_stdout_tty);
         if self.header_bg_colour.is_none() {
             self.header_bg_colour = Some("\x1b[48;5;237m".into());
         }

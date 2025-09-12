@@ -214,7 +214,7 @@ pub trait Writer {
         colour: bool,
     ) -> BString {
 
-        if colour && opts.rainbow_columns == AutoChoices::Always {
+        if colour && opts.rainbow_columns != AutoChoices::Never {
             // colour each column differently
             self.set_rgb(state, row.len());
         }

@@ -229,7 +229,7 @@ class xargs(_Base):
             #  round this one up
             bars[i] = (x + 1, 0)
 
-        colour = self.opts.colour
+        colour = self.opts.stderr_colour
         vars = dict(
             succeeded_colour =  "\x1b[32m" if colour else "",
             failed_colour =  "\x1b[31m"  if colour else "",

@@ -129,10 +129,10 @@ class _Base:
             opts.quote_output = True
 
         opts.trailer = opts.trailer or 'auto'
-        opts.stderr_colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
+        opts.stderr_colour = not opts.page and os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto', fd=2)
         opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
         opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'auto')
-        opts.rainbow_columns = opts.colour and _utils.resolve_tty_auto(opts.rainbow_columns or 'auto')
+        opts.rainbow_columns = opts.rainbow_columns or 'auto'
         opts.header_colour = opts.header_colour or b'\x1b[1;4m'
         opts.header_bg_colour = opts.header_bg_colour or b'\x1b[48;5;237m'
         if _utils.is_tty(1):
@@ -380,7 +380,7 @@ class _Base:
                 if p > 0:
                     row[i] += b' ' * p
 
-        if colour and self.opts.rainbow_columns:
+        if colour and self.opts.rainbow_columns != 'never':
             # colour each column differently
 
             if len(row) > len(self.__rgb_map):
