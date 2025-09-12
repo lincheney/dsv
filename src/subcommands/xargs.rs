@@ -256,7 +256,7 @@ impl Proc {
         format: &BStr,
         keys: Option<&HashMap<BString, usize>>,
         values: &[BString],
-    ) -> Result<BString> {
+    ) -> Result<Option<BString>> {
 
         let mut err = Ok(());
         let result = placeholder_regex.replace_all(format, |c: &Captures| -> Cow<[u8]> {
@@ -294,7 +294,10 @@ impl Proc {
         });
 
         err?;
-        Ok(result.into_owned().into())
+        match result {
+            Cow::Borrowed(_) => Ok(None),
+            Cow::Owned(x) => Ok(Some(x.into())),
+        }
     }
 
     fn format_args(
@@ -304,29 +307,32 @@ impl Proc {
         values: &[BString],
     ) -> Result<Vec<BString>> {
 
-        let command = if command.is_empty() {
+        if command.is_empty() {
             // just print out
             let mut cmd = vec![
                 b"printf".into(),
                 b"%s\n".into(),
             ];
             cmd.extend(values.iter().cloned());
-            cmd
-        } else if command.len() == 1 && command[0].contains(' ') {
+            return Ok(cmd)
+        }
+
+        let mut formatted = false;
+        let mut cmd = vec![];
+        for c in command {
+            let x = Self::format_arg(placeholder_regex, c.as_bytes().into(), keys, values)?;
+            formatted = formatted || x.is_some();
+            cmd.push(x.unwrap_or(c.clone().into()));
+        }
+
+        if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
-            vec![
-                b"bash".into(),
-                b"-c".into(),
-                Self::format_arg(placeholder_regex, command[0].as_bytes().into(), keys, values)?,
-            ]
-        } else {
-            let mut cmd = vec![];
-            for c in command {
-                cmd.push(Self::format_arg(placeholder_regex, c.as_bytes().into(), keys, values)?);
-            }
-            cmd
-        };
-        Ok(command)
+            cmd.splice(0..0, [b"bash".into(), b"-c".into()]);
+        } else if !formatted {
+            // no arguments are formatted, append the args at the end
+            cmd.extend(values.iter().cloned());
+        }
+        Ok(cmd)
     }
 
     fn new(

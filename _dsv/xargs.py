@@ -166,10 +166,13 @@ class xargs(_Base):
     async def start_proc(self, row):
         logger = Logger(self.stats.total - self.stats.queued, self, row)
         try:
-            if self.opts.command:
-                formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
-            else:
+            if not self.opts.command:
                 formatted = ['printf', '%s\n'] + row
+            elif not any(self.placeholder_regex.match(c) for c in self.opts.command):
+                # no arguments are formatted, append the args at the end
+                formatted = self.opts.command + row
+            else:
+                formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
 
             if len(self.opts.command) == 1 and b' ' in self.opts.command[0]:
                 formatted = [b'bash', b'-c', formatted[0]]
