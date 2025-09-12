@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::base;
 use bstr::{BString};
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 use crate::column_slicer::ColumnSlicer;
 
 #[derive(Parser)]
@@ -9,11 +9,11 @@ use crate::column_slicer::ColumnSlicer;
 pub struct Opts {
     #[arg(help = "new header names")]
     fields: Vec<String>,
-    #[arg(long, action = ArgAction::SetTrue, help = "drop all other header names")]
+    #[arg(long, help = "drop all other header names")]
     only: bool,
-    #[arg(num_args = 2, action = ArgAction::Append, long, value_names = ["A", "B"], help = "rename field A to B")]
+    #[arg(num_args = 2, long, value_names = ["A", "B"], help = "rename field A to B")]
     rename: Vec<String>,
-    #[arg(long, action = ArgAction::SetTrue, help = "automatically name the headers, only useful if there is no input")]
+    #[arg(long, help = "automatically name the headers, only useful if there is no input")]
     auto: bool,
 }
 

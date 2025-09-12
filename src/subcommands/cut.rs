@@ -2,7 +2,7 @@ use anyhow::Result;
 use crate::base;
 use bstr::BString;
 use crate::column_slicer::ColumnSlicer;
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 #[derive(Parser)]
 #[command(about = "select columns")]
@@ -11,9 +11,9 @@ pub struct Opts {
     fields: Vec<String>,
     #[arg(short = 'f', long = "fields", value_name = "fields", help = "select only these fields")]
     old_style_fields: Vec<String>,
-    #[arg(short = 'x', long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
     complement: bool,
-    #[arg(short = 'r', long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(short = 'r', long, help = "treat fields as regexes")]
     regex: bool,
 }
 

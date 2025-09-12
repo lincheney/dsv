@@ -4,7 +4,7 @@ use bstr::{BString, ByteSlice};
 use crate::column_slicer::ColumnSlicer;
 use std::process::{Command, Child, ChildStdin, ChildStdout, Stdio};
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 const ORS: u8 = b'\x00';
 
@@ -15,31 +15,31 @@ pub struct Opts {
     fields: Vec<String>,
     #[arg(short = 'k', long = "fields", value_name = "fields", help = "sort based only on these fields")]
     old_style_fields: Vec<String>,
-    #[arg(short = 'x', long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
     complement: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(long, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(short = 'b', long, action = ArgAction::SetTrue, help = "ignore leading blanks")]
+    #[arg(short = 'b', long, help = "ignore leading blanks")]
     ignore_leading_blanks: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "consider only blanks and alphanumeric characters")]
+    #[arg(long, help = "consider only blanks and alphanumeric characters")]
     dictionary_order: bool,
-    #[arg(short = 'f', long, action = ArgAction::SetTrue, help="fold lower case to upper case characters")]
+    #[arg(short = 'f', long, help="fold lower case to upper case characters")]
     ignore_case: bool,
-    #[arg(short = 'g', long, action = ArgAction::SetTrue, help="compare according to general numerical value")]
+    #[arg(short = 'g', long, help="compare according to general numerical value")]
     general_numeric_sort: bool,
-    #[arg(short = 'i', long, action = ArgAction::SetTrue, help="consider only printable characters")]
+    #[arg(short = 'i', long, help="consider only printable characters")]
     ignore_nonprinting: bool,
-    #[arg(short = 'M', long, action = ArgAction::SetTrue, help="sort by month name e.g. JAN < DEC")]
+    #[arg(short = 'M', long, help="sort by month name e.g. JAN < DEC")]
     month_sort: bool,
-    #[arg(short = 'h', long, action = ArgAction::SetTrue, help="compare human readable numbers e.g. 4K < 2G")]
+    #[arg(short = 'h', long, help="compare human readable numbers e.g. 4K < 2G")]
     human_numeric_sort: bool,
-    #[arg(short = 'n', long, action = ArgAction::SetTrue, help="compare according to string numerical value")]
+    #[arg(short = 'n', long, help="compare according to string numerical value")]
     numeric_sort: bool,
-    #[arg(short = 'R', long, action = ArgAction::SetTrue, help="shuffle, but group identical keys")]
+    #[arg(short = 'R', long, help="shuffle, but group identical keys")]
     random_sort: bool,
-    #[arg(short = 'r', long, action = ArgAction::SetTrue, help="sort in reverse order")]
+    #[arg(short = 'r', long, help="sort in reverse order")]
     reverse: bool,
-    #[arg(short = 'V', long, action = ArgAction::SetTrue, help="natural sort of version numbers within text")]
+    #[arg(short = 'V', long, help="natural sort of version numbers within text")]
     version_sort: bool,
 }
 

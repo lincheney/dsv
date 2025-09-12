@@ -1,7 +1,7 @@
 use anyhow::Result;
 use crate::base;
 use bstr::{BString};
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 use super::py;
 use std::ffi::{CString, CStr};
 use crate::column_slicer::ColumnSlicer;
@@ -11,9 +11,9 @@ use crate::python;
 struct OtherOpts {
     #[arg(short = 'k', long, help = "sort based only on these fields")]
     fields: Vec<String>,
-    #[arg(short = 'x', long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
     complement: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(long, help = "treat fields as regexes")]
     regex: bool,
     #[arg(short = 'p', long, conflicts_with_all = ["regex", "complement"], help = "grouping fields are python scripts")]
     python_fields: bool,

@@ -50,7 +50,7 @@ mod verbosity {
 pub struct Opts {
     #[arg(short = 'p', long, help = "run up to num processes at a time, the default is 1")]
     max_procs: Option<String>,
-    #[arg(short = 'j', long, overrides_with = "max_procs", help = "run up to num processes at a time, the default is 1")]
+    #[arg(short, long, overrides_with = "max_procs", help = "run up to num processes at a time, the default is 1")]
     jobs: Option<String>,
     #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "print a progress bar")]
     progress_bar: base::AutoChoices,

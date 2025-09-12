@@ -5,7 +5,7 @@ use crate::base::*;
 use bstr::{BString, BStr};
 use std::collections::{HashSet, HashMap, hash_map::Entry};
 use crate::column_slicer::ColumnSlicer;
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 use once_cell::sync::Lazy;
 
 static PERCENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"%.").unwrap());
@@ -33,7 +33,7 @@ pub struct Opts {
     right_fields: Vec<String>,
     #[arg(short = 'e', value_name = "STRING", help = "replace missing input fields with STRING")]
     empty_value: Option<String>,
-    #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(long, help = "treat fields as regexes")]
     regex: bool,
     #[arg(long, help = "rename header from stdin according to this %%-format string")]
     rename_1: Option<String>,

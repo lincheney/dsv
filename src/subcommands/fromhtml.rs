@@ -4,15 +4,15 @@ use std::io::BufRead;
 use std::process::ExitCode;
 use std::collections::HashMap;
 use bstr::{BString, ByteVec};
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 use quick_xml::{events::Event, reader::Reader, errors::SyntaxError};
 
 #[derive(Parser, Default)]
 #[command(about = "convert from html table")]
 pub struct Opts {
-    #[arg(long, action = ArgAction::SetTrue, help = "only allow valid table")]
+    #[arg(long, help = "only allow valid table")]
     strict: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "output the innerHTML of table cells, not the innerText")]
+    #[arg(long, help = "output the innerHTML of table cells, not the innerText")]
     inner_html: bool,
 }
 

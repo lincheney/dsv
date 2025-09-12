@@ -6,20 +6,20 @@ use std::process::{Child, Command, ChildStdin, Stdio, ExitStatus};
 use std::os::unix::process::ExitStatusExt;
 use std::io::{BufReader, BufWriter, Write};
 use crate::column_slicer::ColumnSlicer;
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 #[derive(Parser, Clone)]
 #[command(about = "pipe rows through a process")]
 pub struct Opts {
     #[arg(short = 'k', long, help = "pipe only these fields")]
     fields: Vec<String>,
-    #[arg(short = 'x', long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
     complement: bool,
-    #[arg(short = 'r', long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(short = 'r', long, help = "treat fields as regexes")]
     regex: bool,
     #[arg(short = 'a', long, help = "append output as extra fields rather than replacing")]
     append_columns: Vec<String>,
-    #[arg(short = 'q', long, action = ArgAction::SetTrue, help = "do not do CSV quoting on the input")]
+    #[arg(short = 'q', long, help = "do not do CSV quoting on the input")]
     no_quote_input: bool,
     #[arg(trailing_var_arg = true, help = "command to pipe rows through")]
     command: Vec<String>,

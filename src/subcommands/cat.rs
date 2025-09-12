@@ -1,12 +1,12 @@
 use anyhow::Result;
 use crate::base;
 use bstr::BString;
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 #[derive(Parser, Default, Clone)]
 #[command(about = "concatenate files by row")]
 pub struct Opts {
-    #[arg(short = 'n', long, action = ArgAction::SetTrue, help = "number all output lines")]
+    #[arg(short = 'n', long, help = "number all output lines")]
     number: bool,
     #[arg(help = "other files to concatenate to stdin")]
     files: Vec<String>,

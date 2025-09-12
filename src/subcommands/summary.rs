@@ -2,7 +2,7 @@ use anyhow::{Result};
 use crate::base;
 use regex::bytes::{Regex};
 use bstr::{BString, ByteSlice, BStr};
-use clap::{Parser, ArgAction, CommandFactory, error::{ErrorKind, ContextKind, ContextValue}};
+use clap::{Parser, CommandFactory, error::{ErrorKind, ContextKind, ContextValue}};
 use crate::column_slicer::ColumnSlicer;
 use std::collections::HashMap;
 use once_cell::sync::Lazy;
@@ -70,7 +70,7 @@ pub struct Opts {
     complement: bool,
     #[arg(short = 'r', long, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(short = 't', num_args = 2, action = ArgAction::Append, long, value_names = ["A", "B"], help = "assume field A is type B")]
+    #[arg(short = 't', num_args = 2, long, value_names = ["A", "B"], help = "assume field A is type B")]
     r#type: Vec<String>,
 }
 

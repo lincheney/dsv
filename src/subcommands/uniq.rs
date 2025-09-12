@@ -3,22 +3,22 @@ use crate::base;
 use bstr::{BString};
 use std::collections::{HashMap};
 use crate::column_slicer::ColumnSlicer;
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 #[derive(Parser)]
 #[command(about = "omit repeated lines")]
 pub struct Opts {
     #[arg(help = "sort based only on these fields")]
     fields: Vec<String>,
-    #[arg(short = 'x', long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(short = 'x', long, help = "exclude, rather than include, field names")]
     complement: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(long, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(short = 'c', long, action = ArgAction::SetTrue, help = "prefix lines by the number of occurrences")]
+    #[arg(short = 'c', long, help = "prefix lines by the number of occurrences")]
     count: bool,
     #[arg(short = 'C', long, help = "name of column to put the count in")]
     count_column: Option<String>,
-    #[arg(long, action = ArgAction::SetTrue, help = "show all items, separating groups with an empty line")]
+    #[arg(long, help = "show all items, separating groups with an empty line")]
     group: bool,
     #[arg(long, conflicts_with_all = ["group"], help = "only print duplicate lines, one for each group")]
     repeated: bool,

@@ -4,40 +4,40 @@ use std::io::{BufReader, BufRead};
 use crate::base;
 use regex::bytes::{Regex, RegexBuilder};
 use bstr::{BString};
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 const MATCH_COLOUR: &str = "\x1b[1;31m";
 
 #[derive(Parser, Default)]
 pub struct CommonOpts {
-    #[arg(short = 'e', long, action = ArgAction::Append, help = "pattern to search for")]
+    #[arg(short = 'e', long, help = "pattern to search for")]
     regexp: Vec<String>,
-    #[arg(short = 'F', long, action = ArgAction::SetTrue, help = "treat all patterns as literals instead of as regular expressions")]
+    #[arg(short = 'F', long, help = "treat all patterns as literals instead of as regular expressions")]
     fixed_strings: bool,
-    #[arg(short = 'f', long, action = ArgAction::Append, help = "obtain patterns from FILE")]
+    #[arg(short = 'f', long, help = "obtain patterns from FILE")]
     file: Vec<String>,
-    #[arg(short = 'w', long, action = ArgAction::SetTrue, help = "select only those matches surrounded by word boundaries")]
+    #[arg(short = 'w', long, help = "select only those matches surrounded by word boundaries")]
     word_regexp: bool,
-    #[arg(short = 'x', long, action = ArgAction::SetTrue, help = "select only those matches that exactly match the column")]
+    #[arg(short = 'x', long, help = "select only those matches that exactly match the column")]
     field_regexp: bool,
-    #[arg(short = 's', long, action = ArgAction::SetTrue, help = "search case sensitively")]
+    #[arg(short = 's', long, help = "search case sensitively")]
     case_sensitive: bool,
     #[arg(short = 'm', long, default_value_t = usize::MAX, value_name = "NUM", help = "show only the first NUM matching rows")]
     max_count: usize,
     #[arg(short = 'o', long, help = "print only the matched (non-empty) parts of a matching column")]
     only_matching: bool,
-    #[arg(short = 'k', long, action = ArgAction::Append, help = "search only on these fields")]
+    #[arg(short = 'k', long, help = "search only on these fields")]
     fields: Vec<String>,
-    #[arg(short = 'r', long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(short = 'r', long, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(long, help = "exclude, rather than include, field names")]
     complement: bool,
 }
 
 #[derive(Parser, Default)]
 #[command(about = "print lines that match patterns")]
 pub struct Opts {
-    #[arg(action = ArgAction::Append, required_unless_present_any = ["regexp", "file"], help = "pattern to search for")]
+    #[arg(required_unless_present_any = ["regexp", "file"], help = "pattern to search for")]
     pub patterns: Vec<String>,
     #[arg(long, help = "replaces every match with the given text")]
     pub replace: Option<String>,

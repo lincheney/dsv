@@ -4,18 +4,18 @@ use anyhow::{Result};
 use crate::base;
 use bstr::{BString};
 use regex::bytes::Regex;
-use clap::{Parser, ArgAction};
+use clap::{Parser};
 
 #[derive(Parser, Default)]
 #[command(about = "reshape to long format")]
 pub struct Opts {
     #[arg(default_value = "value", help = "value field (timevar/wide variable)")]
     value: String,
-    #[arg(short = 'k', long, action = ArgAction::Append, help = "reshape only these fields")]
+    #[arg(short = 'k', long, help = "reshape only these fields")]
     fields: Vec<String>,
-    #[arg(short = 'r', long, action = ArgAction::SetTrue, help = "treat fields as regexes")]
+    #[arg(short = 'r', long, help = "treat fields as regexes")]
     regex: bool,
-    #[arg(long, action = ArgAction::SetTrue, help = "exclude, rather than include, field names")]
+    #[arg(long, help = "exclude, rather than include, field names")]
     complement: bool,
     #[arg(long, default_value = "^(.*?)_(.*)$", help = "regex to split wide columns")]
     format: String,
