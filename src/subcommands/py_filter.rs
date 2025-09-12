@@ -56,7 +56,7 @@ impl base::Processor for Handler {
         self.inner.count += 1;
         let py = self.inner.py.acquire_gil();
         let rows = py.list_from_iter([self.inner.row_to_py(&py, &row)]).unwrap();
-        let result = self.inner.run_python(&py, rows, [], self.inner.code, self.inner.prelude)?;
+        let result = self.inner.run_python(&py, base, rows, [], self.inner.code, self.inner.prelude)?;
         let result = if let Some(mut result) = result {
             if py.isinstance(result, self.inner.vec_cls) {
                 result = py.call_func(self.all, &[result])?;

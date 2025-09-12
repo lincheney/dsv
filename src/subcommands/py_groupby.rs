@@ -106,7 +106,7 @@ impl base::Processor for Handler {
             self.inner.count = self.rows.len();
             for (i, script) in self.field_scripts.iter().enumerate() {
                 let rows = py.list_from_iter(self.rows.iter().map(|row| self.inner.row_to_py(&py, row))).unwrap();
-                let result = self.inner.run_python(&py, rows, [], *script, None)?;
+                let result = self.inner.run_python(&py, base, rows, [], *script, None)?;
 
                 let result = if let Some(result) = result {
                     Some(py.try_iter(result)?)
@@ -160,7 +160,7 @@ impl base::Processor for Handler {
             py.dict_extend(current_key, header.iter().map(|h| h.as_ref()).zip(py.try_iter(key)?));
 
             self.inner.count = py.list_len(group);
-            let result = self.inner.run_python(&py, group, [(c"K", current_key)], self.inner.code, self.inner.prelude)?;
+            let result = self.inner.run_python(&py, base, group, [(c"K", current_key)], self.inner.code, self.inner.prelude)?;
 
             let result = if self.inner.inner.expr && let Some(result) = result {
                 py.dict_clear(self.inner.inner.locals);

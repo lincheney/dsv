@@ -161,8 +161,6 @@ pub struct BaseOptions {
     pub is_stderr_tty: bool,
     #[clap(skip)]
     pub stderr_colour: bool,
-    #[clap(skip)]
-    pub stderr_rainbow_columns: bool,
 }
 
 impl BaseOptions {

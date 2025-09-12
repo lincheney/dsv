@@ -140,6 +140,7 @@ impl Handler {
     pub fn run_python<'a, I: IntoIterator<Item=(&'a CStr, python::Object)>>(
         &self,
         py: &python::GilHandle,
+        base: &mut base::Base,
         rows: python::Object,
         vars: I,
         code: python::Object,
@@ -175,7 +176,7 @@ impl Handler {
             }
             Err(e) => {
                 if ! self.opts.common.quiet {
-                    eprintln!("{e}");
+                    base.write_raw_stderr(format!("{e}\n").into(), false);
                 }
                 if self.opts.common.remove_errors || (self.opts.common.ignore_errors && self.inner.expr) {
                     Ok(None)
@@ -211,7 +212,7 @@ impl base::Processor for Handler {
             self.count += 1;
             let py = self.py.acquire_gil();
             let rows = py.list_from_iter([self.row_to_py(&py, &row)]).unwrap();
-            let result = self.run_python(&py, rows, [], self.code, self.prelude)?;
+            let result = self.run_python(&py, base, rows, [], self.code, self.prelude)?;
             if let Some(result) = result {
                 self.inner.handle_result(&py, base, result)
             } else {
@@ -227,7 +228,7 @@ impl base::Processor for Handler {
         if !self.opts.no_slurp {
             let py = self.py.acquire_gil();
             let rows = py.list_from_iter(self.rows.iter().map(|row| self.row_to_py(&py, row))).unwrap();
-            let result = self.run_python(&py, rows, [], self.code, self.prelude)?;
+            let result = self.run_python(&py, base, rows, [], self.code, self.prelude)?;
             if let Some(result) = result && self.inner.handle_result(&py, base, result)? {
                 return Ok(true)
             }
