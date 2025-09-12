@@ -431,11 +431,12 @@ impl ProcStats {
     fn running(&self) -> usize { self.started() - self.finished }
 
     fn draw_progress_bar(&self, base: &mut base::Base, opts: &Opts, newline: bool) -> bool {
+        const WIDTH: usize = 40;
+
         if !opts.progress_bar.is_on(false) {
             return false
         }
 
-        const WIDTH: usize = 40;
         let total = self.total.max(1);
         let mut bars = [
             divmod(WIDTH * self.succeeded, total),
