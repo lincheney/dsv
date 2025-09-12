@@ -412,7 +412,7 @@ class _Base:
                 #  self.outfile_proc = subprocess.Popen(['cat'], stdin=subprocess.PIPE) # faster to print through cat??
                 #  self.outfile = self.outfile_proc.stdin
 
-    def write_output(self, row, padding=None, stderr=False):
+    def write_output(self, row, padding=None, is_header=False, stderr=False):
         if stderr:
             outfile = sys.stderr.buffer
         else:
@@ -450,7 +450,7 @@ class _Base:
         if self.opts.ofs is self.PRETTY_OUTPUT:
             self.__gathered_rows.append(self.format_columns(row, self.PRETTY_OUTPUT_DELIM, self.opts.ors, quote_output=self.opts.quote_output))
         else:
-            return self.write_output(row, padding, stderr)
+            return self.write_output(row, padding, is_header, stderr)
 
     def justify(self, rows: list[bytes]):
         # get width of each column

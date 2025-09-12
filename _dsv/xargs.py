@@ -114,19 +114,22 @@ class xargs(_Base):
         return await loop.run_in_executor(None, self.queue.get)
 
     async def loop(self):
-        while True:
-            row = await self.get_from_queue()
-            if row is None:
-                break
-            self.stats.total += 1
-            if self.job_limit == 0 or len(self.proc_tasks) < self.job_limit:
-                self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
-            else:
-                self.proc_queue.append(row)
-                self.stats.queued = len(self.proc_queue)
-            self.print_progress_bar()
-        while self.proc_tasks:
-            await asyncio.gather(*self.proc_tasks)
+        try:
+            while True:
+                row = await self.get_from_queue()
+                if row is None:
+                    break
+                self.stats.total += 1
+                if self.job_limit == 0 or len(self.proc_tasks) < self.job_limit:
+                    self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
+                else:
+                    self.proc_queue.append(row)
+                    self.stats.queued = len(self.proc_queue)
+                self.print_progress_bar()
+            while self.proc_tasks:
+                await asyncio.gather(*self.proc_tasks)
+        except BrokenPipeError:
+            pass
 
     def get_format_arg_index(self, text):
         if not text:
@@ -168,7 +171,7 @@ class xargs(_Base):
         try:
             if not self.opts.command:
                 formatted = ['printf', '%s\n'] + row
-            elif not any(self.placeholder_regex.match(c) for c in self.opts.command):
+            elif not any(self.placeholder_regex.search(c) for c in self.opts.command):
                 # no arguments are formatted, append the args at the end
                 formatted = self.opts.command + row
             else:
