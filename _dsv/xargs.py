@@ -11,6 +11,14 @@ from . import _utils
 from ._column_slicer import _ColumnSlicer
 from ._base import _Base
 
+def shell_quote(values):
+    return b' '.join(
+        b"'" + val.replace(b"'", b"'\\''") + b"'"
+        if re.search(rb'[^-a-zA-Z0-9_]', val) else
+        val
+        for val in values
+    )
+
 class ProcStats:
     total = 0
     succeeded = 0
@@ -29,12 +37,18 @@ class Logger:
             _Base.on_row(self.parent, self.keys + [v], stderr=stderr)
         self.parent.print_progress_bar()
 
+class Verbosity:
+    LOW = 0
+    EXIT_CODE = 1
+    ALL = 2
+
 class xargs(_Base):
     ''' build and execute command lines '''
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '-j', '--max_procs', '--jobs', help='run up to num processes at a time, default is 1')
     parser.add_argument('--progress-bar', choices=('never', 'always', 'auto'), nargs='?', help='print a trailer')
     parser.add_argument('command', nargs='+', type=_utils.utf8_type, help='command and arguments to run')
+    parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
 
     def __init__(self, opts):
         opts.command.extend(map(_utils.utf8_type, opts.extras))
@@ -100,6 +114,9 @@ class xargs(_Base):
         logger = Logger(self, row)
         try:
             command = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
+            if self.opts.verbose >= Verbosity.ALL:
+                logger.log_output([b'starting process: ' + shell_quote(command)], True)
+
             proc = await asyncio.create_subprocess_exec(
                 *command,
                 stdin=subprocess.DEVNULL,
@@ -112,7 +129,8 @@ class xargs(_Base):
                 self.read_from_stream(logger, proc.stderr, True),
             )
             code = await proc.wait()
-            logger.log_output([b'exited with %i' % code], True)
+            if self.opts.verbose >= Verbosity.ALL or (self.opts.verbose >= Verbosity.EXIT_CODE and code != 0):
+                logger.log_output([b'exited with %i' % code], True)
             if code == 0:
                 self.stats.succeeded += 1
         except OSError as e:

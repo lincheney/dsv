@@ -10,8 +10,33 @@ use std::collections::{VecDeque, HashMap, hash_map::Entry};
 use std::os::fd::{RawFd, AsRawFd};
 use std::process::{Child, Command, Stdio, ChildStdout, ChildStderr};
 use std::io::{Read};
-use bstr::{BString, BStr, ByteSlice};
-use clap::{Parser, CommandFactory, error::{ErrorKind, ContextKind, ContextValue}};
+use bstr::{BString, BStr, ByteSlice, ByteVec};
+use clap::{Parser, CommandFactory, ArgAction, error::{ErrorKind, ContextKind, ContextValue}};
+
+fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
+    let mut new: BString = b"".into();
+    for (i, val) in values.into_iter().enumerate() {
+        if i > 0 {
+            new.push(b' ');
+        }
+
+        let val = val.as_ref();
+        if val.iter().all(|c| matches!(c, b'-' | b'_' | b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9')) {
+            new.push_str(val);
+        } else {
+            new.push(b'\'');
+            new.append(&mut val.replace(b"'", b"'\\''"));
+            new.push(b'\'');
+        }
+    }
+    new
+}
+
+mod verbosity {
+    // pub const LOW: u8 = 0;
+    pub const EXIT_CODE: u8 = 1;
+    pub const ALL: u8 = 2;
+}
 
 #[derive(Parser, Default, Clone)]
 #[command(about = "build and execute command lines ")]
@@ -22,8 +47,8 @@ pub struct Opts {
     jobs: Option<String>,
     #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "print a progress bar")]
     progress_bar: base::AutoChoices,
-    #[arg(short, long, help = "enable verbose logging")]
-    verbose: bool,
+    #[arg(short, long, action = ArgAction::Count, help = "enable verbose logging")]
+    verbose: u8,
     #[arg(trailing_var_arg = true, help = "command and arguments to run")]
     command: Vec<String>,
 }
@@ -193,7 +218,7 @@ impl Proc {
         format: &BStr,
         keys: Option<&HashMap<BString, usize>>,
         values: &[BString],
-    ) -> Result<OsString> {
+    ) -> Result<BString> {
 
         let mut err = Ok(());
         let result = PLACEHOLDERS.replace_all(format, |c: &Captures| -> &BStr {
@@ -217,33 +242,43 @@ impl Proc {
         });
 
         err?;
-        Ok(OsString::from_vec(result.into_owned()))
+        Ok(result.into_owned().into())
     }
 
     fn new(
         token: EventMarker,
         command: &[String],
         keys: Option<&HashMap<BString, usize>>,
-        values: &[BString],
         registry: &mio::Registry,
+        base: &mut base::Base,
+        logger: &mut Logger,
+        opts: &Opts,
     ) -> Result<Self> {
 
-        let mut cmd = if command.len() == 1 && command[0].contains(' ') {
+        let mut command = if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
-            let mut cmd = Command::new("bash");
-            cmd.arg("-c");
-            cmd.arg(Self::format_arg(command[0].as_bytes().into(), keys, values)?);
-            cmd
+            vec![
+                b"bash".into(),
+                b"-c".into(),
+                Self::format_arg(command[0].as_bytes().into(), keys, &logger.row)?,
+            ]
         } else {
-            let arg0 = Self::format_arg(command[0].as_bytes().into(), keys, values)?;
-            let mut cmd = Command::new(arg0);
-            for c in &command[1..] {
-                cmd.arg(Self::format_arg(c.as_bytes().into(), keys, values)?);
+            let mut cmd = vec![];
+            for c in command {
+                cmd.push(Self::format_arg(c.as_bytes().into(), keys, &logger.row)?);
             }
             cmd
         };
 
-        let mut child = cmd
+        if opts.verbose >= verbosity::ALL {
+            let mut line: BString = b"starting process: ".into();
+            line.append(&mut shell_quote(&command));
+            logger.write_line(base, line.into(), true)?;
+        }
+
+        let arg0 = std::mem::take(&mut command[0]);
+        let mut child = Command::new(OsString::from_vec(arg0.to_vec()))
+            .args(command[1..].into_iter().map(|c| OsString::from_vec(c.to_vec())))
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -272,6 +307,7 @@ impl Proc {
         registry: &mio::Registry,
         logger: &mut Logger,
         base: &mut base::Base,
+        opts: &Opts,
     ) -> Result<bool> {
 
         match et {
@@ -298,15 +334,17 @@ impl Proc {
                         let r2 = child.wait().map_err(|e| e.into());
                         let r3 = r2.as_ref().map_or(Ok(()), |r| {
                             self.success = r.success();
-                            let line = format!("exited with {:?}", r.into_raw() - 255);
-                            logger.write_line(base, line.into(), true)?;
+                            if opts.verbose >= verbosity::ALL || (!self.success && opts.verbose >= verbosity::EXIT_CODE) {
+                                let line = format!("exited with {:?}", r.into_raw() - 255);
+                                logger.write_line(base, line.into(), true)?;
+                            }
                             Ok(())
                         });
                         crate::utils::chain_errors([r1, r2.map(|_| ()), r3.map(|_| ())])
                     }),
                     // write in the remaining lines
-                    self.handle_event(EventType::Stdout, registry, logger, base).map(|_| ()),
-                    self.handle_event(EventType::Stderr, registry, logger, base).map(|_| ()),
+                    self.handle_event(EventType::Stdout, registry, logger, base, opts).map(|_| ()),
+                    self.handle_event(EventType::Stderr, registry, logger, base, opts).map(|_| ()),
                 ])?;
             },
         }
@@ -459,8 +497,10 @@ impl ProcStore {
             EventMarker(token),
             &self.opts.command,
             self.keys.as_ref(),
-            &logger.row,
             registry,
+            base,
+            &mut logger,
+            &self.opts,
         );
         match result {
             Ok(proc) => {
@@ -477,7 +517,13 @@ impl ProcStore {
         Ok(self.stats.draw_progress_bar(base, &self.opts, false))
     }
 
-    fn handle_event(&mut self, base: &mut base::Base, token: mio::Token, registry: &mio::Registry) -> Result<bool> {
+    fn handle_event(
+        &mut self,
+        base: &mut base::Base,
+        token: mio::Token,
+        registry: &mio::Registry,
+    ) -> Result<bool> {
+
         let (marker, et) = EventMarker::from_token(token);
         let mut entry = match self.inner.entry(marker.0) {
             Entry::Occupied(e) => e,
@@ -485,7 +531,7 @@ impl ProcStore {
         };
 
         let (proc, logger) = entry.get_mut();
-        let result = proc.handle_event(et, registry, logger, base);
+        let result = proc.handle_event(et, registry, logger, base, &self.opts);
         if proc.success {
             self.stats.succeeded += 1;
         }
