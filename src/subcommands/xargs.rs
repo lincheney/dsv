@@ -126,7 +126,7 @@ impl<R: Read+AsFd> BufferedReader<R> {
             },
             Ok(count) => {
                 self.used += count;
-                Ok(count != slice.len())
+                Ok(count == slice.len())
             },
             Err(err) if err.kind() == std::io::ErrorKind::Interrupted => Ok(true),
             Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
@@ -468,16 +468,18 @@ impl ProcStats {
         }
         loop {
             let width = bars.iter().map(|(x, _)| x).sum::<usize>();
-            if width >= WIDTH {
+            if width == WIDTH {
                 break
             }
-            let i = bars.iter().enumerate().max_by_key(|(_, (_, y))| y).unwrap().0;
-            if bars[i].1 == 0 {
-                bars[3] = (WIDTH - width, 0);
+            if width < WIDTH {
+                let (i, (x, _)) = bars.iter().enumerate().max_by_key(|(_, (x, y))| (y, -(*x as isize))).unwrap();
+                bars[i] = (x + 1, 0);
+            } else if width > WIDTH {
+                let (i, (x, _)) = bars.iter().enumerate().min_by_key(|(_, (x, y))| (y, -(*x as isize))).unwrap();
+                bars[i] = (x - 1, usize::MAX);
+            } else {
                 break
             }
-            // round this one up
-            bars[i] = (bars[i].0 + 1, 0);
         }
 
         let [(succeeded, _), (failed, _), (running, _), (queued, _)] = bars;

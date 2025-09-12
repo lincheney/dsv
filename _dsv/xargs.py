@@ -45,7 +45,7 @@ class Logger:
             if self.parent.opts.rainbow_rows:
                 if row:
                     row[0] = self.dark_colour + row[0]
-                v = self.light_colour + v + self.RESET_COLOUR
+                v = self.light_colour + v + self.parent.RESET_COLOUR
             row.append(v)
             _Base.on_row(self.parent, row, stderr=stderr)
         self.parent.print_progress_bar()
@@ -264,14 +264,16 @@ class xargs(_Base):
 
         while True:
             current_width = sum(x for x, y in bars)
-            if current_width >= width:
+            if current_width == width:
                 break
-            i, (x, y) = max(enumerate(bars), key=lambda ixy: ixy[1][1])
-            if y == 0:
-                bars[3] = (width - current_width, 0)
-                break
-            #  round this one up
-            bars[i] = (x + 1, 0)
+            fn = min if current_width > width else max
+            i, (x, y) = fn(enumerate(bars), key=lambda ixy: (ixy[1][1], -ixy[1][0]))
+            if current_width > width:
+                # make space and go down
+                bars[i] = (x - 1, float('inf'))
+            else:
+                # round this one up
+                bars[i] = (x + 1, 0)
 
         colour = self.opts.stderr_colour
         vars = dict(
