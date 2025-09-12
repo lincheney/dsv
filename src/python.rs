@@ -11,7 +11,26 @@ type Pointer = *mut c_void;
 struct SendPointer(Object);
 unsafe impl Send for SendPointer {}
 unsafe impl Sync for SendPointer {}
-pub type Object = NonNull<c_void>;
+
+#[derive(Clone, Copy, PartialEq)]
+pub struct Object(NonNull<c_void>);
+unsafe impl Send for Object {}
+impl std::convert::From<NonNull<c_void>> for Object {
+    fn from(val: NonNull<c_void>) -> Self {
+        Self(val)
+    }
+}
+impl std::ops::Deref for Object {
+    type Target = NonNull<c_void>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl Object {
+    fn new(ptr: *mut c_void) -> Option<Self> {
+        NonNull::new(ptr).map(|p| Self(p))
+    }
+}
 
 static PYTHON: OnceCell<Result<PythonLib, libloading::Error>> = OnceCell::new();
 
@@ -130,7 +149,7 @@ fn compile_code_cstr(py: &PythonLib, code: &CStr, filename: &CStr, start: StartT
             filename.as_ptr(),
             start as _,
         );
-        NonNull::new(code)
+        Object::new(code)
     }
 }
 
@@ -193,7 +212,7 @@ impl GilHandle<'_> {
 
     pub fn get_builtin_dict(&self) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyEval_GetBuiltins)())
+            Object::new((self.py.PyEval_GetBuiltins)())
         }
     }
 
@@ -228,49 +247,49 @@ impl GilHandle<'_> {
 
     pub fn to_float(&self, value: f64) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyFloat_FromDouble)(value))
+            Object::new((self.py.PyFloat_FromDouble)(value))
         }
     }
 
     pub fn to_bool(&self, value: bool) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyLong_FromSsize_t)(if value { 1 } else { 0 }))
+            Object::new((self.py.PyLong_FromSsize_t)(if value { 1 } else { 0 }))
         }
     }
 
     pub fn to_int(&self, value: isize) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyLong_FromSsize_t)(value))
+            Object::new((self.py.PyLong_FromSsize_t)(value))
         }
     }
 
     pub fn to_uint(&self, value: usize) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyLong_FromSize_t)(value))
+            Object::new((self.py.PyLong_FromSize_t)(value))
         }
     }
 
     pub fn to_str(&self, string: &str) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyUnicode_FromStringAndSize)(string.as_ptr().cast(), string.len().try_into().unwrap()))
+            Object::new((self.py.PyUnicode_FromStringAndSize)(string.as_ptr().cast(), string.len().try_into().unwrap()))
         }
     }
 
     pub fn to_bytes(&self, string: &BStr) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyBytes_FromStringAndSize)(string.as_ptr().cast(), string.len().try_into().unwrap()))
+            Object::new((self.py.PyBytes_FromStringAndSize)(string.as_ptr().cast(), string.len().try_into().unwrap()))
         }
     }
 
     pub fn empty_list(&self, size: usize) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyList_New)(size.try_into().unwrap()))
+            Object::new((self.py.PyList_New)(size.try_into().unwrap()))
         }
     }
 
     pub fn empty_tuple(&self, size: usize) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyTuple_New)(size.try_into().unwrap()))
+            Object::new((self.py.PyTuple_New)(size.try_into().unwrap()))
         }
     }
 
@@ -333,7 +352,7 @@ impl GilHandle<'_> {
 
     pub fn empty_dict(&self) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyDict_New)())
+            Object::new((self.py.PyDict_New)())
         }
     }
 
@@ -345,13 +364,13 @@ impl GilHandle<'_> {
 
     pub fn dict_get(&self, dict: Object, key: Object) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyDict_GetItem)(dict.as_ptr(), key.as_ptr()))
+            Object::new((self.py.PyDict_GetItem)(dict.as_ptr(), key.as_ptr()))
         }
     }
 
     pub fn dict_get_string(&self, dict: Object, key: &CStr) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyDict_GetItemString)(dict.as_ptr(), key.as_ptr().cast()))
+            Object::new((self.py.PyDict_GetItemString)(dict.as_ptr(), key.as_ptr().cast()))
         }
     }
 
@@ -383,14 +402,14 @@ impl GilHandle<'_> {
 
     pub fn getattr_string(&self, obj: Object, key: &CStr) -> Option<Object> {
         unsafe{
-            NonNull::new((self.py.PyObject_GetAttrString)(obj.as_ptr(), key.as_ptr()))
+            Object::new((self.py.PyObject_GetAttrString)(obj.as_ptr(), key.as_ptr()))
         }
     }
 
     pub fn call_func(&self, func: Object, args: &[Object]) -> Result<Object> {
         unsafe{
             (self.py.PyErr_Clear)();
-            NonNull::new((self.py.PyObject_Vectorcall)(func.as_ptr(), args.as_ptr().cast(), args.len(), null_mut()))
+            Object::new((self.py.PyObject_Vectorcall)(func.as_ptr(), args.as_ptr().cast(), args.len(), null_mut()))
                 .ok_or_else(|| self.get_exception())
         }
     }
@@ -419,7 +438,7 @@ impl GilHandle<'_> {
     fn _exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Option<Object> {
         unsafe{
             (self.py.PyErr_Clear)();
-            NonNull::new((self.py.PyEval_EvalCode)(code.as_ptr(), globals, locals))
+            Object::new((self.py.PyEval_EvalCode)(code.as_ptr(), globals, locals))
         }
     }
 
@@ -435,7 +454,7 @@ impl GilHandle<'_> {
         };
 
         (|| {
-            let linecache = NonNull::new(unsafe{ (self.py.PyImport_ImportModule)(c"linecache".as_ptr()) })?;
+            let linecache = Object::new(unsafe{ (self.py.PyImport_ImportModule)(c"linecache".as_ptr()) })?;
             let cache = self.getattr_string(linecache, c"cache")?;
 
             let filename = self.to_str(std::str::from_utf8(filename.to_bytes()).unwrap()).unwrap();
@@ -472,10 +491,10 @@ impl GilHandle<'_> {
 
         let mut item: Option<Object> = None;
         Ok(std::iter::from_fn(move || unsafe {
-            if let Some(item) = item {
+            if let Some(item) = &item {
                 (self.py.Py_DecRef)(item.as_ptr());
             }
-            item = NonNull::new((self.py.PyIter_Next)(iter.as_ptr()));
+            item = Object::new((self.py.PyIter_Next)(iter.as_ptr()));
             item
         }))
     }
@@ -493,7 +512,7 @@ impl GilHandle<'_> {
                 std::ptr::from_mut(&mut value),
             );
             if result > 0 {
-                Some((NonNull::new(key).unwrap(), NonNull::new(value).unwrap()))
+                Some((Object::new(key).unwrap(), Object::new(value).unwrap()))
             } else {
                 None
             }

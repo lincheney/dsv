@@ -209,14 +209,14 @@ pub enum GatheredRow {
 
 pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
-    fn make_writer(opts: BaseOptions) -> Output::<W> {
+    fn make_writer(&self, opts: BaseOptions) -> Output::<W> {
         Output::new(opts)
     }
 
     fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
-        let opts = base.opts.clone();
+        let mut writer = self.make_writer(base.opts.clone());
         base.scope.spawn(move || {
-            Self::make_writer(opts).run(receiver)
+            writer.run(receiver)
         });
         self.process_file(std::io::stdin().lock(), base, Callbacks::all())
     }
