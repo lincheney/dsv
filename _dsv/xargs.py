@@ -45,7 +45,7 @@ class Logger:
             if self.parent.opts.rainbow_rows:
                 if row:
                     row[0] = self.dark_colour + row[0]
-                v = self.light_colour + v
+                v = self.light_colour + v + self.RESET_COLOUR
             row.append(v)
             _Base.on_row(self.parent, row, stderr=stderr)
         self.parent.print_progress_bar()

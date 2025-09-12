@@ -215,10 +215,11 @@ impl Logger {
             vec![]
         };
         if let Some((dark, light)) = &self.colour {
-            if !row.is_empty() {
-                row[0].insert_str(0, dark);
+            for c in &mut row {
+                c.insert_str(0, dark);
             }
             line.insert_str(0, light);
+            line.push_str(base::RESET_COLOUR);
         }
         row.push(line);
         if stderr {
