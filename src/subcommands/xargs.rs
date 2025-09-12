@@ -60,6 +60,8 @@ pub struct Opts {
     verbose: u8,
     #[arg(long, help = "print the job to run but do not run the job")]
     dry_run: bool,
+    #[arg(long = "no-tag", action = ArgAction::SetFalse, help = "don't tag lines with the input rows")]
+    tag: bool,
     #[arg(trailing_var_arg = true, help = "command and arguments to run")]
     command: Vec<String>,
 }
@@ -199,12 +201,17 @@ struct Logger {
     row: Vec<BString>,
     colour: Option<(BString, BString)>,
     dirty: bool,
+    tag: bool,
 }
 
 impl Logger {
     fn write_line(&mut self, base: &base::Base, mut line: BString, stderr: bool) -> Result<bool> {
         self.dirty = true;
-        let mut row = self.row.clone();
+        let mut row = if self.tag {
+            self.row.clone()
+        } else {
+            vec![]
+        };
         if let Some((dark, light)) = &self.colour {
             if !row.is_empty() {
                 row[0].insert_str(0, dark);
@@ -522,7 +529,7 @@ impl ProcStore {
         self.stats.total += 1;
         if self.job_limit == 0 || self.inner.len() < self.job_limit {
             // start immediately
-            self.start_proc(base, values, registry)
+            self.start_proc(base, values, registry, self.opts.tag)
         } else {
             self.queue.push_back(values);
             self.stats.queued = self.queue.len();
@@ -538,12 +545,14 @@ impl ProcStore {
         base: &mut base::Base,
         values: Vec<BString>,
         registry: &mio::Registry,
+        tag: bool,
     ) -> Result<bool> {
 
         let token = self.stats.started();
         let mut logger = Logger{
             row: values,
             dirty: false,
+            tag,
             colour: if base.opts.colour.is_on(base.opts.is_stdout_tty) && self.opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
                 Some((
                     get_rgb(token-1, None, Some(0.5)),
@@ -619,7 +628,7 @@ impl ProcStore {
             // can we start a new proc?
             while (self.job_limit == 0 || self.inner.len() < self.job_limit) && let Some(values) = self.queue.pop_front() {
                 self.stats.queued = self.queue.len();
-                if self.start_proc(base, values, registry)? {
+                if self.start_proc(base, values, registry, self.opts.tag)? {
                     return Ok(true)
                 }
             }
@@ -663,8 +672,11 @@ fn proc_loop(
                 if event.token() == mio::Token(0) {
                     loop {
                         match receiver.try_recv() {
-                            Ok(Message::Header(h)) => {
+                            Ok(Message::Header(mut h)) => {
                                 proc_store.keys = Some(make_header_map(&h));
+                                if !proc_store.opts.tag {
+                                    h.clear();
+                                }
                                 if base.on_header(h)? {
                                     return Ok(())
                                 }

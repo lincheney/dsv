@@ -30,11 +30,10 @@ class ProcStats:
     queued = 0
 
 class Logger:
-    def __init__(self, id, parent, keys, opts):
+    def __init__(self, id, parent, keys):
         self.parent = parent
         self.keys = keys
-        self.opts = opts
-        if self.opts.rainbow_rows:
+        if self.parent.opts.rainbow_rows:
             self.dark_colour = self.parent.get_rgb(id-1, sat=0.5)
             self.light_colour = self.parent.get_rgb(id-1, sat=0.2)
 
@@ -42,9 +41,10 @@ class Logger:
         for v in values:
             if not isinstance(v, bytes):
                 v = str(v).encode()
-            row = self.keys.copy()
-            if self.opts.rainbow_rows:
-                row[0] = self.dark_colour + row[0]
+            row = self.keys.copy() if self.parent.opts.tag else []
+            if self.parent.opts.rainbow_rows:
+                if row:
+                    row[0] = self.dark_colour + row[0]
                 v = self.light_colour + v
             row.append(v)
             _Base.on_row(self.parent, row, stderr=stderr)
@@ -63,6 +63,7 @@ class xargs(_Base):
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
     parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
+    parser.add_argument('--no-tag', action='store_false', dest='tag', help="don't tag lines with the input rows")
     parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
     parser.add_argument('command', nargs='*', type=_utils.utf8_type, help='command and arguments to run')
 
@@ -162,7 +163,7 @@ class xargs(_Base):
         raise FormattingError(f'invalid placeholder: {text!r}')
 
     async def start_proc(self, row):
-        logger = Logger(self.stats.total - self.stats.queued, self, row, self.opts)
+        logger = Logger(self.stats.total - self.stats.queued, self, row)
         try:
             if self.opts.command:
                 formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
@@ -220,6 +221,8 @@ class xargs(_Base):
 
     def on_header(self, header):
         self.header_map = _ColumnSlicer.make_header_map(header)
+        if not self.opts.tag:
+            header.clear()
         return super().on_header(header)
 
     def on_row(self, row):
