@@ -36,6 +36,7 @@ _shtab__dsv_commands() {
     "tomarkdown:convert to markdown table"
     "totsv:convert to tsv"
     "uniq:omit repeated lines"
+    "xargs:build and execute command lines"
   )
   _describe 'dsv commands' _commands
 }
@@ -63,6 +64,7 @@ _shtab__dsv_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv___options=(
@@ -88,6 +90,7 @@ _shtab__dsv___options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_cat_options=(
@@ -114,6 +117,7 @@ _shtab__dsv_cat_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::other files to concatenate to stdin:"
 )
 
@@ -143,6 +147,7 @@ _shtab__dsv_cut_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::select only these fields:"
 )
 
@@ -171,6 +176,7 @@ _shtab__dsv_flip_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_fromhtml_options=(
@@ -198,6 +204,7 @@ _shtab__dsv_fromhtml_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_fromjson_options=(
@@ -224,6 +231,7 @@ _shtab__dsv_fromjson_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_frommarkdown_options=(
@@ -249,6 +257,7 @@ _shtab__dsv_frommarkdown_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_grep_options=(
@@ -260,6 +269,7 @@ _shtab__dsv_grep_options=(
   {-x,--field-regexp}"[select only those matches that exactly match the column]"
   {-s,--case-sensitive}"[search case sensitively]"
   {-m,--max-count}"[show only the first NUM matching rows]:max_count:"
+  {-o,--only-matching}"[print only the matched (non-empty) parts of a matching column]"
   "*"{-k,--fields}"[search only on these fields]:fields:"
   {-r,--regex}"[treat fields as regexes]"
   "--complement[exclude, rather than include, field names]"
@@ -292,6 +302,7 @@ _shtab__dsv_grep_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::pattern to search for:"
 )
 
@@ -319,6 +330,7 @@ _shtab__dsv_head_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_join_options=(
@@ -356,6 +368,7 @@ _shtab__dsv_join_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   ":join stdin with FILE:"
   "(*)::join on these fields from stdin and FILE:"
 )
@@ -383,6 +396,7 @@ _shtab__dsv_page_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_paste_options=(
@@ -408,6 +422,7 @@ _shtab__dsv_paste_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::other files to concatenate to stdin:"
 )
 
@@ -439,6 +454,7 @@ _shtab__dsv_pipe_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*):command to pipe rows through:"
 )
 
@@ -465,6 +481,7 @@ _shtab__dsv_pretty_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_py_options=(
@@ -497,6 +514,7 @@ _shtab__dsv_py_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*):python statements to run:"
 )
 
@@ -529,6 +547,7 @@ _shtab__dsv_py_filter_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*):python statements to run:"
 )
 
@@ -565,6 +584,7 @@ _shtab__dsv_py_groupby_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*):python statements to run:"
 )
 
@@ -577,6 +597,7 @@ _shtab__dsv_replace_options=(
   {-x,--field-regexp}"[select only those matches that exactly match the column]"
   {-s,--case-sensitive}"[search case sensitively]"
   {-m,--max-count}"[show only the first NUM matching rows]:max_count:"
+  {-o,--only-matching}"[print only the matched (non-empty) parts of a matching column]"
   "*"{-k,--fields}"[search only on these fields]:fields:"
   {-r,--regex}"[treat fields as regexes]"
   "--complement[exclude, rather than include, field names]"
@@ -601,6 +622,7 @@ _shtab__dsv_replace_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   ":pattern to search for:"
   ":replaces every match with the given text:"
 )
@@ -609,8 +631,7 @@ _shtab__dsv_reshape_long_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-x,--complement}"[exclude, rather than include, field names]"
   {-r,--regex}"[treat fields as regexes]"
-  {-k,--key}"[name of the key field]:key:"
-  {-v,--value}"[name of the value field]:value:"
+  "--format[regex to split wide columns]:format:"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -632,11 +653,17 @@ _shtab__dsv_reshape_long_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
-  "(*):reshape only these fields:"
+  "--no-quote-output[don\'t quote output]"
+  ":value field (timevar\/wide variable):"
+  "(*)::reshape only these fields:"
 )
 
 _shtab__dsv_reshape_wide_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-f,--fields}"[select only these fields]:old_style_fields:"
+  {-x,--complement}"[exclude, rather than include, field names]"
+  {-r,--regex}"[treat fields as regexes]"
+  "--format[name the new wide columns using this \{\}-format string]:format:"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -658,8 +685,9 @@ _shtab__dsv_reshape_wide_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
-  ":key field:"
-  ":value field:"
+  "--no-quote-output[don\'t quote output]"
+  ":value field (timevar\/wide variable):"
+  "(*):fields to group by (idvar\/long variable):"
 )
 
 _shtab__dsv_set_header_options=(
@@ -688,6 +716,7 @@ _shtab__dsv_set_header_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::new header names:"
 )
 
@@ -728,6 +757,7 @@ _shtab__dsv_sort_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::sort based only on these fields:"
 )
 
@@ -755,6 +785,7 @@ _shtab__dsv_sqlite_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*):sql statements to run:"
 )
 
@@ -785,6 +816,7 @@ _shtab__dsv_summary_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::select only these fields:"
 )
 
@@ -811,6 +843,7 @@ _shtab__dsv_tac_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_tail_options=(
@@ -837,6 +870,7 @@ _shtab__dsv_tail_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_tocsv_options=(
@@ -862,6 +896,7 @@ _shtab__dsv_tocsv_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_tojson_options=(
@@ -887,6 +922,7 @@ _shtab__dsv_tojson_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_tomarkdown_options=(
@@ -912,6 +948,7 @@ _shtab__dsv_tomarkdown_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_totsv_options=(
@@ -937,6 +974,7 @@ _shtab__dsv_totsv_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
 )
 
 _shtab__dsv_uniq_options=(
@@ -969,7 +1007,43 @@ _shtab__dsv_uniq_options=(
   "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
   "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
   "(*)::check these only fields for uniqueness:"
+)
+
+_shtab__dsv_xargs_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  {-p,-j,--max_procs,--jobs}"[run up to num processes at a time, default is 1]:max_procs:"
+  "--progress-bar[print a trailer]:progress_bar:(never always auto)"
+  "*"{-v,--verbose}"[enable verbose logging]"
+  "--rainbow-rows[enable rainbow rows]:rainbow_rows:(never always auto)"
+  "--dry-run[print the job to run but do not run the job]"
+  "--no-tag[don\'t tag lines with the input rows]"
+  {-k,--column}"[new header column name]:column:"
+  {-I,--replace-str}"[use the replacement string instead of \{\}]:replace_str:"
+  {-H,--header}"[treat first row as a header]"
+  {-N,--no-header}"[do not treat first row as header]"
+  "--drop-header[do not print the header]"
+  "--trailer[print a trailer]:trailer:(never always auto)"
+  "--numbered-columns[number the columns in the header]:numbered_columns:(never always auto)"
+  {-d,--ifs}"[input field separator]:ifs:"
+  "--plain-ifs[treat input field separator as a literal not a regex]"
+  {-D,--ofs}"[output field separator]:ofs:"
+  "--irs[input row separator]:irs:"
+  "--ors[output row separator]:ors:"
+  "--csv[treat input as csv]"
+  "--tsv[treat input as tsv]"
+  "--ssv[treat input as whitespace separated]"
+  "--combine-trailing-columns[if a row has more columns than the header, combine the last ones into one, useful with --ssv]"
+  {-P,--pretty}"[prettified output]"
+  "--page[show output in a pager (less)]"
+  {--colour,--color}"[enable colour]:colour:(never always auto)"
+  "--header-colour[ansi escape code for the header]:header_colour:"
+  "--header-bg-colour[ansi escape code for the header background]:header_bg_colour:"
+  "--rainbow-columns[enable rainbow columns]:rainbow_columns:(never always auto)"
+  {-Q,--no-quoting}"[do not handle quotes from input]"
+  "--no-quote-output[don\'t quote output]"
+  "(*)::command and arguments to run:"
 )
 
 
@@ -1018,6 +1092,7 @@ _shtab__dsv() {
         tomarkdown) _arguments -C -s $_shtab__dsv_tomarkdown_options ;;
         totsv) _arguments -C -s $_shtab__dsv_totsv_options ;;
         uniq) _arguments -C -s $_shtab__dsv_uniq_options ;;
+        xargs) _arguments -C -s $_shtab__dsv_xargs_options ;;
       esac
   esac
 }
