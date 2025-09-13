@@ -20,3 +20,4 @@ mio_channel = "0.2.0"
 mio = { version = "1.0.4", features = ["os-ext"] }
 mio-pidfd = "0.4.0"
 nix = { version = "0.30.1", features = ["fs", "signal"] }
+ctrlc = "3.5.0"

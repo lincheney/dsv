@@ -41,6 +41,7 @@ impl Handler {
                 base.scope,
                 base.opts.is_stdout_tty && i == 0,
             )?;
+            handler.register_cleanup();
             handlers.push((handler, base, receiver));
         }
 

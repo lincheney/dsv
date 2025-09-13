@@ -10,9 +10,19 @@ use anyhow::Result;
 use clap::{Parser, CommandFactory};
 use base::{Processor};
 use subcommands::{Cli};
+use std::sync::Mutex;
+
+pub static CONTROL_C_HANDLERS: Mutex<Vec<fn()>> = Mutex::new(vec![]);
 
 fn main() -> Result<ExitCode> {
     let cli = Cli::parse();
+
+    ctrlc::set_handler(|| {
+        for func in CONTROL_C_HANDLERS.lock().unwrap().iter() {
+            func();
+        }
+        std::process::exit(130);
+    })?;
 
     subcommands::run(cli.command, cli.opts, |base, receiver| {
         if std::io::stdin().is_terminal() {

@@ -10,13 +10,15 @@ use std::os::unix::{ffi::OsStringExt, ffi::OsStrExt, process::ExitStatusExt};
 use std::collections::{VecDeque, HashMap, hash_map::Entry};
 use std::os::fd::{AsFd, RawFd, AsRawFd};
 use std::process::{Child, Command, Stdio, ChildStdout, ChildStderr};
-use std::io::{Read};
+use std::io::{Read, Write};
 use bstr::{BString, BStr, ByteSlice, ByteVec};
 use clap::{Parser, CommandFactory, ArgAction, error::{ErrorKind, ContextKind, ContextValue}};
 use nix::sys::stat::{fstat, SFlag};
 use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
 use nix::sys::signal::{kill, SIGTERM};
 use std::borrow::Cow;
+
+const CLEAR_PROGRESS_REPORT: &[u8] = b"\x1b]9;4;0;\x1b\\";
 
 fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
     let mut new: BString = b"".into();
@@ -56,6 +58,8 @@ pub struct Opts {
     progress_bar: base::AutoChoices,
     #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "enable rainbow rows")]
     rainbow_rows: base::AutoChoices,
+    #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "enable conemu progress reporting")]
+    terminal_progress_report: base::AutoChoices,
     #[arg(short, long, action = ArgAction::Count, help = "enable verbose logging")]
     verbose: u8,
     #[arg(long, help = "print the job to run but do not run the job")]
@@ -429,12 +433,18 @@ impl Drop for Proc {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Default)]
+#[derive(Clone, PartialEq, Default)]
 struct ProcStats {
     total: usize,
     succeeded: usize,
     finished: usize,
     queued: usize,
+}
+
+impl Drop for ProcStats {
+    fn drop(&mut self) {
+        eprintln!("DEBUG(newly) \t{}\t= {:?}", stringify!(123), 123);
+    }
 }
 
 fn divmod(x: usize, y: usize) -> (usize, usize) {
@@ -446,7 +456,12 @@ impl ProcStats {
     fn failed(&self) -> usize { self.finished - self.succeeded }
     fn running(&self) -> usize { self.started() - self.finished }
 
-    fn draw_progress_bar(&self, base: &mut base::Base, opts: &Opts, newline: bool) -> bool {
+    fn print_progress(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
+        self.print_progress_bar(base, opts, cleanup)
+        || self.print_progress_report(base, opts, cleanup)
+    }
+
+    fn print_progress_bar(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
         const WIDTH: usize = 40;
 
         if !opts.progress_bar.is_on(false) {
@@ -511,10 +526,35 @@ impl ProcStats {
             total = self.total,
             failed = self.failed(),
         );
-        if newline {
+        if cleanup {
             bar.push('\n');
         }
         base.write_raw_stderr(bar.into(), false)
+    }
+
+    fn print_progress_report(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
+        if !opts.progress_bar.is_on(false) {
+            return false
+        }
+
+        if cleanup {
+            return base.write_raw_stderr(CLEAR_PROGRESS_REPORT.into(), false)
+        }
+
+        let report = format!(
+            "\x1b]9;4;{};{:.0}\x1b\\",
+            if self.total == 0 {
+                3 // indeterminate
+            } else if self.failed() == self.finished {
+                2 // error
+            } else if self.failed() > 0 {
+                4 // warning
+            } else {
+                1 // normal
+            },
+            100. * self.finished as f64 / self.total.max(1) as f64,
+        );
+        base.write_raw_stderr(report.into(), false)
     }
 }
 
@@ -540,17 +580,20 @@ impl ProcStore {
         registry: &mio::Registry,
     ) -> Result<bool> {
         self.stats.total += 1;
-        if self.job_limit == 0 || self.inner.len() < self.job_limit {
+
+        let result = if self.job_limit == 0 || self.inner.len() < self.job_limit {
             // start immediately
             self.start_proc(base, values, registry, self.opts.tag)
         } else {
             self.queue.push_back(values);
             self.stats.queued = self.queue.len();
-            if self.stats.draw_progress_bar(base, &self.opts, false) {
-                return Ok(true)
-            }
             Ok(false)
+        };
+
+        if self.stats.print_progress(base, &self.opts, false) {
+            return Ok(true)
         }
+        result
     }
 
     fn start_proc(
@@ -610,7 +653,7 @@ impl ProcStore {
             },
         }
 
-        Ok(self.stats.draw_progress_bar(base, &self.opts, false))
+        Ok(self.stats.print_progress(base, &self.opts, false))
     }
 
     fn handle_event(
@@ -635,9 +678,9 @@ impl ProcStore {
             self.stats.finished += 1;
         }
 
-        if logger.dirty || proc.success || proc.exited() {
+        if logger.dirty || proc.exited() {
             logger.dirty = false;
-            if self.stats.draw_progress_bar(base, &self.opts, false) {
+            if self.stats.print_progress(base, &self.opts, false) {
                 return Ok(true)
             }
         }
@@ -676,7 +719,7 @@ fn proc_loop(
     };
 
     let result = (|| {
-        proc_store.stats.draw_progress_bar(base, &proc_store.opts, false);
+        proc_store.stats.print_progress(base, &proc_store.opts, false);
 
         let mut poll = mio::Poll::new()?;
         let mut events = mio::Events::with_capacity(255);
@@ -725,7 +768,7 @@ fn proc_loop(
     })();
 
     let _ = base.on_eof();
-    proc_store.stats.draw_progress_bar(base, &proc_store.opts, true);
+    proc_store.stats.print_progress(base, &proc_store.opts, true);
     result
 }
 
@@ -744,6 +787,13 @@ impl Handler {
         if opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
             base.opts.rainbow_columns = base::AutoChoices::Never;
         }
+
+        // ermmm only supported on some terminals
+        // for now just check for vte even though kitty supports it too
+        opts.terminal_progress_report = opts.terminal_progress_report.resolve_with(|| {
+            base.opts.is_stderr_tty
+            && std::env::var("VTE_VERSION").ok().and_then(|v| v.parse::<usize>().ok()).is_some_and(|v| v >= 7900)
+        });
 
         let job_limit = opts.jobs.as_ref().or(opts.max_procs.as_ref()).map_or(1, |jobs| {
             if let Ok(j) = jobs.parse::<usize>() {
@@ -819,5 +869,13 @@ impl base::Processor for Handler {
         self.sender.send(Message::Eof).unwrap();
         self.err_receiver.recv().unwrap()?;
         Ok(false)
+    }
+
+    fn register_cleanup(&self) {
+        crate::CONTROL_C_HANDLERS.lock().unwrap().push(|| {
+            let mut stderr = std::io::stderr().lock();
+            let _ = stderr.write(CLEAR_PROGRESS_REPORT);
+            let _ = stderr.flush();
+        });
     }
 }

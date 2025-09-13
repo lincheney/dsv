@@ -48,7 +48,7 @@ class Logger:
                 v = self.light_colour + v + self.parent.RESET_COLOUR
             row.append(v)
             _Base.on_row(self.parent, row, stderr=stderr)
-        self.parent.print_progress_bar()
+        self.parent.print_progress()
 
 class Verbosity:
     LOW = 0
@@ -60,6 +60,7 @@ class xargs(_Base):
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '-j', '--max_procs', '--jobs', help='run up to num processes at a time, default is 1')
     parser.add_argument('--progress-bar', choices=('never', 'always', 'auto'), nargs='?', help='print a trailer')
+    parser.add_argument('--terminal-progress-report', choices=('never', 'always', 'auto'), nargs='?', help='enable conemu progress reporting')
     parser.add_argument('-v', '--verbose', default=0, action='count', help='enable verbose logging')
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
     parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
@@ -80,6 +81,13 @@ class xargs(_Base):
             opts.rainbow_columns = 'never'
         if len(opts.replace_str) not in (1, 2):
             opts.parser.error('-I/--replace-str: should be 1-2 chars')
+        # ermmm only supported on some terminals
+        # for now just check for vte even though kitty supports it too
+        opts.terminal_progress_report = _utils.resolve_tty_auto(
+            opts.terminal_progress_report or 'auto',
+            fd=2,
+            checker=lambda fd: _utils.is_tty(fd) and os.environ.get('VTE_VERSION', '').isdigit() and int(os.environ['VTE_VERSION']) >= 7900,
+        )
 
         super().__init__(opts)
         self.header_map = {}
@@ -102,7 +110,7 @@ class xargs(_Base):
             else:
                 self.parser.error(f'error: argument --max-procs/--jobs: invalid value {opts.max_procs!r}')
 
-        self.print_progress_bar()
+        self.print_progress()
 
     def start_loop(self):
         if self.thread is None:
@@ -125,7 +133,7 @@ class xargs(_Base):
                 else:
                     self.proc_queue.append(row)
                     self.stats.queued = len(self.proc_queue)
-                self.print_progress_bar()
+                self.print_progress()
             while self.proc_tasks:
                 await asyncio.gather(*self.proc_tasks)
         except BrokenPipeError:
@@ -213,7 +221,7 @@ class xargs(_Base):
             row = self.proc_queue.popleft()
             self.stats.queued = len(self.proc_queue)
             self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
-        self.print_progress_bar()
+        self.print_progress()
 
     async def read_from_stream(self, logger, stream, stderr: bool, bufsize=4096):
         buf = b''
@@ -242,9 +250,18 @@ class xargs(_Base):
         if self.thread:
             self.thread.join()
         super().on_eof()
-        self.print_progress_bar(newline=True)
 
-    def print_progress_bar(self, newline=False, width=40):
+    def cleanup(self):
+        try:
+            self.print_progress(cleanup=True)
+        finally:
+            super().cleanup()
+
+    def print_progress(self, **kwargs):
+        self.print_progress_bar(**kwargs)
+        self.print_progress_report(**kwargs)
+
+    def print_progress_bar(self, cleanup=False, width=40, **kwargs):
         if not self.opts.progress_bar:
             return
 
@@ -304,7 +321,25 @@ class xargs(_Base):
             ">{queued_len}}] ({finished} / {total}) ({failed} failed)\r",
         )).format('', **vars)
 
-        if newline:
+        if cleanup:
             bar += '\n'
         sys.stderr.buffer.write(bar.encode())
+        sys.stderr.buffer.flush()
+
+    def print_progress_report(self, cleanup=False, **kwargs):
+        if not self.opts.terminal_progress_report:
+            return
+
+        if cleanup:
+            data = b"\x1b]9;4;0;\x1b\\"
+        else:
+            failed = self.stats.finished - self.stats.succeeded
+            data = b"\x1b]9;4;%i;%.0f\x1b\\" % (
+                3 if self.stats.total == 0 # indeterminate
+                else 2 if failed == self.stats.finished # error
+                else 4 if failed > 0 # warning
+                else 1, # normal
+                100. * self.stats.finished / max(1, self.stats.total)
+            )
+        sys.stderr.buffer.write(data)
         sys.stderr.buffer.flush()

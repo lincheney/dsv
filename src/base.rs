@@ -214,6 +214,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
     }
 
     fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
+        self.register_cleanup();
         let mut writer = self.make_writer(base.opts.clone());
         base.scope.spawn(move || {
             writer.run(receiver)
@@ -445,6 +446,9 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
     fn parse_line(&self, base: &mut Base, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
         base.parse_line(line, row, quote)
+    }
+
+    fn register_cleanup(&self) {
     }
 
     fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {

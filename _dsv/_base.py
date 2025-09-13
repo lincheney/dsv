@@ -505,3 +505,8 @@ class _Base:
             return Separator((b'\x1b[2m' + b'-' * shutil.get_terminal_size().columns,))
         else:
             return Separator((b'---',))
+
+    def cleanup(self):
+        if self.outfile_proc:
+            self.outfile_proc.stdin.close()
+            self.outfile_proc.wait()

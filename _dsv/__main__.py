@@ -22,9 +22,7 @@ def main():
     try:
         list(handler.process_file(sys.stdin.buffer))
     finally:
-        if handler.outfile_proc:
-            handler.outfile_proc.stdin.close()
-            handler.outfile_proc.wait()
+        handler.cleanup()
 
 if __name__ == '__main__':
     try:
