@@ -468,17 +468,19 @@ impl ProcStats {
         }
         loop {
             let width = bars.iter().map(|(x, _)| x).sum::<usize>();
-            if width == WIDTH {
+            if width == 0 {
+                bars[3] = (WIDTH, 0);
+                break;
+            } else if width == WIDTH {
                 break
             }
+            let best = bars.iter().enumerate().filter(|ixy| *ixy.1 != (0, 0)).map(|(i, &(x, y))| (y, -(x as isize), i));
             if width < WIDTH {
-                let (i, (x, _)) = bars.iter().enumerate().max_by_key(|(_, (x, y))| (y, -(*x as isize))).unwrap();
-                bars[i] = (x + 1, 0);
-            } else if width > WIDTH {
-                let (i, (x, _)) = bars.iter().enumerate().min_by_key(|(_, (x, y))| (y, -(*x as isize))).unwrap();
-                bars[i] = (x - 1, usize::MAX);
+                let i = best.max().unwrap().2;
+                bars[i] = (bars[i].0 + 1, 0);
             } else {
-                break
+                let i = best.min().unwrap().2;
+                bars[i] = (bars[i].0 - 1, usize::MAX);
             }
         }
 
@@ -729,7 +731,7 @@ fn proc_loop(
 
 impl Handler {
     pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
-        opts.progress_bar = opts.progress_bar.resolve_if(|| {
+        opts.progress_bar = opts.progress_bar.resolve_with(|| {
             base.opts.is_stderr_tty && (
                 base.opts.is_stdout_tty
                 || fstat(std::io::stdout().as_fd())

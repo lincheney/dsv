@@ -264,10 +264,13 @@ class xargs(_Base):
 
         while True:
             current_width = sum(x for x, y in bars)
+            if current_width == 0:
+                bars[3] = (width, 0)
+                break
             if current_width == width:
                 break
             fn = min if current_width > width else max
-            i, (x, y) = fn(enumerate(bars), key=lambda ixy: (ixy[1][1], -ixy[1][0]))
+            i, (x, y) = fn(filter(lambda ixy: ixy[1] != (0, 0), enumerate(bars)), key=lambda ixy: (ixy[1][1], -ixy[1][0]))
             if current_width > width:
                 # make space and go down
                 bars[i] = (x - 1, float('inf'))

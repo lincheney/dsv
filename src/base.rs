@@ -82,7 +82,7 @@ impl AutoChoices {
         }
     }
 
-    pub fn resolve_if<F: Fn() -> bool>(self, is_tty: F) -> Self {
+    pub fn resolve_with<F: Fn() -> bool>(self, is_tty: F) -> Self {
         if self.is_on_if(is_tty) {
             Self::Always
         } else {
