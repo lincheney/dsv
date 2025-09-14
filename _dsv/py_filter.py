@@ -18,7 +18,7 @@ class py_filter(py):
             self.opts.remove_errors = True
 
     def handle_exec_result(self, result, vars, table):
-        if isinstance(result, Vec):
+        if isinstance(result, NoNaVec if self.opts.no_na else Vec):
             result = all(result)
 
         if self.opts.passthru:

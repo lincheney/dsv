@@ -367,13 +367,13 @@ class Proxy(BaseTable):
         return super().__flat__()
 
     def map(self, fn, col=False):
-        if self.__parent__.__na__:
+        if na := self.__parent__.__na__:
             fn = na_wrapper(fn)
 
         if col and self.__is_column__():
             return fn(self)
         if self.__is_row__() or self.__is_column__():
-            return NoNaVec(self).map(fn)
+            return (Vec if na else NoNaVec)(self).map(fn)
         return super().map(fn, col)
 
 
@@ -388,7 +388,7 @@ class NoNaVec(Vectorised, list):
     def map(self, fn):
         if self.__na__:
             fn = na_wrapper(fn)
-        return (type)(self)(map(fn, self))
+        return type(self)(map(fn, self))
 
 class Vec(NoNaVec):
     __na__ = True
