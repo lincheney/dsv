@@ -77,3 +77,13 @@ class pipeline(_Base):
                 kwargs = {**self.DEFAULTS, **kwargs}
             return handler.from_args(args, **kwargs)
         raise ValueError(f'cannot find handler named {name}')
+
+    def _cleanup(self, subject, *rest):
+        try:
+            subject.cleanup()
+        finally:
+            if rest:
+                self._cleanup(*rest)
+
+    def cleanup(self):
+        self._cleanup(*self.pipeline, super())
