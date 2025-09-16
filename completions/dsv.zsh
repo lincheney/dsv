@@ -1015,6 +1015,7 @@ _shtab__dsv_xargs_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-p,-j,--max_procs,--jobs}"[run up to num processes at a time, default is 1]:max_procs:"
   "--progress-bar[print a trailer]:progress_bar:(never always auto)"
+  "--terminal-progress-report[enable conemu progress reporting]:terminal_progress_report:(never always auto)"
   "*"{-v,--verbose}"[enable verbose logging]"
   "--rainbow-rows[enable rainbow rows]:rainbow_rows:(never always auto)"
   "--dry-run[print the job to run but do not run the job]"

@@ -34,7 +34,7 @@ _shtab__dsv_tojson_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-head
 _shtab__dsv_tomarkdown_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_totsv_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_uniq_option_strings=('-h' '--help' '-x' '--complement' '-r' '--regex' '-c' '--count' '-C' '--count-column' '--group' '--repeated' '--repeated-all' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
-_shtab__dsv_xargs_option_strings=('-h' '--help' '-p' '-j' '--max_procs' '--jobs' '--progress-bar' '-v' '--verbose' '--rainbow-rows' '--dry-run' '--no-tag' '-k' '--column' '-I' '--replace-str' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
+_shtab__dsv_xargs_option_strings=('-h' '--help' '-p' '-j' '--max_procs' '--jobs' '--progress-bar' '--terminal-progress-report' '-v' '--verbose' '--rainbow-rows' '--dry-run' '--no-tag' '-k' '--column' '-I' '--replace-str' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
 
 
 
@@ -204,6 +204,7 @@ _shtab__dsv_uniq___colour_choices=('never' 'always' 'auto')
 _shtab__dsv_uniq___color_choices=('never' 'always' 'auto')
 _shtab__dsv_uniq___rainbow_columns_choices=('never' 'always' 'auto')
 _shtab__dsv_xargs___progress_bar_choices=('never' 'always' 'auto')
+_shtab__dsv_xargs___terminal_progress_report_choices=('never' 'always' 'auto')
 _shtab__dsv_xargs___rainbow_rows_choices=('never' 'always' 'auto')
 _shtab__dsv_xargs___trailer_choices=('never' 'always' 'auto')
 _shtab__dsv_xargs___numbered_columns_choices=('never' 'always' 'auto')
@@ -1107,6 +1108,7 @@ _shtab__dsv_xargs_pos_0_nargs=*
 _shtab__dsv_xargs__h_nargs=0
 _shtab__dsv_xargs___help_nargs=0
 _shtab__dsv_xargs___progress_bar_nargs=?
+_shtab__dsv_xargs___terminal_progress_report_nargs=?
 _shtab__dsv_xargs__v_nargs=0
 _shtab__dsv_xargs___verbose_nargs=0
 _shtab__dsv_xargs___rainbow_rows_nargs=?
