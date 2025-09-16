@@ -4,7 +4,7 @@ use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer, WriterState};
 use std::io::{Read, BufRead, BufReader, IsTerminal};
-use bstr::{BStr, BString, ByteSlice, ByteVec};
+use bstr::{BStr, BString, ByteSlice};
 use std::process::{ExitCode};
 use anyhow::{Result, Context};
 
@@ -801,9 +801,6 @@ impl<W: Writer> Output<W> {
 
     pub fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
         let mut state = WriterState{ ors: self.opts.get_ors(), ..WriterState::default() };
-        if self.opts.is_stdout_tty {
-            state.ors.insert_str(0, b"\x1b[K");
-        }
         for msg in receiver {
             if self.handle_message(&mut state, msg)? {
                 break

@@ -57,7 +57,7 @@ impl Writer for JsonWriter {
 
         let output = keys.zip(values).collect();
         let output = serde_json::Value::Object(output);
-        self.write_raw_with(state, opts, false, |mut file| {
+        self.write_raw_with(state, opts, false, opts.is_stdout_tty, |mut file| {
             serde_json::to_writer(&mut file, &output)?;
             Ok(file)
         })

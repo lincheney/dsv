@@ -5,6 +5,8 @@ use std::process::{Command, Stdio};
 use anyhow::{Result};
 use colorutils_rs::Hsv;
 
+const TERM_CLEAR: &[u8] = b"\x1b[K";
+
 const STEP: f32 = 0.647;
 pub fn get_rgb(i: usize, step: Option<f32>, saturation: Option<f32>) -> BString {
     let hue = (step.unwrap_or(STEP) * i as f32) % 1.0;
@@ -135,7 +137,7 @@ pub trait Writer {
         is_header: bool,
     ) -> Result<()> {
         let file = state.file.get_or_insert_with(|| self.get_file(opts, is_header));
-        self.write_to_file(file, if ors { Some(state.ors.as_ref()) } else { None }, string)
+        self.write_to_file(file, if ors { Some(state.ors.as_ref()) } else { None }, opts.is_stdout_tty, string)
     }
 
     fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<&mut Box<dyn Write>>>(
@@ -143,10 +145,11 @@ pub trait Writer {
         state: &mut WriterState,
         opts: &BaseOptions,
         is_header: bool,
+        clear: bool,
         func: F,
     ) -> Result<()> {
         let file = state.file.get_or_insert_with(|| self.get_file(opts, is_header));
-        self.write_to_file_with(file, state.ors.as_ref(), func)
+        self.write_to_file_with(file, state.ors.as_ref(), clear, func)
     }
 
     fn write_output(
@@ -167,10 +170,15 @@ pub trait Writer {
         state: &mut WriterState,
         string: BString,
         ors: bool,
-        _opts: &BaseOptions,
+        opts: &BaseOptions,
     ) -> Result<()> {
         let mut file = std::io::stderr().lock();
-        self.write_to_file(&mut file, if ors { Some(state.ors.as_ref()) } else { None }, string)
+        self.write_to_file(
+            &mut file,
+            if ors { Some(state.ors.as_ref()) } else { None },
+            opts.is_stderr_tty,
+            string,
+        )
     }
 
     fn write_stderr(
@@ -189,8 +197,12 @@ pub trait Writer {
         &mut self,
         mut file: W,
         ors: Option<&BStr>,
+        clear: bool,
         mut value: BString,
     ) -> Result<()> {
+        if clear {
+            file.write_all(TERM_CLEAR)?;
+        }
         if let Some(ors) = ors {
             value.push_str(ors);
         }
@@ -201,10 +213,14 @@ pub trait Writer {
 
     fn write_to_file_with<W: Write, F: Fn(W) -> Result<W>>(
         &mut self,
-        file: W,
+        mut file: W,
         ors: &BStr,
+        clear: bool,
         value: F,
     ) -> Result<()> {
+        if clear {
+            file.write_all(TERM_CLEAR)?;
+        }
         let mut file = value(file)?;
         file.write_all(ors)?;
         file.flush()?;

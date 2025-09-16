@@ -134,8 +134,6 @@ class _Base:
         opts.rainbow_columns = opts.rainbow_columns or 'auto'
         opts.header_colour = opts.header_colour or b'\x1b[1;4m'
         opts.header_bg_colour = opts.header_bg_colour or b'\x1b[48;5;237m'
-        if _utils.is_tty(1):
-            opts.ors = b'\x1b[K' + opts.ors
 
         for k, v in kwargs.items():
             setattr(opts, k, v)
@@ -419,6 +417,8 @@ class _Base:
             self.start_outfile()
             outfile = self.outfile
         row = self.format_row(row, self.opts.stderr_colour if stderr else self.opts.colour, padding) + self.opts.ors
+        if _utils.is_tty(2 if stderr else 1):
+            row = b'\x1b[K' + row
         outfile.write(row)
         outfile.flush()
 
