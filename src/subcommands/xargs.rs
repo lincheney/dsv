@@ -441,12 +441,6 @@ struct ProcStats {
     queued: usize,
 }
 
-impl Drop for ProcStats {
-    fn drop(&mut self) {
-        eprintln!("DEBUG(newly) \t{}\t= {:?}", stringify!(123), 123);
-    }
-}
-
 fn divmod(x: usize, y: usize) -> (usize, usize) {
     (x / y, x % y)
 }
