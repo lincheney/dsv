@@ -125,7 +125,7 @@ pub trait Writer {
             b"---"
         };
 
-        self.write_raw(state, sep.into(), true, opts, false)
+        self.write_raw(state, sep.into(), true, opts, false, true)
     }
 
     fn write_raw(
@@ -135,9 +135,10 @@ pub trait Writer {
         ors: bool,
         opts: &BaseOptions,
         is_header: bool,
+        clear: bool,
     ) -> Result<()> {
         let file = state.file.get_or_insert_with(|| self.get_file(opts, is_header));
-        self.write_to_file(file, if ors { Some(state.ors.as_ref()) } else { None }, opts.is_stdout_tty, string)
+        self.write_to_file(file, if ors { Some(state.ors.as_ref()) } else { None }, clear, string)
     }
 
     fn write_raw_with<F: Fn(&mut Box<dyn Write>) -> Result<&mut Box<dyn Write>>>(
@@ -162,7 +163,7 @@ pub trait Writer {
         ofs: &Ofs,
     ) -> Result<()> {
         let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs, opts.colour.is_on(false));
-        self.write_raw(state, formatted_row, true, opts, is_header)
+        self.write_raw(state, formatted_row, true, opts, is_header, opts.is_stdout_tty)
     }
 
     fn write_raw_stderr(
@@ -170,13 +171,14 @@ pub trait Writer {
         state: &mut WriterState,
         string: BString,
         ors: bool,
-        opts: &BaseOptions,
+        _opts: &BaseOptions,
+        clear: bool,
     ) -> Result<()> {
         let mut file = std::io::stderr().lock();
         self.write_to_file(
             &mut file,
             if ors { Some(state.ors.as_ref()) } else { None },
-            opts.is_stderr_tty,
+            clear,
             string,
         )
     }
@@ -190,7 +192,7 @@ pub trait Writer {
         ofs: &Ofs,
     ) -> Result<()> {
         let formatted_row = self.format_row(state, row, padding, false, opts, ofs, opts.stderr_colour);
-        self.write_raw_stderr(state, formatted_row, true, opts)
+        self.write_raw_stderr(state, formatted_row, true, opts, opts.is_stderr_tty)
     }
 
     fn write_to_file<W: Write>(

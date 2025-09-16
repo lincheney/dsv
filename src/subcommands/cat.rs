@@ -55,7 +55,7 @@ impl base::Processor for Handler {
                     Child{inner: &mut self}.process_file(file, base, base::Callbacks::all() - base::Callbacks::ON_EOF)?;
                 },
                 Err(e) => {
-                    base.write_raw_stderr(format!("{e}: {file}\n").into(), false);
+                    base.write_raw_stderr(format!("{e}: {file}\n").into(), false, true);
                 }
             }
         }

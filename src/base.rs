@@ -31,10 +31,10 @@ pub enum Message {
     Row(Vec<BString>),
     Separator,
     Eof,
-    Raw(BString, bool),
+    Raw(BString, bool, bool),
     Ofs(Ofs),
     Stderr(Vec<BString>),
-    RawStderr(BString, bool),
+    RawStderr(BString, bool, bool),
 }
 
 pub fn no_ansi_colour_len(val: &BStr) -> usize {
@@ -422,10 +422,10 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                 Message::Header(header) => self.on_header(base, header),
                 Message::Eof => { break },
                 Message::Separator => Ok(false), // do nothing
-                Message::Raw(value, ors) => if base.write_raw(value, ors) { break } else { Ok(false) },
+                Message::Raw(value, ors, clear) => if base.write_raw(value, ors, clear) { break } else { Ok(false) },
                 Message::Ofs(ofs) => if self.on_ofs(base, ofs) { break } else { Ok(false) },
                 Message::Stderr(row) => if base.write_stderr(row) { break } else { Ok(false) },
-                Message::RawStderr(value, ors) => if base.write_raw_stderr(value, ors) { break } else { Ok(false) },
+                Message::RawStderr(value, ors, clear) => if base.write_raw_stderr(value, ors, clear) { break } else { Ok(false) },
             };
             match result {
                 Ok(true) => break,
@@ -621,8 +621,8 @@ impl<'a, 'b> Base<'a, 'b> {
         Ok(self.sender.send(Message::Header(header)).is_err())
     }
 
-    pub fn write_raw(&self, value: BString, ors: bool) -> bool {
-        self.sender.send(Message::Raw(value, ors)).is_err()
+    pub fn write_raw(&self, value: BString, ors: bool, clear: bool) -> bool {
+        self.sender.send(Message::Raw(value, ors, clear)).is_err()
     }
 
     pub fn on_ofs(&self, ofs: Ofs) -> bool {
@@ -633,8 +633,8 @@ impl<'a, 'b> Base<'a, 'b> {
         self.sender.send(Message::Stderr(row)).is_err()
     }
 
-    pub fn write_raw_stderr(&self, value: BString, ors: bool) -> bool {
-        self.sender.send(Message::RawStderr(value, ors)).is_err()
+    pub fn write_raw_stderr(&self, value: BString, ors: bool, clear: bool) -> bool {
+        self.sender.send(Message::RawStderr(value, ors, clear)).is_err()
     }
 
 }
@@ -780,8 +780,8 @@ impl<W: Writer> Output<W> {
         }
     }
 
-    fn on_raw(&mut self, state: &mut WriterState, value: BString, ors: bool) -> Result<bool> {
-        self.writer.write_raw(state, value, ors, &self.opts, false)?;
+    fn on_raw(&mut self, state: &mut WriterState, value: BString, ors: bool, clear: bool) -> Result<bool> {
+        self.writer.write_raw(state, value, ors, &self.opts, false, clear)?;
         Ok(false)
     }
 
@@ -794,8 +794,8 @@ impl<W: Writer> Output<W> {
         self.on_row(state, row, false, true)
     }
 
-    fn on_raw_stderr(&mut self, state: &mut WriterState, value: BString, ors: bool) -> Result<bool> {
-        self.writer.write_raw_stderr(state, value, ors, &self.opts)?;
+    fn on_raw_stderr(&mut self, state: &mut WriterState, value: BString, ors: bool, clear: bool) -> Result<bool> {
+        self.writer.write_raw_stderr(state, value, ors, &self.opts, clear)?;
         Ok(false)
     }
 
@@ -815,10 +815,10 @@ impl<W: Writer> Output<W> {
             Message::Header(header) => self.on_header(state, header),
             Message::Eof => self.on_eof(state),
             Message::Separator => self.on_separator(state),
-            Message::Raw(value, ors) => self.on_raw(state, value, ors),
+            Message::Raw(value, ors, clear) => self.on_raw(state, value, ors, clear),
             Message::Ofs(ofs) => Ok(self.on_ofs(ofs)),
             Message::Stderr(row) => self.on_stderr(state, row),
-            Message::RawStderr(value, ors) => self.on_raw_stderr(state, value, ors),
+            Message::RawStderr(value, ors, clear) => self.on_raw_stderr(state, value, ors, clear),
         }
     }
 

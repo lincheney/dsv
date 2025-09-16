@@ -176,7 +176,7 @@ impl Handler {
             }
             Err(e) => {
                 if ! self.opts.common.quiet {
-                    base.write_raw_stderr(format!("{e}\n").into(), false);
+                    base.write_raw_stderr(format!("{e}\n").into(), false, true);
                 }
                 if self.opts.common.remove_errors || (self.opts.common.ignore_errors && self.inner.expr) {
                     Ok(None)
@@ -276,7 +276,7 @@ impl InnerHandler {
                 }
             } else if self.expr {
                 let bytes = py.convert_py_to_bytes(result)?;
-                if base.write_raw(bytes.to_owned(), true) {
+                if base.write_raw(bytes.to_owned(), true, true) {
                     return Ok(true)
                 }
             } else {

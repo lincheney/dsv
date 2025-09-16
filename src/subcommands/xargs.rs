@@ -523,7 +523,7 @@ impl ProcStats {
         if cleanup {
             bar.push('\n');
         }
-        base.write_raw_stderr(bar.into(), false)
+        base.write_raw_stderr(bar.into(), false, false)
     }
 
     fn print_progress_report(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
@@ -532,7 +532,7 @@ impl ProcStats {
         }
 
         if cleanup {
-            return base.write_raw_stderr(CLEAR_PROGRESS_REPORT.into(), false)
+            return base.write_raw_stderr(CLEAR_PROGRESS_REPORT.into(), false, false)
         }
 
         let report = format!(
@@ -548,7 +548,7 @@ impl ProcStats {
             },
             100. * self.finished as f64 / self.total.max(1) as f64,
         );
-        base.write_raw_stderr(report.into(), false)
+        base.write_raw_stderr(report.into(), false, false)
     }
 }
 
@@ -796,7 +796,7 @@ impl Handler {
                 let max = match std::thread::available_parallelism() {
                     Ok(max) => max.get(),
                     Err(e) => {
-                        base.write_raw_stderr(format!("{e}\n").into(), false);
+                        base.write_raw_stderr(format!("{e}\n").into(), false, true);
                         1
                     },
                 };
