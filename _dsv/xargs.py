@@ -43,9 +43,9 @@ class Logger:
                 v = str(v).encode()
             row = self.keys.copy() if self.parent.opts.tag else []
             if self.parent.opts.rainbow_rows:
-                if row:
-                    row[0] = self.dark_colour + row[0]
-                v = self.light_colour + v + self.parent.RESET_COLOUR
+                for i, c in enumerate(row):
+                    row[i] = self.dark_colour + row[i]
+                v = self.light_colour + v + self.parent.RESET_COLOUR + self.dark_colour
             row.append(v)
             _Base.on_row(self.parent, row, stderr=stderr)
         self.parent.print_progress()
@@ -176,9 +176,12 @@ class xargs(_Base):
 
     async def start_proc(self, row):
         logger = Logger(self.stats.total - self.stats.queued, self, row)
+        no_proc = self.opts.dry_run
         try:
             if not self.opts.command:
-                formatted = ['printf', '%s\n'] + row
+                logger.log_output([self.format_row(row, False)], False)
+                no_proc = True
+
             elif not any(self.placeholder_regex.search(c) for c in self.opts.command):
                 # no arguments are formatted, append the args at the end
                 formatted = self.opts.command + row
@@ -191,7 +194,7 @@ class xargs(_Base):
             if self.opts.dry_run or self.opts.verbose >= Verbosity.ALL:
                 logger.log_output([b'starting process: ' + shell_quote(formatted)], True)
 
-            if self.opts.dry_run:
+            if no_proc:
                 self.stats.succeeded += 1
 
             else:

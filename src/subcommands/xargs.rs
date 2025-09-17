@@ -81,6 +81,7 @@ enum Message {
     Header(Vec<BString>),
     Row(Vec<BString>),
     Eof,
+    Ofs(base::Ofs),
 }
 
 struct BufferedReader<R> {
@@ -224,6 +225,7 @@ impl Logger {
             }
             line.insert_str(0, light);
             line.push_str(base::RESET_COLOUR);
+            line.push_str(dark);
         }
         row.push(line);
         if stderr {
@@ -311,16 +313,6 @@ impl Proc {
         keys: Option<&HashMap<BString, usize>>,
         values: &[BString],
     ) -> Result<Vec<BString>> {
-
-        if command.is_empty() {
-            // just print out
-            let mut cmd = vec![
-                b"printf".into(),
-                b"%s\n".into(),
-            ];
-            cmd.extend(values.iter().cloned());
-            return Ok(cmd)
-        }
 
         let mut formatted = false;
         let mut cmd = vec![];
@@ -560,6 +552,7 @@ struct ProcStore {
     inner: HashMap<usize, (Proc, Logger)>,
     stats: ProcStats,
     keys: Option<HashMap<BString, usize>>,
+    ofs: base::Ofs,
 }
 
 impl ProcStore {
@@ -613,23 +606,40 @@ impl ProcStore {
             },
         };
         let result = (|| {
-            let command = Proc::format_args(&self.placeholder_regex, &self.opts.command, self.keys.as_ref(), &logger.row)?;
-            if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
-                let mut line: BString = b"starting process: ".into();
-                line.append(&mut shell_quote(&command));
-                logger.write_line(base, line, true)?;
-            }
 
-            if self.opts.dry_run {
-                self.stats.succeeded += 1;
-                self.stats.finished += 1;
-                Ok(None)
+            let command = if self.opts.command.is_empty() {
+                // just print out
+                let line = crate::writer::format_row(
+                    logger.row.clone(),
+                    None,
+                    false,
+                    &base.opts,
+                    &self.ofs,
+                    false,
+                    std::iter::empty(),
+                );
+                logger.write_line(base, line, false)?;
+                None
             } else {
+                let command = Proc::format_args(&self.placeholder_regex, &self.opts.command, self.keys.as_ref(), &logger.row)?;
+                if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
+                    let mut line: BString = b"starting process: ".into();
+                    line.append(&mut shell_quote(&command));
+                    logger.write_line(base, line, true)?;
+                }
+                Some(command)
+            };
+
+            if let Some(command) = command {
                 Proc::new(
                     EventMarker(token),
                     &command,
                     registry,
                 ).map(Option::Some)
+            } else {
+                self.stats.succeeded += 1;
+                self.stats.finished += 1;
+                Ok(None)
             }
         })();
 
@@ -710,6 +720,7 @@ fn proc_loop(
         stats: ProcStats::default(),
         keys: None,
         queue: VecDeque::new(),
+        ofs: base::Ofs::default(),
     };
 
     let result = (|| {
@@ -748,6 +759,9 @@ fn proc_loop(
                                 // no more rows
                                 poll.registry().deregister(&mut receiver)?;
                                 got_eof = true;
+                            },
+                            Ok(Message::Ofs(ofs)) => {
+                                proc_store.ofs = ofs;
                             },
                             Err(mpsc::TryRecvError::Empty) => break,
                             Err(e) => { Err(e)?; },
@@ -857,6 +871,11 @@ impl base::Processor for Handler {
     fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
         self.sender.send(Message::Row(row)).unwrap();
         Ok(false)
+    }
+
+    fn on_ofs(&mut self, base: &mut base::Base, ofs: base::Ofs) -> bool {
+        self.sender.send(Message::Ofs(ofs.clone())).unwrap();
+        base.on_ofs(ofs)
     }
 
     fn on_eof(self, _base: &mut base::Base) -> Result<bool> {

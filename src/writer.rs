@@ -44,6 +44,64 @@ pub fn format_columns<S: AsRef<BStr>>(mut row: Vec<BString>, ofs: &Ofs<S>, ors: 
     FormattedRow(row)
 }
 
+pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
+    row: Vec<BString>,
+    padding: Option<&Vec<usize>>,
+    is_header: bool,
+    opts: &BaseOptions,
+    ofs: &Ofs,
+    colour: bool,
+    rgb: I,
+) -> BString {
+
+    let mut parts = BString::new(vec![]);
+    let tmp_padding = vec![];
+    let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
+    let ofs = ofs.as_bstr();
+    let header_colour = if is_header && colour {
+        opts.header_colour.as_deref().map(|x| x.as_bytes()).or(Some(b"\x1b[1;4m"))
+    } else {
+        None
+    };
+    let header_bg_colour = if is_header && colour {
+        opts.header_bg_colour.as_deref().map(|x| x.as_bytes())
+    } else {
+        None
+    };
+
+    let rgb = rgb.chain(std::iter::repeat(b"".into()));
+    for (i, ((col, rgb), &pad)) in row.iter().zip(rgb).zip(padding).enumerate() {
+        if i != 0 {
+            parts.extend_from_slice(ofs);
+        }
+        if let Some(header_colour) = header_colour {
+            parts.extend_from_slice(header_colour);
+        }
+        if let Some(header_bg_colour) = header_bg_colour {
+            parts.extend_from_slice(header_bg_colour);
+        }
+        if colour {
+            parts.extend_from_slice(rgb);
+        }
+        parts.extend_from_slice(col);
+        if header_bg_colour.or(header_colour).is_some() {
+            parts.extend_from_slice(RESET_COLOUR.as_bytes());
+            if let Some(header_bg_colour) = header_bg_colour {
+                parts.extend_from_slice(header_bg_colour);
+            }
+        }
+        for _ in 0 .. pad {
+            parts.push(b' ');
+        }
+    }
+    // reset colour
+    if colour && !parts.is_empty() {
+        parts.extend_from_slice(RESET_COLOUR.as_bytes());
+    }
+
+    parts
+}
+
 fn needs_quoting(value: &[u8], ofs: &[u8], ors: &[u8]) -> bool {
     value.contains(&b'"') || value.windows(ofs.len()).any(|window| window == ofs) || value.windows(ors.len()).any(|window| window == ors)
 }
@@ -71,7 +129,7 @@ pub trait Writer {
         }
     }
 
-    fn get_rgb<'a>(&self, state: &'a WriterState, _row: &[BString]) -> impl Iterator<Item=&'a BStr> {
+    fn get_rgb<'a>(&self, state: &'a WriterState) -> impl Iterator<Item=&'a BStr> {
         state.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()))
     }
 
@@ -240,61 +298,11 @@ pub trait Writer {
         ofs: &Ofs,
         colour: bool,
     ) -> BString {
-
         if colour && opts.rainbow_columns != AutoChoices::Never {
             // colour each column differently
             self.set_rgb(state, row.len());
         }
-
-        let mut parts = BString::new(vec![]);
-        let tmp_padding = vec![];
-        let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
-        let rgb = self.get_rgb(state, &row);
-        let ofs = ofs.as_bstr();
-        let header_colour = if is_header && colour {
-            opts.header_colour.as_deref().map(|x| x.as_bytes()).or(Some(b"\x1b[1;4m"))
-        } else {
-            None
-        };
-        let header_bg_colour = if is_header && colour {
-            opts.header_bg_colour.as_deref().map(|x| x.as_bytes())
-        } else {
-            None
-        };
-
-        for (i, ((col, rgb), &pad)) in row.iter().zip(rgb).zip(padding).enumerate() {
-            if i != 0 {
-                if colour {
-                    parts.extend_from_slice(b"\x1b[39m");
-                }
-                parts.extend_from_slice(ofs);
-            }
-            if let Some(header_colour) = header_colour {
-                parts.extend_from_slice(header_colour);
-            }
-            if let Some(header_bg_colour) = header_bg_colour {
-                parts.extend_from_slice(header_bg_colour);
-            }
-            if colour {
-                parts.extend_from_slice(rgb);
-            }
-            parts.extend_from_slice(col);
-            if header_bg_colour.or(header_colour).is_some() {
-                parts.extend_from_slice(RESET_COLOUR.as_bytes());
-                if let Some(header_bg_colour) = header_bg_colour {
-                    parts.extend_from_slice(header_bg_colour);
-                }
-            }
-            for _ in 0 .. pad {
-                parts.push(b' ');
-            }
-        }
-        // reset colour
-        if colour && !parts.is_empty() {
-            parts.extend_from_slice(RESET_COLOUR.as_bytes());
-        }
-
-        parts
+        format_row(row, padding, is_header, opts, ofs, colour, self.get_rgb(state))
     }
 }
 
