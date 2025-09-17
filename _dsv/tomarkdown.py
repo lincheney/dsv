@@ -28,8 +28,8 @@ class tomarkdown(_Base):
 
         return super().on_row(row)
 
-    def write_output(self, row, padding=None, is_header=False):
-        if super().write_output(row, padding, is_header):
+    def write_output(self, row, padding=None, is_header=False, stderr=False):
+        if super().write_output(row, padding, is_header, stderr):
             return True
 
         # print the separator
