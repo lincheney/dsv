@@ -630,7 +630,7 @@ impl ProcStore {
                 Some(command)
             };
 
-            if let Some(command) = command {
+            if !self.opts.dry_run && let Some(command) = command {
                 Proc::new(
                     EventMarker(token),
                     &command,
