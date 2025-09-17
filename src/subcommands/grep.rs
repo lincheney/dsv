@@ -125,7 +125,7 @@ impl Handler {
                 replace.push_str(base::RESET_COLOUR);
                 Some(replace)
             } else {
-                Some(format!("{}$1{}", MATCH_COLOUR, base::RESET_COLOUR))
+                Some(format!("{}$0{}", MATCH_COLOUR, base::RESET_COLOUR))
             }
         } else {
             opts.replace.take()
