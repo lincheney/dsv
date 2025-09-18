@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -eu -o pipefail
 
+# Check if any artifacts exist
+if [ ! -d "artifacts" ] || [ -z "$(find artifacts -name 'dsv-nightly-*' -type f)" ]; then
+    echo "No successful build artifacts found. Skipping release creation."
+    exit 1
+fi
+
 # Delete previous nightly release and tag
 echo "Deleting previous nightly release..."
 gh release delete nightly --yes || echo "No previous nightly release found"
@@ -12,12 +18,6 @@ git config user.name "github-actions[bot]"
 git config user.email "github-actions[bot]@users.noreply.github.com"
 git tag -f nightly
 git push origin nightly -f
-
-# Check if any artifacts exist
-if [ ! -d "artifacts" ] || [ -z "$(find artifacts -name 'dsv-nightly-*' -type f)" ]; then
-    echo "No successful build artifacts found. Skipping release creation."
-    exit 0
-fi
 
 # Generate release notes
 echo "Generating release notes..."
