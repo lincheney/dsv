@@ -13,6 +13,12 @@ git config user.email "github-actions[bot]@users.noreply.github.com"
 git tag -f nightly
 git push origin nightly -f
 
+# Check if any artifacts exist
+if [ ! -d "artifacts" ] || [ -z "$(find artifacts -name '*.tar.gz' -type f)" ]; then
+    echo "No successful build artifacts found. Skipping release creation."
+    exit 0
+fi
+
 # Generate release notes
 echo "Generating release notes..."
 cat > release_notes.md << EOF
@@ -34,7 +40,7 @@ Choose the appropriate binary for your platform:
 ⚠️  **Note**: This is a pre-release build and may contain unstable features.
 EOF
 
-# Create nightly release
+# Create nightly release with only available artifacts
 echo "Creating nightly release..."
 gh release create nightly \
   --title "DSV Nightly $(date -u '+%Y-%m-%d')" \

@@ -34,22 +34,14 @@ jobs:
           rustup default stable
           rustup target add "$BUILD_TARGET"
 
-      - name: Build release
-        env:
-          BUILD_TARGET: ${{ matrix.target }}
-        run: cargo build --release --target "$BUILD_TARGET"
-
-      - name: Package binary
+      - name: Build and package
         env:
           BUILD_TARGET: ${{ matrix.target }}
           PACKAGE_NAME: ${{ matrix.name }}
-        run: |
-          mkdir -p package
-          cp "target/$BUILD_TARGET/release/dsv" package/
-          cd package
-          tar czf "../$PACKAGE_NAME" *
+        run: ./build.sh "$BUILD_TARGET" "$PACKAGE_NAME"
 
       - name: Upload artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
@@ -57,6 +49,7 @@ jobs:
 
   release:
     needs: build
+    if: always()
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -69,6 +62,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+        continue-on-error: true
 
       - name: Create nightly release
-        run: ./scripts/create-nightly-release.sh
+        run: ./release.sh
