@@ -7,12 +7,7 @@ PACKAGE_NAME="$2"
 echo "Building for target: $BUILD_TARGET"
 cargo build --release --target "$BUILD_TARGET"
 
-echo "Packaging binary as: $PACKAGE_NAME"
-mkdir -p package
-cp "target/$BUILD_TARGET/release/dsv" package/
-cd package
-tar czf "../$PACKAGE_NAME" *
-cd ..
-rm -rf package
+echo "Copying binary as: $PACKAGE_NAME"
+cp "target/$BUILD_TARGET/release/dsv" "$PACKAGE_NAME"
 
-echo "Build and package complete: $PACKAGE_NAME"
+echo "Build complete: $PACKAGE_NAME"

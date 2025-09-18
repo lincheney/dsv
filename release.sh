@@ -14,7 +14,7 @@ git tag -f nightly
 git push origin nightly -f
 
 # Check if any artifacts exist
-if [ ! -d "artifacts" ] || [ -z "$(find artifacts -name '*.tar.gz' -type f)" ]; then
+if [ ! -d "artifacts" ] || [ -z "$(find artifacts -name 'dsv-nightly-*' -type f)" ]; then
     echo "No successful build artifacts found. Skipping release creation."
     exit 0
 fi
@@ -32,10 +32,10 @@ Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
 Choose the appropriate binary for your platform:
 
-- **Linux x86_64**: \`dsv-nightly-x86_64-linux.tar.gz\`
-- **Linux ARM64**: \`dsv-nightly-aarch64-linux.tar.gz\`
-- **macOS x86_64**: \`dsv-nightly-x86_64-macos.tar.gz\`
-- **macOS ARM64**: \`dsv-nightly-aarch64-macos.tar.gz\`
+- **Linux x86_64**: \`dsv-nightly-x86_64-linux\`
+- **Linux ARM64**: \`dsv-nightly-aarch64-linux\`
+- **macOS x86_64**: \`dsv-nightly-x86_64-macos\`
+- **macOS ARM64**: \`dsv-nightly-aarch64-macos\`
 
 ⚠️  **Note**: This is a pre-release build and may contain unstable features.
 EOF

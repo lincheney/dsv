@@ -15,10 +15,10 @@ jobs:
       matrix:
         # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
         include:
-          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, name: dsv-nightly-x86_64-linux.tar.gz }
-          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, name: dsv-nightly-aarch64-linux.tar.gz }
-          - { target: x86_64-apple-darwin, os: macos-latest, name: dsv-nightly-x86_64-macos.tar.gz }
-          - { target: aarch64-apple-darwin, os: macos-latest, name: dsv-nightly-aarch64-macos.tar.gz }
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, name: dsv-nightly-x86_64-linux }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, name: dsv-nightly-aarch64-linux }
+          - { target: x86_64-apple-darwin, os: macos-latest, name: dsv-nightly-x86_64-macos }
+          - { target: aarch64-apple-darwin, os: macos-latest, name: dsv-nightly-aarch64-macos }
 
     runs-on: ${{ matrix.os }}
 
