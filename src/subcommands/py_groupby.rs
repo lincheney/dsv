@@ -83,16 +83,16 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.column_slicer.make_header_map(&header);
         self.inner.process_header(&header);
         self.header = Some(header);
-        Ok(false)
+        Ok(())
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         self.rows.push(row);
-        Ok(false)
+        Ok(())
     }
 
     fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
@@ -176,8 +176,8 @@ impl base::Processor for Handler {
                 result
             };
 
-            if let Some(result) = result && self.inner.inner.handle_result(&py, base, result)? {
-                return Ok(true)
+            if let Some(result) = result {
+                self.inner.inner.handle_result(&py, base, result)?;
             }
         }
         base.on_eof()

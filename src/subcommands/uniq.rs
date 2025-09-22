@@ -55,7 +55,7 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
         self.column_slicer.make_header_map(&header);
         if let Some(count_column) = &self.opts.count_column {
             header.insert(0, count_column.as_bytes().into());
@@ -63,7 +63,7 @@ impl base::Processor for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
 
         let entry = self.map.entry(key).or_insert((0, vec![]));
@@ -77,27 +77,25 @@ impl base::Processor for Handler {
             entry.1.push(row);
         }
 
-        Ok(false)
+        Ok(())
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
         if !self.print_early {
             let mut first = true;
-            'outer: for (_, (count, rows)) in self.map {
+            for (_, (count, rows)) in self.map {
                 if self.repeated && count < 2 {
                     continue
                 }
-                if self.opts.group && !first && base.on_separator() {
-                    break
+                if self.opts.group && !first {
+                    base.on_separator()?;
                 }
                 first = false;
                 for mut row in rows {
                     if self.opts.count_column.is_some() {
                         row.insert(0, format!("{count}").into());
                     }
-                    if base.on_row(row)? {
-                        break 'outer
-                    }
+                    base.on_row(row)?;
                 }
             }
         }

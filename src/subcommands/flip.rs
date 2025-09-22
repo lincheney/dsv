@@ -1,3 +1,4 @@
+use crate::utils::Break;
 use anyhow::Result;
 use crate::base;
 use bstr::{BString};
@@ -34,20 +35,20 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.header = Some(header);
         base.on_header(vec![b"row".into(), b"column".into(), b"key".into(), b"value".into()])
     }
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<()> {
         if self.count == 0 {
             // first row
-            if self.header.is_none() && base.on_header(vec![b"row".into(), b"column".into(), b"value".into()])? {
-                return Ok(true)
+            if self.header.is_none() {
+                base.on_header(vec![b"row".into(), b"column".into(), b"value".into()])?;
             }
 
-        } else if self.opts.row_sep == base::AutoChoices::Always && base.on_separator() {
-            return Ok(true)
+        } else if self.opts.row_sep == base::AutoChoices::Always {
+            base.on_separator()?;
         }
 
         self.count += 1;
@@ -62,11 +63,9 @@ impl base::Processor for Handler {
                 }
             }
             row.push(value);
-            if base.on_row(row)? {
-                return Ok(false)
-            }
+            base.on_row(row)?;
         }
 
-        Ok(self.opts.lines.is_some_and(|lines| self.count >= lines))
+        Break::when(self.opts.lines.is_some_and(|lines| self.count >= lines))
     }
 }

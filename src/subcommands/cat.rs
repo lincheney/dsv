@@ -2,6 +2,7 @@ use anyhow::Result;
 use crate::base;
 use bstr::BString;
 use clap::{Parser};
+use crate::utils::MaybeBreak;
 
 #[derive(Parser, Default, Clone)]
 #[command(about = "concatenate files by row")]
@@ -30,7 +31,7 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
         self.got_data = true;
         if self.opts.number {
             header.insert(0, b"n".into());
@@ -38,7 +39,7 @@ impl base::Processor for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<()> {
         self.got_data = true;
         if self.opts.number {
             self.row_count += 1;
@@ -55,7 +56,7 @@ impl base::Processor for Handler {
                     Child{inner: &mut self}.process_file(file, base, base::Callbacks::all() - base::Callbacks::ON_EOF)?;
                 },
                 Err(e) => {
-                    base.write_raw_stderr(format!("{e}: {file}\n").into(), false, true);
+                    base.write_raw_stderr(format!("{e}: {file}\n").into(), false, true)?;
                 }
             }
         }
@@ -69,13 +70,21 @@ struct Child<'a> {
 }
 
 impl base::Processor for Child<'_> {
-    fn on_ofs(&mut self, base: &mut base::Base, ofs: base::Ofs) -> bool {
-        !self.inner.got_data && base.on_ofs(ofs)
+    fn on_ofs(&mut self, base: &mut base::Base, ofs: base::Ofs) -> MaybeBreak {
+        if self.inner.got_data {
+            Ok(())
+        } else {
+            base.on_ofs(ofs)
+        }
     }
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
-        Ok(!self.inner.got_data && self.inner.on_header(base, header)?)
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
+        if self.inner.got_data {
+            Ok(())
+        } else {
+            self.inner.on_header(base, header)
+        }
     }
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         self.inner.got_data = true;
         self.inner.on_row(base, row)
     }

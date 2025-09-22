@@ -30,16 +30,16 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.just_got_header = true;
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         if self.just_got_header {
             self.just_got_header = false;
             if row.iter().all(|r| SEPARATOR.is_match(r)) {
-                return Ok(false)
+                return Ok(())
             }
         }
 

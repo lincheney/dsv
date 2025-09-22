@@ -54,7 +54,7 @@ impl base::Processor for Handler {
     fn process_file<R: BufRead>(mut self, file: R, base: &mut base::Base, do_callbacks: base::Callbacks) -> Result<ExitCode> {
 
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
-        if base.on_ofs(ofs) {
+        if base.on_ofs(ofs).is_err() {
             return Ok(ExitCode::SUCCESS)
         }
 
@@ -111,7 +111,7 @@ impl base::Processor for Handler {
                                             if let Ok(Ok(span)) = std::str::from_utf8(&attr.value).map(str::parse) && span > 0 {
                                                 add_rowspan(&mut rowspans, current_row.len(), span, b"".into());
                                             } else {
-                                                base.write_raw_stderr(format!("invalid rowspan {:?}\n", attr.value).into(), false, true);
+                                                base.write_raw_stderr(format!("invalid rowspan {:?}\n", attr.value).into(), false, true)?;
                                             }
                                         }
                                     }
@@ -153,7 +153,7 @@ impl base::Processor for Handler {
 
                     if had_tr && !state.iter().any(|x| x == b"tr") {
                         if had_thead && got_header {
-                            base.write_raw_stderr("got duplicate html table header\n".into(), false, true);
+                            base.write_raw_stderr("got duplicate html table header\n".into(), false, true)?;
                         } else if had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {
                             self.on_header(base, current_row.clone())?;
                         } else if !had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {

@@ -1,3 +1,4 @@
+use crate::utils::{Break, MaybeBreak};
 use crate::writer::{get_rgb};
 use crate::column_slicer::{make_header_map};
 use regex::bytes::{Regex, Captures};
@@ -121,20 +122,20 @@ impl<R: Read+AsFd> BufferedReader<R> {
         Ok(())
     }
 
-    fn read_once(&mut self, registry: &mio::Registry) -> Result<bool> {
+    fn read_once(&mut self, registry: &mio::Registry) -> Result<()> {
         let slice = &mut self.buffer[self.used..];
         match self.inner.read(slice) {
             Ok(0) => {
                 // eof
                 self.close(registry)?;
-                Ok(false)
+                Break.to_err()
             },
             Ok(count) => {
                 self.used += count;
-                Ok(count == slice.len())
+                Break::when(count < slice.len())
             },
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => Ok(true),
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Ok(false),
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Break.to_err(),
             Err(err) => Err(err)?,
         }
     }
@@ -147,7 +148,7 @@ impl<R: Read+AsFd> BufferedReader<R> {
             if self.buffer.len() < new_size {
                 self.buffer.resize(new_size, 0);
             }
-            if !self.read_once(registry)? {
+            if Break::is_break(self.read_once(registry))? {
                 return Ok(self)
             }
         }
@@ -212,7 +213,7 @@ struct Logger {
 }
 
 impl Logger {
-    fn write_line(&mut self, base: &base::Base, mut line: BString, stderr: bool) -> Result<bool> {
+    fn write_line(&mut self, base: &base::Base, mut line: BString, stderr: bool) -> Result<()> {
         self.dirty = true;
         let mut row = if self.tag {
             self.row.clone()
@@ -229,7 +230,7 @@ impl Logger {
         }
         row.push(line);
         if stderr {
-            Ok(base.write_stderr(row))
+            Ok(base.write_stderr(row)?)
         } else {
             base.on_row(row)
         }
@@ -369,21 +370,17 @@ impl Proc {
         logger: &mut Logger,
         base: &mut base::Base,
         opts: &Opts,
-    ) -> Result<bool> {
+    ) -> Result<()> {
 
         match et {
             EventType::Stdout => {
                 for line in self.stdout.read(registry)?.get_lines(base.irs.as_ref()) {
-                    if logger.write_line(base, line, false)? {
-                        return Ok(true)
-                    }
+                    logger.write_line(base, line, false)?;
                 }
             },
             EventType::Stderr => {
                 for line in self.stderr.read(registry)?.get_lines(base.irs.as_ref()) {
-                    if logger.write_line(base, line, true)? {
-                        return Ok(true)
-                    }
+                    logger.write_line(base, line, true)?;
                 }
             },
             EventType::Pidfd => {
@@ -410,7 +407,7 @@ impl Proc {
             },
         }
 
-        Ok(false)
+        Ok(())
     }
 
 }
@@ -442,16 +439,17 @@ impl ProcStats {
     fn failed(&self) -> usize { self.finished - self.succeeded }
     fn running(&self) -> usize { self.started() - self.finished }
 
-    fn print_progress(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
-        self.print_progress_bar(base, opts, cleanup)
-        || self.print_progress_report(base, opts, cleanup)
+    fn print_progress(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> MaybeBreak {
+        self.print_progress_bar(base, opts, cleanup)?;
+        self.print_progress_report(base, opts, cleanup)?;
+        Ok(())
     }
 
-    fn print_progress_bar(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
+    fn print_progress_bar(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> MaybeBreak {
         const WIDTH: usize = 40;
 
         if !opts.progress_bar.is_on(false) {
-            return false
+            return Ok(())
         }
 
         let total = self.total.max(1);
@@ -518,9 +516,9 @@ impl ProcStats {
         base.write_raw_stderr(bar.into(), false, false)
     }
 
-    fn print_progress_report(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> bool {
+    fn print_progress_report(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> MaybeBreak {
         if !opts.progress_bar.is_on(false) {
-            return false
+            return Ok(())
         }
 
         if cleanup {
@@ -565,7 +563,7 @@ impl ProcStore {
         base: &mut base::Base,
         values: Vec<BString>,
         registry: &mio::Registry,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         self.stats.total += 1;
 
         let result = if self.job_limit == 0 || self.inner.len() < self.job_limit {
@@ -574,12 +572,10 @@ impl ProcStore {
         } else {
             self.queue.push_back(values);
             self.stats.queued = self.queue.len();
-            Ok(false)
+            Ok(())
         };
 
-        if self.stats.print_progress(base, &self.opts, false) {
-            return Ok(true)
-        }
+        self.stats.print_progress(base, &self.opts, false)?;
         result
     }
 
@@ -589,7 +585,7 @@ impl ProcStore {
         values: Vec<BString>,
         registry: &mio::Registry,
         tag: bool,
-    ) -> Result<bool> {
+    ) -> Result<()> {
 
         let token = self.stats.started();
         let mut logger = Logger{
@@ -651,13 +647,12 @@ impl ProcStore {
             Err(e) => {
                 self.stats.finished += 1;
                 let line = e.to_string();
-                if logger.write_line(base, line.into(), true)? {
-                    return Ok(true)
-                }
+                logger.write_line(base, line.into(), true)?;
             },
         }
 
-        Ok(self.stats.print_progress(base, &self.opts, false))
+        self.stats.print_progress(base, &self.opts, false)?;
+        Ok(())
     }
 
     fn handle_event(
@@ -665,7 +660,7 @@ impl ProcStore {
         base: &mut base::Base,
         token: mio::Token,
         registry: &mio::Registry,
-    ) -> Result<bool> {
+    ) -> Result<()> {
 
         let (marker, et) = EventMarker::from_token(token);
         let mut entry = match self.inner.entry(marker.0) {
@@ -684,9 +679,7 @@ impl ProcStore {
 
         if logger.dirty || proc.exited() {
             logger.dirty = false;
-            if self.stats.print_progress(base, &self.opts, false) {
-                return Ok(true)
-            }
+            self.stats.print_progress(base, &self.opts, false)?;
         }
 
         if proc.exited() {
@@ -694,9 +687,7 @@ impl ProcStore {
             // can we start a new proc?
             while (self.job_limit == 0 || self.inner.len() < self.job_limit) && let Some(values) = self.queue.pop_front() {
                 self.stats.queued = self.queue.len();
-                if self.start_proc(base, values, registry, self.opts.tag)? {
-                    return Ok(true)
-                }
+                self.start_proc(base, values, registry, self.opts.tag)?;
             }
         }
         result
@@ -724,7 +715,7 @@ fn proc_loop(
     };
 
     let result = (|| {
-        proc_store.stats.print_progress(base, &proc_store.opts, false);
+        proc_store.stats.print_progress(base, &proc_store.opts, false)?;
 
         let mut poll = mio::Poll::new()?;
         let mut events = mio::Events::with_capacity(255);
@@ -745,15 +736,11 @@ fn proc_loop(
                                     h.clear();
                                 }
                                 h.push(proc_store.opts.column.clone().into());
-                                if base.on_header(h)? {
-                                    return Ok(())
-                                }
+                                base.on_header(h)?;
                             },
                             Ok(Message::Row(row)) => {
                                 // spawn a new process
-                                if proc_store.queue_proc(base, row, poll.registry())? {
-                                    return Ok(())
-                                }
+                                proc_store.queue_proc(base, row, poll.registry())?;
                             },
                             Ok(Message::Eof) => {
                                 // no more rows
@@ -767,8 +754,8 @@ fn proc_loop(
                             Err(e) => { Err(e)?; },
                         }
                     }
-                } else if proc_store.handle_event(base, event.token(), poll.registry())? {
-                    return Ok(())
+                } else {
+                    proc_store.handle_event(base, event.token(), poll.registry())?;
                 }
             }
         }
@@ -776,7 +763,7 @@ fn proc_loop(
     })();
 
     let _ = base.on_eof();
-    proc_store.stats.print_progress(base, &proc_store.opts, true);
+    let _ = proc_store.stats.print_progress(base, &proc_store.opts, true);
     result
 }
 
@@ -803,14 +790,14 @@ impl Handler {
             && std::env::var("VTE_VERSION").ok().and_then(|v| v.parse::<usize>().ok()).is_some_and(|v| v >= 7900)
         });
 
-        let job_limit = opts.jobs.as_ref().or(opts.max_procs.as_ref()).map_or(1, |jobs| {
+        let job_limit = if let Some(jobs) = opts.jobs.as_ref().or(opts.max_procs.as_ref()) {
             if let Ok(j) = jobs.parse::<usize>() {
                 j
             } else if jobs.ends_with('%') && let Ok(j) = jobs[..jobs.len()-1].parse::<usize>() {
                 let max = match std::thread::available_parallelism() {
                     Ok(max) => max.get(),
                     Err(e) => {
-                        base.write_raw_stderr(format!("{e}\n").into(), false, true);
+                        base.write_raw_stderr(format!("{e}\n").into(), false, true)?;
                         1
                     },
                 };
@@ -822,7 +809,9 @@ impl Handler {
                 err.insert(ContextKind::InvalidValue, ContextValue::String(jobs.clone()));
                 err.exit();
             }
-        });
+        } else {
+            1
+        };
 
         if !matches!(opts.replace_str.len(), 1 | 2) {
             let cmd = crate::subcommands::Cli::command();
@@ -863,17 +852,15 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
-        self.sender.send(Message::Header(header)).unwrap();
-        Ok(false)
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<()> {
+        Break::when(self.sender.send(Message::Header(header)).is_err())
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
-        self.sender.send(Message::Row(row)).unwrap();
-        Ok(false)
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<()> {
+        Break::when(self.sender.send(Message::Row(row)).is_err())
     }
 
-    fn on_ofs(&mut self, base: &mut base::Base, ofs: base::Ofs) -> bool {
+    fn on_ofs(&mut self, base: &mut base::Base, ofs: base::Ofs) -> MaybeBreak {
         self.sender.send(Message::Ofs(ofs.clone())).unwrap();
         base.on_ofs(ofs)
     }

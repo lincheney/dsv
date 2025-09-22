@@ -33,7 +33,7 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         if !self.got_header {
             let header = if self.opts.auto {
                 (0..row.len()).map(|i| format!("col{i}").into()).collect()
@@ -41,15 +41,13 @@ impl base::Processor for Handler {
             } else {
                 vec![]
             };
-            if self.on_header(base, header)? {
-                return Ok(true)
-            }
+            self.on_header(base, header)?;
         }
 
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
         self.got_header = true;
 
         let mut column_slicer = ColumnSlicer::new(&[], false);
@@ -76,7 +74,7 @@ impl base::Processor for Handler {
         }
 
         if header.is_empty() {
-            Ok(false)
+            Ok(())
         } else {
             base.on_header(header)
         }

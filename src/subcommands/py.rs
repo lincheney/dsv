@@ -176,7 +176,7 @@ impl Handler {
             }
             Err(e) => {
                 if ! self.opts.common.quiet {
-                    base.write_raw_stderr(format!("{e}\n").into(), false, true);
+                    base.write_raw_stderr(format!("{e}\n").into(), false, true)?;
                 }
                 if self.opts.common.remove_errors || (self.opts.common.ignore_errors && self.inner.expr) {
                     Ok(None)
@@ -202,12 +202,12 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.process_header(&header);
-        Ok(false)
+        Ok(())
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         if self.opts.no_slurp {
             self.count += 1;
             let py = self.py.acquire_gil();
@@ -216,11 +216,11 @@ impl base::Processor for Handler {
             if let Some(result) = result {
                 self.inner.handle_result(&py, base, result)
             } else {
-                Ok(false)
+                Ok(())
             }
         } else {
             self.rows.push(row);
-            Ok(false)
+            Ok(())
         }
     }
 
@@ -229,8 +229,8 @@ impl base::Processor for Handler {
             let py = self.py.acquire_gil();
             let rows = py.list_from_iter(self.rows.iter().map(|row| self.row_to_py(&py, row))).unwrap();
             let result = self.run_python(&py, base, rows, [], self.code, self.prelude)?;
-            if let Some(result) = result && self.inner.handle_result(&py, base, result)? {
-                return Ok(true)
+            if let Some(result) = result {
+                self.inner.handle_result(&py, base, result)?;
             }
         }
         base.on_eof()
@@ -244,7 +244,7 @@ impl InnerHandler {
         py: &python::GilHandle,
         base: &mut base::Base,
         result: python::Object,
-    ) -> Result<bool> {
+    ) -> Result<()> {
 
         if !py.is_none(result) {
             let table = py.call_func(self.convert_to_table_fn, &[result, py.get_none()])?;
@@ -257,9 +257,7 @@ impl InnerHandler {
                     for x in py.try_iter(header)? {
                         new_header.push(py.convert_py_to_bytes(x)?.to_owned());
                     }
-                    if base.on_header(new_header)? {
-                        return Ok(true)
-                    }
+                    base.on_header(new_header)?;
                 }
 
                 let rows = py.getattr_string(table, c"__data__");
@@ -269,22 +267,18 @@ impl InnerHandler {
                         for x in py.try_iter(row)? {
                             new_row.push(py.convert_py_to_bytes(x)?.to_owned());
                         }
-                        if base.on_row(new_row)? {
-                            return Ok(true)
-                        }
+                        base.on_row(new_row)?;
                     }
                 }
             } else if self.expr {
                 let bytes = py.convert_py_to_bytes(result)?;
-                if base.write_raw(bytes.to_owned(), true, true) {
-                    return Ok(true)
-                }
+                base.write_raw(bytes.to_owned(), true, true)?;
             } else {
                 py.dict_set(self.locals, py.to_str("X").unwrap(), result);
                 py.exec(c"raise ValueError(X)", None, self.locals.as_ptr(), self.locals.as_ptr()).unwrap();
             }
         }
-        Ok(false)
+        Ok(())
     }
 
 }

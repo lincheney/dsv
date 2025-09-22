@@ -72,12 +72,12 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.column_slicer.make_header_map(&header);
         base.on_header(header)
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         let key = self.column_slicer.slice(&row, self.opts.complement, true);
         let key = crate::writer::format_columns(key, &self.ofs, (&[ORS]).into(), true).0;
         // add row index as first column
@@ -90,7 +90,7 @@ impl base::Processor for Handler {
         proc.stdin.write_all(&key)?;
 
         self.rows.push(Some(row));
-        Ok(false)
+        Ok(())
     }
 
     fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
@@ -108,9 +108,7 @@ impl base::Processor for Handler {
                 let index = buf.split_str(ofs).next().unwrap();
                 let index: usize = std::str::from_utf8(index)?.parse()?;
                 let row = self.rows[index].take().ok_or(anyhow!("duplicated row"))?;
-                if base.on_row(row)? {
-                    break
-                }
+                base.on_row(row)?;
                 buf.clear();
             }
             proc.child.wait()?;

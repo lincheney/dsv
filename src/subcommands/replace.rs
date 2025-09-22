@@ -35,11 +35,11 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.inner.on_header(base, header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         self.inner.on_row(base, row)
     }
 

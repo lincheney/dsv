@@ -40,12 +40,12 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.got_header = true;
         self.on_row(base, header)
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         const ORS: &[u8] = b"\n";
 
         assert!(self.got_header, "cannot use sqlite without a header");
@@ -53,7 +53,7 @@ impl base::Processor for Handler {
         let row = crate::writer::format_columns(row, &base::Ofs::Plain(DELIM.as_bytes()), ORS.into(), true).0;
         proc.stdin.write_all(&row.join(DELIM.as_bytes()))?;
         proc.stdin.write_all(ORS)?;
-        Ok(false)
+        Ok(())
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {

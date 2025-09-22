@@ -45,7 +45,7 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.column_slicer.make_header_map(&header);
         self.format_slicer.make_header_map(&header);
 
@@ -76,7 +76,7 @@ impl base::Processor for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         // not a lot we can do without headers ...
         if let Some((header_matches, wide_header)) = self.header_matches.as_ref().zip(self.wide_header.as_ref()) {
 
@@ -100,12 +100,10 @@ impl base::Processor for Handler {
                 let mut row = keys.clone();
                 row.push(lv.clone());
                 row.append(&mut vals);
-                if base.on_row(row)? {
-                    return Ok(true)
-                }
+                base.on_row(row)?;
             }
         }
 
-        Ok(false)
+        Ok(())
     }
 }

@@ -136,7 +136,7 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         let header = if let Some(slicer) = &mut self.column_slicer {
             slicer.make_header_map(&header);
             slicer.slice(&header, self.complement, true)
@@ -144,19 +144,17 @@ impl base::Processor for Handler {
             header
         };
         self.header = Some(header);
-        Ok(false)
+        Ok(())
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         let row = self.column_slicer.as_ref().map(|slicer| slicer.slice(&row, self.complement, true)).unwrap_or(row);
         self.rows.push(row);
-        Ok(false)
+        Ok(())
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        if base.on_header(vec![b"column".into(), b"type".into(), b"key".into(), b"value".into()])? {
-            return Ok(true)
-        }
+        base.on_header(vec![b"column".into(), b"type".into(), b"key".into(), b"value".into()])?;
 
         let mut header = self.header.unwrap_or_default();
         let num_cols = self.rows.iter().map(|r| r.len()).max().unwrap_or(0).max(header.len());
@@ -176,17 +174,15 @@ impl base::Processor for Handler {
         }
 
         for (i, (h, t)) in header.into_iter().zip(types).enumerate() {
-            if self.col_sep && i > 0 && base.on_separator() {
-                return Ok(true)
+            if self.col_sep && i > 0 {
+                base.on_separator()?;
             }
 
             let column: Vec<_> = self.rows.iter().map(|r| r.get(i)).collect();
             // what is it
 
             if column.iter().all(|c| c.is_none()) {
-                if base.on_row(vec![h, b"(empty)".into()])? {
-                    return Ok(true)
-                }
+                base.on_row(vec![h, b"(empty)".into()])?;
             } else if let Some(t) = t {
                 let result = match t {
                     Type::Date => display_date(base, &h, &column, 0.),
@@ -195,8 +191,8 @@ impl base::Processor for Handler {
                     Type::Size => display_size(base, &h, &column, 0.),
                     Type::Percent => display_percentage(base, &h, &column, 0.),
                 };
-                if let Some(result) = result && result? {
-                    return Ok(true)
+                if let Some(result) = result {
+                    result?;
                 }
             } else if let Some(result) =
                                 display_enum(base, &h, &column, CUTOFF)
@@ -205,11 +201,9 @@ impl base::Processor for Handler {
                     .or_else(|| display_percentage(base, &h, &column, CUTOFF))
                     .or_else(|| display_size(base, &h, &column, CUTOFF))
             {
-                if result? {
-                    return Ok(true)
-                }
-            } else if display_enum(base, &h, &column, 0.).unwrap()? {
-                return Ok(true)
+                result?;
+            } else {
+                display_enum(base, &h, &column, 0.).unwrap()?;
             }
         }
 
@@ -217,16 +211,14 @@ impl base::Processor for Handler {
     }
 }
 
-fn display_stats<I: Iterator<Item=Vec<BString>>>(base: &mut base::Base, stats: I) -> Result<bool> {
+fn display_stats<I: Iterator<Item=Vec<BString>>>(base: &mut base::Base, stats: I) -> Result<()> {
     for row in stats {
-        if base.on_row(row)? {
-            return Ok(true)
-        }
+        base.on_row(row)?;
     }
-    Ok(false)
+    Ok(())
 }
 
-fn display_enum(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
+fn display_enum(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
     const N: usize = 5;
 
     let non_blank: Vec<_> = column.iter().flatten().filter(|v| !v.is_empty()).copied().collect();
@@ -282,7 +274,7 @@ fn display_enum(base: &mut base::Base, header: &BString, column: &Vec<Option<&BS
     })))
 }
 
-fn display_date(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
+fn display_date(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
     const DATE_YARDSTICK: f64 = chrono::NaiveDate
         ::from_ymd_opt(2000, 1, 1).unwrap()
         .and_hms_opt(0, 0, 0).unwrap()
@@ -358,21 +350,21 @@ fn get_numeric_stats<F: Fn(f64) -> String>(
     Some(stats)
 }
 
-fn display_numeric(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
+fn display_numeric(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
     let parsed: Vec<_> = column.iter().map(|c| std::str::from_utf8(c.as_ref()?).ok()?.parse().ok()).collect();
     let stats = get_numeric_stats(&parsed, cutoff, nice_float)?;
     Some(display_stats(base, stats.into_iter().map(|(k, v)| {
         vec![header.clone(), b"numeric".into(), k.into(), v.into()]
     })))
 }
-fn display_percentage(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
+fn display_percentage(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
     let parsed: Vec<_> = column.iter().map(|&c| std::str::from_utf8(c?.strip_suffix(b"%")?).ok()?.parse().ok()).collect();
     let stats = get_numeric_stats(&parsed, cutoff, |x| format!("{}%", nice_float(x)))?;
     Some(display_stats(base, stats.into_iter().map(|(k, v)| {
         vec![header.clone(), b"percent".into(), k.into(), v.into()]
     })))
 }
-fn display_size(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<bool>> {
+fn display_size(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
     let parsed: Vec<_> = column.iter().map(|&c| parse_size(c?.as_ref())).collect();
     let stats = get_numeric_stats(&parsed, cutoff, |size| {
         let suffixes = ["b", "kb", "mb", "gb", "tb", "pb"];

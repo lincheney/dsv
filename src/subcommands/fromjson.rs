@@ -69,7 +69,7 @@ impl Handler {
         base: &mut base::Base,
         keys: I,
         get: F,
-    ) -> Result<bool> {
+    ) -> Result<()> {
         let values = keys.map(|k| {
             get(k)
                 .map_or_else(String::new, |v| {
@@ -96,33 +96,33 @@ impl Handler {
             let sep = sep.as_bytes().into();
             let first_row = flatten_to_hashmap(&header_row, sep);
             let header: Vec<_> = first_row.keys().cloned().collect();
-            if do_header && self.on_header(base, header)? {
-                return Ok(())
+            if do_header {
+                self.on_header(base, header)?;
             }
 
-            if do_row && self.process_json_row(base, first_row.keys(), |k| first_row.get(k).copied())? {
-                return Ok(())
+            if do_row {
+                self.process_json_row(base, first_row.keys(), |k| first_row.get(k).copied())?;
             }
             for row in stream {
                 let row = row?;
                 let row = flatten_to_hashmap(&row, sep);
-                if do_row && self.process_json_row(base, first_row.keys(), |k| row.get(k).copied())? {
-                    return Ok(())
+                if do_row {
+                    self.process_json_row(base, first_row.keys(), |k| row.get(k).copied())?;
                 }
             }
 
         } else {
             let header: Vec<_> = header_row.keys().cloned().map(|x| x.into()).collect();
-            if do_header && self.on_header(base, header)? {
-                return Ok(())
+            if do_header {
+                self.on_header(base, header)?;
             }
-            if do_row && self.process_json_row(base, header_row.keys(), |k| header_row.get(k))? {
-                return Ok(())
+            if do_row {
+                self.process_json_row(base, header_row.keys(), |k| header_row.get(k))?;
             }
             for row in stream {
                 let row = row?;
-                if do_row && self.process_json_row(base, header_row.keys(), |k| row.get(k))? {
-                    return Ok(())
+                if do_row {
+                    self.process_json_row(base, header_row.keys(), |k| row.get(k))?;
                 }
             }
         }
@@ -133,11 +133,10 @@ impl Handler {
 impl base::Processor for Handler {
     fn process_file<R: Read>(mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
-        if !base.on_ofs(ofs) {
-            self.process_json(file, base, do_callbacks)?;
-            if do_callbacks.contains(Callbacks::ON_EOF) {
-                self.on_eof(base)?;
-            }
+        base.on_ofs(ofs)?;
+        self.process_json(file, base, do_callbacks)?;
+        if do_callbacks.contains(Callbacks::ON_EOF) {
+            self.on_eof(base)?;
         }
         Ok(ExitCode::SUCCESS)
     }

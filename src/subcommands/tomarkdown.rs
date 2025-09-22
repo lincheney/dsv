@@ -38,7 +38,7 @@ impl Handler {
 
 impl base::Processor<MarkdownWriter> for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
         self.got_header = true;
         if self.drop_header {
             for h in &mut header {
@@ -48,12 +48,11 @@ impl base::Processor<MarkdownWriter> for Handler {
         base.on_header(header)
     }
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
-        if !self.got_header && self.on_header(base, (0..row.len()).map(|_| b"".into()).collect())? {
-            Ok(false)
-        } else {
-            base.on_row(row)
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
+        if !self.got_header {
+            self.on_header(base, (0..row.len()).map(|_| b"".into()).collect())?;
         }
+        base.on_row(row)
     }
 }
 

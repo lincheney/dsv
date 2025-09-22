@@ -1,3 +1,5 @@
+use crate::utils::Break;
+use crate::utils::MaybeBreak;
 use anyhow::{Result, Context};
 use regex::bytes::{Regex, Captures};
 use std::sync::mpsc::{self, Sender, Receiver};
@@ -138,16 +140,16 @@ impl Handler {
 }
 
 impl Processor for Handler {
-    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<()> {
         self.inner.on_row(base, row)
     }
 
-    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<()> {
         self.inner.on_header(base, header)
     }
 
-    fn on_ofs(&mut self, _base: &mut Base, ofs: Ofs) -> bool {
-        self.inner.sender.as_ref().unwrap().send((true, Message::Ofs(ofs))).is_err()
+    fn on_ofs(&mut self, _base: &mut Base, ofs: Ofs) -> MaybeBreak {
+        Break::when(self.inner.sender.as_ref().unwrap().send((true, Message::Ofs(ofs))).is_err())
     }
 
     fn on_eof(self, _base: &mut Base) -> Result<bool> {
@@ -183,8 +185,8 @@ impl Joiner {
                 Message::Eof => (),
                 Message::Stderr(_) => unreachable!(),
                 Message::RawStderr(_, _, _) => unreachable!(),
-                Message::Ofs(ofs) => if is_left && base.on_ofs(ofs) {
-                    return Ok(())
+                Message::Ofs(ofs) => if is_left {
+                    base.on_ofs(ofs)?;
                 },
                 Message::Header(header) => {
                     if is_left {
@@ -233,10 +235,8 @@ impl Joiner {
 
                         header.append(&mut left);
                         header.append(&mut right);
+                        base.on_header(header)?;
 
-                        if base.on_header(header)? {
-                            return Ok(())
-                        }
                         // clear out the buffered rows
                         // their side must be the other side
                         for row in buffer.drain(..) {
@@ -262,9 +262,7 @@ impl Joiner {
                 if !stores.1.contains_key(key) {
                     for row in rows {
                         let row = self.make_row(key, Some(row), None, &slicers, opts.empty_value.as_ref());
-                        if base.on_row(row)? {
-                            return Ok(())
-                        }
+                        base.on_row(row)?;
                     }
                 }
             }
@@ -275,9 +273,7 @@ impl Joiner {
                 if !stores.0.contains_key(key) {
                     for row in rows {
                         let row = self.make_row(key, None, Some(row), &slicers, opts.empty_value.as_ref());
-                        if base.on_row(row)? {
-                            return Ok(())
-                        }
+                        base.on_row(row)?;
                     }
                 }
             }
@@ -346,9 +342,7 @@ impl Joiner {
             for other_row in other_rows {
                 let rows = if is_left { (&row, other_row) } else { (other_row, &row) };
                 let row = self.make_row(&key, Some(rows.0), Some(rows.1), slicers, None);
-                if base.on_row(row)? {
-                    return Ok(true)
-                }
+                base.on_row(row)?;
             }
         }
         // put it in the store
@@ -368,15 +362,15 @@ struct Child {
 }
 
 impl Processor for Child {
-    fn on_header(&mut self, _base: &mut Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, _base: &mut Base, header: Vec<BString>) -> Result<()> {
         self.got_header = true;
-        Ok(self.sender.as_ref().unwrap().send((self.left, Message::Header(header))).is_err())
+        Break::when(self.sender.as_ref().unwrap().send((self.left, Message::Header(header))).is_err())
     }
 
-    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {
-        if !self.got_header && self.on_header(base, vec![])? {
-            return Ok(true)
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<()> {
+        if !self.got_header {
+            self.on_header(base, vec![])?;
         }
-        Ok(self.sender.as_ref().unwrap().send((self.left, Message::Row(row))).is_err())
+        Break::when(self.sender.as_ref().unwrap().send((self.left, Message::Row(row))).is_err())
     }
 }

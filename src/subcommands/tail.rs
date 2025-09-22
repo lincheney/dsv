@@ -31,19 +31,19 @@ impl Handler {
 }
 
 impl base::Processor for Handler {
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         if let Some(ring) = self.ring.as_mut() {
             // Store the last n lines
             if ring.len() == self.lines {
                 ring.pop_front();
             }
             ring.push_back(row);
-            Ok(false)
+            Ok(())
         } else {
             // Handle the case where -n has a plus sign
             if self.count < self.lines {
                 self.count += 1;
-                Ok(false)
+                Ok(())
             } else {
                 base.on_row(row)
             }
@@ -53,9 +53,7 @@ impl base::Processor for Handler {
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
         if let Some(ring) = self.ring {
             for row in ring {
-                if base.on_row(row)? {
-                    break;
-                }
+                base.on_row(row)?;
             }
         }
         base.on_eof()

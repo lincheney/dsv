@@ -1,3 +1,4 @@
+use crate::utils::Break;
 use anyhow::Result;
 use crate::base;
 use bstr::BString;
@@ -29,19 +30,19 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         if let Some(ring) = self.ring.as_mut() {
             // print except for last n lines
-            if ring.len() >= self.lines && let Some(row) = ring.pop_front() && base.on_row(row)? {
-                Ok(true)
+            if ring.len() >= self.lines && let Some(row) = ring.pop_front() {
+                base.on_row(row)
             } else {
                 ring.push_back(row);
-                Ok(false)
+                Ok(())
             }
 
         } else {
             self.count += 1;
-            Ok(self.count > self.lines || base.on_row(row)?)
+            Break::when(self.count > self.lines)
         }
     }
 }

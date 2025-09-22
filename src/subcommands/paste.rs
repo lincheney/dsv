@@ -1,3 +1,4 @@
+use crate::utils::Break;
 use anyhow::{Result};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::*;
@@ -48,11 +49,11 @@ impl Handler {
 }
 
 impl Processor for Handler {
-    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<()> {
         base.on_header(self.paste_row(header))
     }
 
-    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<()> {
         base.on_row(self.paste_row(row))
     }
 
@@ -87,10 +88,10 @@ struct Child {
 }
 
 impl Processor for Child {
-    fn on_header(&mut self, _base: &mut Base, header: Vec<BString>) -> Result<bool> {
-        Ok(self.sender.send(header).is_err())
+    fn on_header(&mut self, _base: &mut Base, header: Vec<BString>) -> Result<()> {
+        Break::when(self.sender.send(header).is_err())
     }
-    fn on_row(&mut self, _base: &mut Base, row: Vec<BString>) -> Result<bool> {
-        Ok(self.sender.send(row).is_err())
+    fn on_row(&mut self, _base: &mut Base, row: Vec<BString>) -> Result<()> {
+        Break::when(self.sender.send(row).is_err())
     }
 }

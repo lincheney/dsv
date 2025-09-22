@@ -75,17 +75,17 @@ impl Slicers {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, _base: &mut base::Base, header: Vec<BString>) -> Result<()> {
         self.slicers.group.make_header_map(&header);
         self.slicers.long.make_header_map(&header);
         self.group_header = Some(self.slicers.group.slice(&header, self.slicers.complement, true));
         self.wide_header = Some(self.slicers.wide_indices(header.len()).map(|i| header[i].clone()).collect());
-        Ok(false)
+        Ok(())
     }
 
-    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, _base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         self.rows.push(row);
-        Ok(false)
+        Ok(())
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
@@ -115,9 +115,7 @@ impl base::Processor for Handler {
                         .flat_map(|h| std::iter::repeat(h).zip(long_values.iter()))
                         .map(|(h, v)| name_format(self.format.as_ref(), h.as_ref(), v.as_ref()))
                 ).collect();
-            if base.on_header(new_headers)? {
-                return Ok(true)
-            }
+            base.on_header(new_headers)?;
         }
 
         let long_value_map: HashMap<_, _> = long_values.iter().enumerate().map(|(i, v)| (v, i)).collect();
@@ -133,9 +131,7 @@ impl base::Processor for Handler {
                     newrow[start + long_value_map[long_value]] = x;
                 }
             }
-            if base.on_row(newrow)? {
-                return Ok(true)
-            }
+            base.on_row(newrow)?;
         }
 
         base.on_eof()

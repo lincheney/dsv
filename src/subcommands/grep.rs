@@ -1,3 +1,4 @@
+use crate::utils::Break;
 use anyhow::{Result, Context};
 use std::collections::{VecDeque, HashSet};
 use std::io::{BufReader, BufRead};
@@ -149,13 +150,13 @@ impl Handler {
 
 impl base::Processor for Handler {
 
-    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<bool> {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
         self.column_slicer.make_header_map(&header);
         if self.opts.line_number {
             header.insert(0, b"n".into());
         }
         if self.opts.count {
-            Ok(false)
+            Ok(())
         } else {
             base.on_header(header)
         }
@@ -164,14 +165,14 @@ impl base::Processor for Handler {
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
         if self.opts.count {
             let output: BString = format!("{}", self.matched_count).into();
-            base.write_raw(output, true, true);
+            base.write_raw(output, true, true)?;
         }
         base.on_eof()?;
         Ok(self.matched_count == 0)
     }
 
 
-    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<bool> {
+    fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<()> {
         self.row_num += 1;
 
         let matched = self.grep(&mut row);
@@ -193,9 +194,7 @@ impl base::Processor for Handler {
                         if self.opts.line_number {
                             r.insert(0, format!("{i}").into());
                         }
-                        if base.on_row(r)? {
-                            return Ok(true)
-                        }
+                        base.on_row(r)?;
                     }
                 }
             }
@@ -205,9 +204,7 @@ impl base::Processor for Handler {
                 if self.opts.line_number {
                     row.insert(0, format!("{}", self.row_num).into());
                 }
-                if base.on_row(row)? {
-                    return Ok(true)
-                }
+                base.on_row(row)?;
             } else {
                 if let Some(before) = &mut self.before {
                     // this line might be a before
@@ -216,12 +213,15 @@ impl base::Processor for Handler {
                     }
                     before.push_back(row);
                 }
-                return Ok(false)
+                return Ok(())
             }
         }
 
         // quit if reached max count
-        Ok(self.matched_count >= self.opts.common.max_count && self.last_matched.is_some_and(|lm| lm + self.after <= self.row_num))
+        Break::when(
+            self.matched_count >= self.opts.common.max_count
+            && self.last_matched.is_some_and(|lm| lm + self.after <= self.row_num),
+        )
     }
 }
 
