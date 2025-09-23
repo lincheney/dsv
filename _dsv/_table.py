@@ -407,6 +407,7 @@ for arity, scalar, functions in [
     (1, False, (
         '__round__', '__floor__', '__ceil__', '__neg__', '__pos__', '__invert__', '__index__',
         math.ceil, math.fabs, math.floor, math.isfinite, math.isinf, math.isnan, math.isqrt, math.prod, math.trunc, math.exp, math.log, math.log2, math.log10, math.sqrt,
+        abs,
         as_float, parse_datetime,
     )),
     (1, True, (
@@ -416,6 +417,7 @@ for arity, scalar, functions in [
     )),
     (2, True, (
         '__lt__', '__gt__', '__le__', '__ge__', '__eq__', '__ne__', '__add__', '__sub__', '__mul__', '__matmul__', '__truediv__', '__floordiv__', '__mod__', '__lshift__', '__rshift__', '__and__', '__xor__', '__or__', '__pow__', '__divmod__',
+        min, max,
     )),
     (-2, True, (
         '__rlt__', '__rgt__', '__rle__', '__rge__', '__req__', '__rne__', '__radd__', '__rsub__', '__rmul__', '__rmatmul__', '__rtruediv__', '__rfloordiv__', '__rmod__', '__rlshift__', '__rrshift__', '__rand__', '__rxor__', '__ror__', '__rpow__', '__rdivmod__',
