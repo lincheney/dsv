@@ -274,22 +274,21 @@ impl Proc {
 
             let text = c.get(0).unwrap().as_bytes();
             let inner = &text[1..text.len()-1];
-            let len = inner.len();
             let as_path = |i: usize| Path::new(OsStr::from_bytes(&values[i]));
 
             if let Some(i) = Self::lookup_key_index(keys, inner) {
                 values[i].as_bytes().into()
 
-            } else if inner.ends_with(b".") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
+            } else if let Some(i) = inner.strip_suffix(b".").and_then(|x| Self::lookup_key_index(keys, x)) {
                 as_path(i).with_extension("").into_os_string().into_encoded_bytes().into()
 
-            } else if inner.ends_with(b"/") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-1]) {
+            } else if let Some(i) = inner.strip_suffix(b"/").and_then(|x| Self::lookup_key_index(keys, x)) {
                 as_path(i).file_name().map_or(b"" as _, |p| p.as_encoded_bytes()).into()
 
-            } else if inner.ends_with(b"//") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
+            } else if let Some(i) = inner.strip_suffix(b"//").and_then(|x| Self::lookup_key_index(keys, x)) {
                 as_path(i).parent().map_or(b"" as _, |p| p.as_os_str().as_encoded_bytes()).into()
 
-            } else if inner.ends_with(b"/.") && let Some(i) = Self::lookup_key_index(keys, &inner[..len-2]) {
+            } else if let Some(i) = inner.strip_suffix(b"/.").and_then(|x| Self::lookup_key_index(keys, x)) {
                 as_path(i).file_name()
                     .map(|path| Path::new(path).with_extension(""))
                     .map_or(b"".into(), |p| p.into_os_string().into_encoded_bytes().into())
