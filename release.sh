@@ -34,8 +34,6 @@ Choose the appropriate binary for your platform:
 
 - **Linux x86_64**: \`dsv-nightly-x86_64-linux\`
 - **Linux ARM64**: \`dsv-nightly-aarch64-linux\`
-- **macOS x86_64**: \`dsv-nightly-x86_64-macos\`
-- **macOS ARM64**: \`dsv-nightly-aarch64-macos\`
 
 ⚠️  **Note**: This is a pre-release build and may contain unstable features.
 EOF

@@ -39,8 +39,9 @@ jobs:
         include:
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, name: dsv-nightly-x86_64-linux }
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, name: dsv-nightly-aarch64-linux }
-          - { target: x86_64-apple-darwin, os: macos-latest, name: dsv-nightly-x86_64-macos }
-          - { target: aarch64-apple-darwin, os: macos-latest, name: dsv-nightly-aarch64-macos }
+          # disabled until fixed
+          # - { target: x86_64-apple-darwin, os: macos-latest, name: dsv-nightly-x86_64-macos }
+          # - { target: aarch64-apple-darwin, os: macos-latest, name: dsv-nightly-aarch64-macos }
 
     runs-on: ${{ matrix.os }}
 
@@ -72,7 +73,7 @@ jobs:
 
   release:
     needs: [check-changes, build]
-    if: needs.check-changes.outputs.has-changes == '1' && always()
+    if: needs.check-changes.outputs.has-changes == '1'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -85,7 +86,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-        continue-on-error: true
 
       - name: Create nightly release
         run: ./release.sh
