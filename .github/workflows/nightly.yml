@@ -71,8 +71,8 @@ jobs:
           retention-days: 1
 
   release:
-    needs: build
-    if: always()
+    needs: [check-changes, build]
+    if: needs.check-changes.outputs.has-changes == '1' && always()
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
