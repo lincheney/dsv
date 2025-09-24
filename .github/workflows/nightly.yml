@@ -5,6 +5,9 @@ on:
     - cron: '0 14 * * *'  # Run daily at 2:00 PM UTC (1:00 AM Melbourne AEDT)
   workflow_dispatch:
 
+concurrency:
+  group: nightly-release
+
 env:
   CARGO_TERM_COLOR: always
 
