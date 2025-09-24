@@ -65,6 +65,7 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
+          retention-days: 1
 
   release:
     needs: build
