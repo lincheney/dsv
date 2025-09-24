@@ -9,7 +9,26 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has-changes: ${{ steps.changes.outputs.has-changes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for changes since last nightly
+        id: changes
+        run: |
+          has_changes=1
+          if git fetch origin 'refs/tags/nightly:refs/tags/nightly' && [ "$(git log -1 --format='%ct' 'HEAD')" -le "$(git log -1 --format='%ct' 'nightly')" ]; then
+            has_changes=0
+          fi
+          echo "has-changes=$has_changes" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: check-changes
+    if: needs.check-changes.outputs.has-changes == '1'
     strategy:
       fail-fast: false
       matrix:
