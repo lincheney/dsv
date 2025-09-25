@@ -62,8 +62,9 @@ class pipe(_ColumnSlicer):
             else:
                 # write the stdout back into the original row
                 indices = self.slice(list(range(len(row))), self.opts.complement)
-                for k, v in itertools.zip_longest(indices, stdout, fillvalue=b''):
-                    row[k] = v
+                for k, v in itertools.zip_longest(indices, stdout):
+                    if k is not None:
+                        row[k] = v or b''
 
             if super().on_row(row):
                 break

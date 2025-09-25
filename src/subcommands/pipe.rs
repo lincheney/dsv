@@ -30,31 +30,55 @@ pub struct Opts {
 struct Proc {
     child: Child,
     stdin: BufWriter<ChildStdin>,
-    sender: Sender<Vec<BString>>,
-    err_receiver: Receiver<Result<()>>,
 }
 
 pub struct Handler {
     opts: Opts,
     column_slicer: Option<ColumnSlicer>,
     proc: Option<Proc>,
-    header: Option<Vec<BString>>,
     ofs: Ofs,
+    row_sender: Sender<Vec<BString>>,
+    err_sender: Sender<Result<()>>,
+    err_receiver: Receiver<Result<()>>,
 }
 
 impl Handler {
-    pub fn new(opts: Opts, _base: &mut base::Base) -> Result<Self> {
+    pub fn new(opts: Opts, base: &mut base::Base) -> Result<Self> {
         let column_slicer = if opts.fields.is_empty() {
             None
         } else {
             Some(ColumnSlicer::new(&opts.fields, opts.regex))
         };
+
+        let (sender, receiver) = mpsc::channel();
+        let (row_sender, row_receiver) = mpsc::channel();
+        let (err_sender, err_receiver) = mpsc::channel();
+
+        let joiner = JoinHandler{
+            row_receiver,
+            column_slicer: column_slicer.clone(),
+            append_len: opts.append_columns.len(),
+            complement: opts.complement,
+            header_len: 0,
+        };
+        {
+            let mut base = base.clone();
+            let err_sender = err_sender.clone();
+            base.scope.spawn(move || {
+                let result = joiner.forward_messages(&mut base, receiver);
+                err_sender.send(result).unwrap();
+            });
+        }
+
+        base.sender = sender;
         Ok(Self {
             proc: None,
             opts,
             ofs: Ofs::default(),
             column_slicer,
-            header: None,
+            row_sender,
+            err_sender,
+            err_receiver,
         })
     }
 }
@@ -65,9 +89,6 @@ impl Handler {
         if let Some(proc) = proc {
             Ok(proc)
         } else {
-            let (sender, receiver) = mpsc::channel();
-            let (err_sender, err_receiver) = mpsc::channel();
-
             let mut cmd = Command::new(&self.opts.command[0]);
             cmd.args(&self.opts.command[1..]);
             let mut child = cmd.stdin(Stdio::piped()).stdout(Stdio::piped()).spawn().context("failed to start process")?;
@@ -79,36 +100,16 @@ impl Handler {
                 Ofs::Pretty => base.opts.pretty = true,
                 Ofs::Plain(ofs) => base.opts.ofs = Some(ofs.to_string()),
             }
-            let header = self.header.take();
-            let mut handler = PipeHandler{
-                receiver,
-                column_slicer: self.column_slicer.clone(),
-                append: !self.opts.append_columns.is_empty(),
-                complement: self.opts.complement,
-                header_len: header.as_ref().map(|h| h.len() - self.opts.append_columns.len()),
-            };
-
+            let err_sender = self.err_sender.clone();
             base.scope.spawn(move || {
-                let result = (|| {
-                    base.opts.header = Some(false);
-                    if let Some(header) = header && let Err(e) = handler.on_header(&mut base, header) {
-                        crate::utils::chain_errors([
-                            Err(e),
-                            base.on_eof(),
-                        ])?;
-                    } else {
-                        handler.process_file(stdout, &mut base, base::Callbacks::all())?;
-                    }
-                    Ok(())
-                })();
+                base.opts.header = Some(false);
+                let result = PipeHandler{}.process_file(stdout, &mut base, base::Callbacks::all()).map(|_| ());
                 err_sender.send(result).unwrap();
             });
 
             Ok(proc.insert(Proc {
                 child,
                 stdin,
-                sender,
-                err_receiver,
             }))
         }
     }
@@ -121,13 +122,12 @@ impl base::Processor for Handler {
         base.on_ofs(ofs)
     }
 
-    fn on_header(&mut self, _base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
+    fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
         if let Some(slicer) = &mut self.column_slicer {
             slicer.make_header_map(&header);
         }
         header.extend(self.opts.append_columns.iter().map(|x| x.as_bytes().into()));
-        self.header = Some(header);
-        Ok(())
+        base.on_header(header)
     }
 
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
@@ -147,42 +147,51 @@ impl base::Processor for Handler {
             Err(e) => Err(e)?,
         };
         // proc.stdin.flush()?;
-        Break::when(proc.sender.send(row).is_err() || end_stdin)
+        Break::when(self.row_sender.send(row).is_err() || end_stdin)
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        let success = if let Some(Proc{mut child, stdin, sender, err_receiver}) = self.proc {
-            drop(sender);
+        let Self{proc, row_sender, err_receiver, ..} = self;
+        drop(row_sender);
+
+        let success = if let Some(Proc{mut child, stdin}) = proc {
             drop(stdin);
 
             let result1 = err_receiver.recv().unwrap().map(|_| ExitStatus::from_raw(0));
             let result2 = child.wait().map_err(anyhow::Error::new);
-            drop(err_receiver);
             crate::utils::chain_errors([result1, result2])?.success()
         } else {
             true
         };
+
         base.on_eof()?;
+        err_receiver.recv().unwrap()?;
         Ok(!success)
     }
 }
 
-struct PipeHandler {
-    receiver: Receiver<Vec<BString>>,
+struct PipeHandler { }
+impl base::Processor for PipeHandler {}
+
+struct JoinHandler {
+    row_receiver: Receiver<Vec<BString>>,
     column_slicer: Option<ColumnSlicer>,
     complement: bool,
-    append: bool,
-    header_len: Option<usize>,
+    append_len: usize,
+    header_len: usize,
 }
 
-impl base::Processor for PipeHandler {
-    // no headers
+impl base::Processor for JoinHandler {
+    fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
+        self.header_len = header.len();
+        base.on_header(header)
+    }
 
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<()> {
-        let mut input = self.receiver.recv().unwrap();
-        if self.append {
-            if let Some(header_len) = self.header_len && header_len > input.len() {
-                input.resize(header_len, b"".into());
+        let mut input = self.row_receiver.recv().unwrap();
+        if self.append_len > 0 {
+            if self.header_len - self.append_len > input.len() {
+                input.resize(self.header_len - self.append_len, b"".into());
             }
             input.append(&mut row);
         } else if let Some(slicer) = &self.column_slicer {
