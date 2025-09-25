@@ -141,9 +141,13 @@ impl base::Processor for Handler {
         input.push_str(ors);
 
         let proc = self.start_proc(base)?;
-        proc.stdin.write_all(&input)?;
+        let end_stdin = match proc.stdin.write_all(&input) {
+            Ok(_) => false,
+            Err(e) if e.kind() == std::io::ErrorKind::BrokenPipe => true,
+            Err(e) => Err(e)?,
+        };
         // proc.stdin.flush()?;
-        Break::when(proc.sender.send(row).is_err())
+        Break::when(proc.sender.send(row).is_err() || end_stdin)
     }
 
     fn on_eof(self, base: &mut base::Base) -> Result<bool> {
