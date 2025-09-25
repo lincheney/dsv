@@ -42,7 +42,8 @@ impl base::Processor for Handler {
 
         } else {
             self.count += 1;
-            Break::when(self.count > self.lines)
+            base.on_row(row)?;
+            Break::when(self.count >= self.lines)
         }
     }
 }
