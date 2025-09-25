@@ -1,0 +1,91 @@
+name: Nightly Release
+
+on:
+  schedule:
+    - cron: '0 14 * * *'  # Run daily at 2:00 PM UTC (1:00 AM Melbourne AEDT)
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-release
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      has-changes: ${{ steps.changes.outputs.has-changes }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for changes since last nightly
+        id: changes
+        run: |
+          has_changes=1
+          if git fetch origin 'refs/tags/nightly:refs/tags/nightly' && [ "$(git log -1 --format='%ct' 'HEAD')" -le "$(git log -1 --format='%ct' 'nightly')" ]; then
+            has_changes=0
+          fi
+          echo "has-changes=$has_changes" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: check-changes
+    if: needs.check-changes.outputs.has-changes == '1'
+    strategy:
+      fail-fast: false
+      matrix:
+        # https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
+        include:
+          - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, name: dsv-nightly-x86_64-linux }
+          - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, name: dsv-nightly-aarch64-linux }
+          # disabled until fixed
+          # - { target: x86_64-apple-darwin, os: macos-latest, name: dsv-nightly-x86_64-macos }
+          # - { target: aarch64-apple-darwin, os: macos-latest, name: dsv-nightly-aarch64-macos }
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+        run: |
+          rustup toolchain install stable
+          rustup default stable
+          rustup target add "$BUILD_TARGET"
+
+      - name: Build and package
+        env:
+          BUILD_TARGET: ${{ matrix.target }}
+          PACKAGE_NAME: ${{ matrix.name }}
+        run: ./build.sh "$BUILD_TARGET" "$PACKAGE_NAME"
+
+      - name: Upload artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+          retention-days: 1
+
+  release:
+    needs: [check-changes, build]
+    if: needs.check-changes.outputs.has-changes == '1'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_SHA: ${{ github.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create nightly release
+        run: ./release.sh
