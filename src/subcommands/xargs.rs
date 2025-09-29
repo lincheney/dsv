@@ -10,7 +10,7 @@ use std::ffi::{OsString, OsStr};
 use std::os::unix::{ffi::OsStringExt, ffi::OsStrExt, process::ExitStatusExt};
 use std::collections::{VecDeque, HashMap, hash_map::Entry};
 use std::os::fd::{AsFd, RawFd, AsRawFd};
-use std::process::{Child, Command, Stdio, ChildStdout, ChildStderr};
+use std::process::{Child, Command, Stdio, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{Read, Write};
 use bstr::{BString, BStr, ByteSlice, ByteVec};
 use clap::{Parser, CommandFactory, ArgAction, error::{ErrorKind, ContextKind, ContextValue}};
@@ -69,6 +69,8 @@ pub struct Opts {
     tag: bool,
     #[arg(short = 'k', long, default_value = "output", help = "new header column name")]
     column: String,
+    #[arg(long, default_value = "", help = "input to command")]
+    stdin: String,
     #[arg(trailing_var_arg = true, help = "command and arguments to run")]
     command: Vec<String>,
 }
@@ -182,26 +184,91 @@ impl<R: Read+AsFd> BufferedReader<R> {
     }
 }
 
+struct BufferedWriter<W> {
+    inner: W,
+    fd: Option<RawFd>,
+    buffer: BString,
+    used: usize,
+}
+
+impl<W: Write+AsFd> BufferedWriter<W> {
+    fn new(inner: W, token: mio::Token, registry: &mio::Registry, buffer: BString) -> Result<Self> {
+        let fd = inner.as_fd();
+        if fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK)).is_err()
+        || fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).is_err() {
+            return Err(std::io::Error::last_os_error())?;
+        }
+
+        let fd = fd.as_raw_fd();
+        registry.register(&mut mio::unix::SourceFd(&fd), token, mio::Interest::WRITABLE)?;
+        Ok(Self{
+            fd: Some(fd),
+            inner,
+            buffer,
+            used: 0,
+        })
+    }
+
+    fn is_eof(&self) -> bool {
+        self.fd.is_none()
+    }
+
+    fn close(&mut self, registry: &mio::Registry) -> Result<()> {
+        if let Some(fd) = self.fd.take() {
+            registry.deregister(&mut mio::unix::SourceFd(&fd))?;
+        }
+        debug_assert!(self.is_eof());
+        Ok(())
+    }
+
+    fn write_once(&mut self, registry: &mio::Registry) -> Result<()> {
+        let slice = &mut self.buffer[self.used..];
+        match self.inner.write(slice) {
+            Ok(count) => {
+                self.used += count;
+                if count == 0 || self.used == self.buffer.len() {
+                    // eof
+                    self.close(registry)?;
+                }
+                Break.to_err()
+            },
+            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => Ok(()),
+            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Break.to_err(),
+            Err(err) => Err(err)?,
+        }
+    }
+
+    fn write(&mut self, registry: &mio::Registry) -> Result<&mut Self> {
+        while !Break::is_break(self.write_once(registry))? {
+        }
+        Ok(self)
+    }
+}
+
 #[derive(Copy, Clone)]
 struct EventMarker(usize);
 #[derive(Debug, Clone, Copy)]
 enum EventType {
-    Stdout = 0,
-    Stderr = 1,
-    Pidfd = 2,
+    Stdin = 0,
+    Stdout = 1,
+    Stderr = 2,
+    Pidfd = 3,
 }
 impl EventMarker {
+    const AMOUNT: usize = EventType::Pidfd as usize + 1;
+
     fn for_event_type(self, et: EventType) -> mio::Token {
-        mio::Token(self.0 * 3 + et as usize)
+        mio::Token(self.0 * Self::AMOUNT + et as usize)
     }
     fn from_token(token: mio::Token) -> (Self, EventType) {
-        let et = match token.0 % 3 {
-            0 => EventType::Stdout,
-            1 => EventType::Stderr,
-            2 => EventType::Pidfd,
+        let et = match token.0 % Self::AMOUNT {
+            0 => EventType::Stdin,
+            1 => EventType::Stdout,
+            2 => EventType::Stderr,
+            3 => EventType::Pidfd,
             _ => unreachable!(),
         };
-        (Self(token.0 / 3), et)
+        (Self(token.0 / Self::AMOUNT), et)
     }
 }
 
@@ -241,6 +308,7 @@ struct Proc {
     child: Option<(Child, mio_pidfd::PidFd)>,
     success: bool,
 
+    stdin: Option<BufferedWriter<ChildStdin>>,
     stdout: BufferedReader<ChildStdout>,
     stderr: BufferedReader<ChildStderr>,
 }
@@ -310,9 +378,10 @@ impl Proc {
     fn format_args(
         placeholder_regex: &Regex,
         command: &[String],
+        stdin: &String,
         keys: Option<&HashMap<BString, usize>>,
         values: &[BString],
-    ) -> Result<Vec<BString>> {
+    ) -> Result<(Vec<BString>, BString)> {
 
         let mut formatted = false;
         let mut cmd = vec![];
@@ -322,6 +391,10 @@ impl Proc {
             cmd.push(x.unwrap_or(c.clone().into()));
         }
 
+        let input = Self::format_arg(placeholder_regex, stdin.as_bytes().into(), keys, values)?;
+        formatted = formatted || input.is_some();
+        let input = input.unwrap_or(stdin.as_bytes().into());
+
         if command.len() == 1 && command[0].contains(' ') {
             // this is probably a shell script
             cmd.splice(0..0, [b"bash".into(), b"-c".into()]);
@@ -329,18 +402,27 @@ impl Proc {
             // no arguments are formatted, append the args at the end
             cmd.extend(values.iter().cloned());
         }
-        Ok(cmd)
+
+        Ok((cmd, input))
     }
 
     fn new(
         token: EventMarker,
         command: &[BString],
+        stdin: BString,
         registry: &mio::Registry,
     ) -> Result<Self> {
 
-        let mut child = Command::new(OsString::from_vec(command[0].to_vec()))
-            .args(command[1..].iter().map(|c| OsString::from_vec(c.to_vec())))
-            .stdin(Stdio::null())
+        let mut cmd = Command::new(OsString::from_vec(command[0].to_vec()));
+        cmd.args(command[1..].iter().map(|c| OsString::from_vec(c.to_vec())));
+
+        if stdin.is_empty() {
+            cmd.stdin(Stdio::null());
+        } else {
+            cmd.stdin(Stdio::piped());
+        }
+
+        let mut child = cmd
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -350,6 +432,11 @@ impl Proc {
         let mut proc = Self{
             stdout: BufferedReader::new(child.stdout.take().unwrap(), token.for_event_type(EventType::Stdout), registry)?,
             stderr: BufferedReader::new(child.stderr.take().unwrap(), token.for_event_type(EventType::Stderr), registry)?,
+            stdin: if let Some(proc_stdin) = child.stdin.take() {
+                Some(BufferedWriter::new(proc_stdin, token.for_event_type(EventType::Stdin), registry, stdin)?)
+            } else {
+                None
+            },
             child: Some((child, pidfd)),
             success: false,
         };
@@ -372,6 +459,14 @@ impl Proc {
     ) -> Result<()> {
 
         match et {
+            EventType::Stdin => {
+                let stdin = self.stdin.as_mut().unwrap();
+                stdin.write(registry)?;
+                if stdin.is_eof() {
+                    // close stdin
+                    self.stdin = None;
+                }
+            },
             EventType::Stdout => {
                 for line in self.stdout.read(registry)?.get_lines(base.irs.as_ref()) {
                     logger.write_line(base, line, false)?;
@@ -616,19 +711,26 @@ impl ProcStore {
                 logger.write_line(base, line, false)?;
                 None
             } else {
-                let command = Proc::format_args(&self.placeholder_regex, &self.opts.command, self.keys.as_ref(), &logger.row)?;
+                let (command, stdin) = Proc::format_args(
+                    &self.placeholder_regex,
+                    &self.opts.command,
+                    &self.opts.stdin,
+                    self.keys.as_ref(),
+                    &logger.row,
+                )?;
                 if self.opts.dry_run || self.opts.verbose >= verbosity::ALL {
                     let mut line: BString = b"starting process: ".into();
                     line.append(&mut shell_quote(&command));
                     logger.write_line(base, line, true)?;
                 }
-                Some(command)
+                Some((command, stdin))
             };
 
-            if !self.opts.dry_run && let Some(command) = command {
+            if !self.opts.dry_run && let Some((command, stdin)) = command {
                 Proc::new(
                     EventMarker(token),
                     &command,
+                    stdin,
                     registry,
                 ).map(Option::Some)
             } else {

@@ -67,6 +67,7 @@ class xargs(_Base):
     parser.add_argument('--no-tag', action='store_false', dest='tag', help="don't tag lines with the input rows")
     parser.add_argument('-k', '--column', type=_utils.utf8_type, default=b'output', help="new header column name")
     parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
+    parser.add_argument('--stdin', default=b'', type=_utils.utf8_type, help='input to command')
     parser.add_argument('command', nargs='*', type=_utils.utf8_type, help='command and arguments to run')
 
     def should_have_progress_bar(self, fd):
@@ -182,11 +183,13 @@ class xargs(_Base):
                 logger.log_output([self.format_row(row, False)], False)
                 no_proc = True
 
-            elif not any(self.placeholder_regex.search(c) for c in self.opts.command):
+            elif not any(self.placeholder_regex.search(c) for c in self.opts.command + [self.opts.stdin]):
                 # no arguments are formatted, append the args at the end
                 formatted = self.opts.command + row
+                stdin = self.opts.stdin
             else:
                 formatted = [self.placeholder_regex.sub(lambda m: self.format_arg(m, row), c) for c in self.opts.command]
+                stdin = self.placeholder_regex.sub(lambda m: self.format_arg(m, row), self.opts.stdin)
 
             if len(self.opts.command) == 1 and b' ' in self.opts.command[0]:
                 formatted = [b'bash', b'-c', formatted[0]]
@@ -198,14 +201,15 @@ class xargs(_Base):
                 self.stats.succeeded += 1
 
             else:
-                proc = await asyncio.create_subprocess_exec(
-                    *formatted,
-                    stdin=subprocess.DEVNULL,
+                kwargs = dict(
+                    stdin=subprocess.PIPE if stdin else subprocess.DEVNULL,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     limit=float('inf'),
                 )
+                proc = await asyncio.create_subprocess_exec(*formatted, **kwargs)
                 await asyncio.gather(
+                    self.write_stdin(logger, proc.stdin, stdin),
                     self.read_from_stream(logger, proc.stdout, False),
                     self.read_from_stream(logger, proc.stderr, True),
                 )
@@ -225,6 +229,11 @@ class xargs(_Base):
             self.stats.queued = len(self.proc_queue)
             self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
         self.print_progress()
+
+    async def write_stdin(self, logger, stream, stdin: bytes, bufsize=4096):
+        stream.write(stdin)
+        await stream.drain()
+        stream.close()
 
     async def read_from_stream(self, logger, stream, stderr: bool, bufsize=4096):
         buf = b''
