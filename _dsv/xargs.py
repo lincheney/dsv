@@ -8,6 +8,8 @@ import argparse
 from collections import deque
 from queue import Queue
 import threading
+import math
+import time
 from . import _utils
 from ._column_slicer import _ColumnSlicer
 from ._base import _Base
@@ -28,6 +30,8 @@ class ProcStats:
     succeeded = 0
     finished = 0
     queued = 0
+    total_runtime = 0
+    max_runtime = 0
 
 class Logger:
     def __init__(self, id, parent, keys):
@@ -48,7 +52,7 @@ class Logger:
                 v = self.light_colour + v + self.parent.RESET_COLOUR + self.dark_colour
             row.append(v)
             _Base.on_row(self.parent, row, stderr=stderr)
-        self.parent.print_progress()
+        self.parent.progress_queue.put_nowait(None)
 
 class Verbosity:
     LOW = 0
@@ -65,6 +69,7 @@ class xargs(_Base):
     parser.add_argument('--rainbow-rows', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow rows')
     parser.add_argument('--dry-run', action='store_true', help='print the job to run but do not run the job')
     parser.add_argument('--no-tag', action='store_false', dest='tag', help="don't tag lines with the input rows")
+    parser.add_argument('--no-eta', action='store_false', dest='eta', help="don't show estimated time before finishing")
     parser.add_argument('-k', '--column', type=_utils.utf8_type, default=b'output', help="new header column name")
     parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
     parser.add_argument('--stdin', default=b'', type=_utils.utf8_type, help='input to command')
@@ -96,7 +101,8 @@ class xargs(_Base):
         self.queue = Queue()
         self.proc_queue = deque()
         self.stats = ProcStats()
-        self.proc_tasks = set()
+        self.proc_tasks = {}
+        self.progress_queue = asyncio.Queue()
 
         l = re.escape(opts.replace_str[0]).encode()
         r = re.escape(opts.replace_str[1:] or opts.replace_str[0]).encode()
@@ -123,6 +129,7 @@ class xargs(_Base):
         return await loop.run_in_executor(None, self.queue.get)
 
     async def loop(self):
+        print_progress_loop = asyncio.create_task(self.print_progress_loop())
         try:
             while True:
                 row = await self.get_from_queue()
@@ -130,15 +137,21 @@ class xargs(_Base):
                     break
                 self.stats.total += 1
                 if self.job_limit == 0 or len(self.proc_tasks) < self.job_limit:
-                    self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
+                    self.proc_tasks[asyncio.create_task(self.start_proc(row))] = time.time()
                 else:
                     self.proc_queue.append(row)
                     self.stats.queued = len(self.proc_queue)
-                self.print_progress()
+                self.progress_queue.put_nowait(None)
             while self.proc_tasks:
-                await asyncio.gather(*self.proc_tasks)
+                await asyncio.gather(*self.proc_tasks.keys())
         except BrokenPipeError:
             pass
+        finally:
+            print_progress_loop.cancel()
+            try:
+                await print_progress_loop
+            except asyncio.CancelledError:
+                pass
 
     def get_format_arg_index(self, text):
         if not text:
@@ -222,18 +235,23 @@ class xargs(_Base):
             logger.log_output([e], True)
         self.stats.finished += 1
 
-        self.proc_tasks.remove(asyncio.current_task())
+        start_time = self.proc_tasks.pop(asyncio.current_task())
+        elapsed = time.time() - start_time
+        self.stats.total_runtime += elapsed
+        self.stats.max_runtime = max(self.stats.max_runtime, elapsed)
+
         # ok we are finished, start the next one
         if self.proc_queue:
             row = self.proc_queue.popleft()
             self.stats.queued = len(self.proc_queue)
-            self.proc_tasks.add(asyncio.create_task(self.start_proc(row)))
-        self.print_progress()
+            self.proc_tasks[asyncio.create_task(self.start_proc(row))] = time.time()
+        self.progress_queue.put_nowait(None)
 
     async def write_stdin(self, logger, stream, stdin: bytes, bufsize=4096):
-        stream.write(stdin)
-        await stream.drain()
-        stream.close()
+        if stream:
+            stream.write(stdin)
+            await stream.drain()
+            stream.close()
 
     async def read_from_stream(self, logger, stream, stderr: bool, bufsize=4096):
         buf = b''
@@ -268,6 +286,21 @@ class xargs(_Base):
             self.print_progress(cleanup=True)
         finally:
             super().cleanup()
+
+    async def print_progress_loop(self):
+        while True:
+            try:
+                await asyncio.wait_for(self.progress_queue.get(), 1 if self.opts.eta else None)
+            except TimeoutError:
+                pass
+            else:
+                # read everything out
+                while True:
+                    try:
+                        self.progress_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        break
+            self.print_progress()
 
     def print_progress(self, **kwargs):
         self.print_progress_bar(**kwargs)
@@ -330,11 +363,39 @@ class xargs(_Base):
             "=",
             ">{running_len}}{clear}{0:",
             " ",
-            ">{queued_len}}] ({finished} / {total}) ({failed} failed)\r",
+            ">{queued_len}}] ({finished} / {total})",
         )).format('', **vars)
+
+        if failed:
+            bar += " ({failed} failed)".format(**vars),
 
         if cleanup:
             bar += '\n'
+        else:
+
+            if self.opts.eta and stats.finished > 0 and self.proc_tasks:
+                now = time.time()
+                mean = stats.total_runtime / stats.finished
+                running_left = sum(max(0, mean - (now - t)) for t in self.proc_tasks.values())
+                running_max = max(now - t for t in self.proc_tasks.values())
+
+                if running_max >= stats.max_runtime and stats.queued == 0:
+                    # running longer than expected and there are no more queued jobs
+                    # so we don't know how long it will take
+                    bar += " ??:?? remaining"
+                else:
+                    remaining = mean
+                    if self.job_limit > 0:
+                        remaining = running_left + mean * stats.queued
+                        unfinished = stats.total - stats.finished
+                        remaining = remaining / unfinished * math.ceil(unfinished / self.job_limit)
+                    remaining = max(1, remaining)
+                    bar += ' '
+                    if remaining >= 3600:
+                        bar += f"{remaining // 3600}:"
+                    bar += f"{remaining // 60 % 60:02.0f}:{remaining % 60:02.0f} remaining"
+
+            bar += '\r'
         sys.stderr.buffer.write(bar.encode())
         sys.stderr.buffer.flush()
 

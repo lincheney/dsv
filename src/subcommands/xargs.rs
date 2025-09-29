@@ -6,6 +6,7 @@ use std::path::Path;
 use anyhow::{Result};
 use std::sync::{mpsc};
 use crate::base;
+use std::fmt::{Write as FmtWrite};
 use std::ffi::{OsString, OsStr};
 use std::os::unix::{ffi::OsStringExt, ffi::OsStrExt, process::ExitStatusExt};
 use std::collections::{VecDeque, HashMap, hash_map::Entry};
@@ -18,6 +19,7 @@ use nix::sys::stat::{fstat, SFlag};
 use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
 use nix::sys::signal::{kill, SIGTERM};
 use std::borrow::Cow;
+use std::time::{Instant, Duration};
 
 const CLEAR_PROGRESS_REPORT: &[u8] = b"\x1b]9;4;0;\x1b\\";
 
@@ -67,6 +69,8 @@ pub struct Opts {
     dry_run: bool,
     #[arg(long = "no-tag", action = ArgAction::SetFalse, help = "don't tag lines with the input rows")]
     tag: bool,
+    #[arg(long = "no-eta", action = ArgAction::SetFalse, help = "don't show estimated time before finishing")]
+    eta: bool,
     #[arg(short = 'k', long, default_value = "output", help = "new header column name")]
     column: String,
     #[arg(long, default_value = "", help = "input to command")]
@@ -307,6 +311,7 @@ impl Logger {
 struct Proc {
     child: Option<(Child, mio_pidfd::PidFd)>,
     success: bool,
+    start_time: Instant,
 
     stdin: Option<BufferedWriter<ChildStdin>>,
     stdout: BufferedReader<ChildStdout>,
@@ -430,6 +435,7 @@ impl Proc {
 
         let pidfd = mio_pidfd::PidFd::new(&child)?;
         let mut proc = Self{
+            start_time: Instant::now(),
             stdout: BufferedReader::new(child.stdout.take().unwrap(), token.for_event_type(EventType::Stdout), registry)?,
             stderr: BufferedReader::new(child.stderr.take().unwrap(), token.for_event_type(EventType::Stderr), registry)?,
             stdin: if let Some(proc_stdin) = child.stdin.take() {
@@ -522,6 +528,9 @@ struct ProcStats {
     succeeded: usize,
     finished: usize,
     queued: usize,
+
+    total_runtime: Duration,
+    max_runtime: Duration,
 }
 
 fn divmod(x: usize, y: usize) -> (usize, usize) {
@@ -532,17 +541,18 @@ impl ProcStats {
     fn started(&self) -> usize { self.total - self.queued }
     fn failed(&self) -> usize { self.finished - self.succeeded }
     fn running(&self) -> usize { self.started() - self.finished }
+    fn unfinished(&self) -> usize { self.total - self.finished }
 
-    fn print_progress(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> MaybeBreak {
-        self.print_progress_bar(base, opts, cleanup)?;
-        self.print_progress_report(base, opts, cleanup)?;
+    fn print_progress(&self, base: &mut base::Base, store: &ProcStore, cleanup: bool) -> MaybeBreak {
+        self.print_progress_bar(base, store, cleanup)?;
+        self.print_progress_report(base, store, cleanup)?;
         Ok(())
     }
 
-    fn print_progress_bar(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> MaybeBreak {
+    fn print_progress_bar(&self, base: &mut base::Base, store: &ProcStore, cleanup: bool) -> MaybeBreak {
         const WIDTH: usize = 40;
 
-        if !opts.progress_bar.is_on(false) {
+        if !store.opts.progress_bar.is_on(false) {
             return Ok(())
         }
 
@@ -590,7 +600,7 @@ impl ProcStats {
                 "=",
                 ">running_len$}{clear}{0:",
                 " ",
-                ">queued_len$}] ({finished} / {total}) ({failed} failed)\r",
+                ">queued_len$}] ({finished} / {total})",
             ),
             "",
             succeeded_colour = if colour { "\x1b[32m" } else { "" },
@@ -602,16 +612,51 @@ impl ProcStats {
             queued_len = queued,
             finished = self.finished,
             total = self.total,
-            failed = self.failed(),
+            // failed = self.failed(),
         );
+
+        if failed > 0 {
+            write!(&mut bar, " ({failed} failed)", failed = self.failed()).unwrap();
+        }
+
         if cleanup {
             bar.push('\n');
+        } else {
+            if store.opts.eta && self.finished > 0 && !store.inner.is_empty() {
+                let now = Instant::now();
+                let mean = self.total_runtime / self.finished as u32;
+                let running_left: Duration = store.inner.values().map(|(p, _)| mean.saturating_sub(now.duration_since(p.start_time))).sum();
+                let running_max = store.inner.values().map(|(p, _)| now.duration_since(p.start_time)).max().unwrap();
+
+                if running_max >= self.max_runtime && self.queued == 0 {
+                    // running longer than expected and there are no more queued jobs
+                    // so we don't know how long it will take
+                    write!(&mut bar, " ??:?? remaining").unwrap();
+                } else {
+                    let remaining = if let Some(limit) = store.job_limit {
+                        let limit = limit.get() as f64;
+                        let remaining = running_left.as_secs_f64() + mean.as_secs_f64() * self.queued as f64;
+                        let unfinished = self.unfinished() as f64;
+                        remaining / unfinished * (unfinished / limit).ceil()
+                    } else {
+                        mean.as_secs_f64()
+                    };
+                    let remaining = remaining.max(1.);
+                    bar.push(' ');
+                    if remaining >= 3600. {
+                        write!(&mut bar, "{}:", (remaining / 3600.).floor()).unwrap();
+                    }
+                    write!(&mut bar, "{:02.0}:{:02.0} remaining", (remaining / 60.).trunc() % 60., remaining % 60.).unwrap();
+                }
+            }
+
+            bar.push('\r');
         }
-        base.write_raw_stderr(bar.into(), false, false)
+        base.write_raw_stderr(bar.into(), false, true)
     }
 
-    fn print_progress_report(&self, base: &mut base::Base, opts: &Opts, cleanup: bool) -> MaybeBreak {
-        if !opts.progress_bar.is_on(false) {
+    fn print_progress_report(&self, base: &mut base::Base, store: &ProcStore, cleanup: bool) -> MaybeBreak {
+        if !store.opts.progress_bar.is_on(false) {
             return Ok(())
         }
 
@@ -639,7 +684,7 @@ impl ProcStats {
 struct ProcStore {
     opts: Opts,
     queue: VecDeque<Vec<BString>>,
-    job_limit: usize,
+    job_limit: Option<std::num::NonZero<usize>>,
     placeholder_regex: Regex,
     inner: HashMap<usize, (Proc, Logger)>,
     stats: ProcStats,
@@ -652,25 +697,30 @@ impl ProcStore {
         self.inner.is_empty()
     }
 
+    fn is_full(&self) -> bool {
+        self.job_limit.is_some_and(|limit| limit.get() <= self.inner.len())
+    }
+
     fn queue_proc(
         &mut self,
         base: &mut base::Base,
         values: Vec<BString>,
         registry: &mio::Registry,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         self.stats.total += 1;
 
-        let result = if self.job_limit == 0 || self.inner.len() < self.job_limit {
-            // start immediately
-            self.start_proc(base, values, registry, self.opts.tag)
-        } else {
+        let result = if self.is_full() {
+            // full
             self.queue.push_back(values);
             self.stats.queued = self.queue.len();
             Ok(())
+        } else {
+            // start immediately
+            self.start_proc(base, values, registry, self.opts.tag)
         };
 
-        self.stats.print_progress(base, &self.opts, false)?;
-        result
+        result?;
+        Ok(true)
     }
 
     fn start_proc(
@@ -752,7 +802,6 @@ impl ProcStore {
             },
         }
 
-        self.stats.print_progress(base, &self.opts, false)?;
         Ok(())
     }
 
@@ -761,7 +810,7 @@ impl ProcStore {
         base: &mut base::Base,
         token: mio::Token,
         registry: &mio::Registry,
-    ) -> Result<()> {
+    ) -> Result<bool> {
 
         let (marker, et) = EventMarker::from_token(token);
         let mut entry = match self.inner.entry(marker.0) {
@@ -774,24 +823,29 @@ impl ProcStore {
         if proc.success {
             self.stats.succeeded += 1;
         }
-        if proc.exited() {
+        let exited = proc.exited();
+        let mut dirty = logger.dirty || exited;
+        logger.dirty = false;
+
+        if exited {
             self.stats.finished += 1;
-        }
-
-        if logger.dirty || proc.exited() {
-            logger.dirty = false;
-            self.stats.print_progress(base, &self.opts, false)?;
-        }
-
-        if proc.exited() {
+            let elapsed = proc.start_time.elapsed();
+            self.stats.total_runtime += elapsed;
+            self.stats.max_runtime = self.stats.max_runtime.max(elapsed);
             entry.remove();
+        }
+
+        if exited {
             // can we start a new proc?
-            while (self.job_limit == 0 || self.inner.len() < self.job_limit) && let Some(values) = self.queue.pop_front() {
+            while !self.is_full() && let Some(values) = self.queue.pop_front() {
                 self.stats.queued = self.queue.len();
                 self.start_proc(base, values, registry, self.opts.tag)?;
+                dirty = true;
             }
         }
-        result
+
+        result?;
+        Ok(dirty)
     }
 }
 
@@ -806,7 +860,7 @@ fn proc_loop(
 
     let mut proc_store = ProcStore{
         opts,
-        job_limit,
+        job_limit: std::num::NonZero::new(job_limit),
         placeholder_regex,
         inner: HashMap::new(),
         stats: ProcStats::default(),
@@ -816,7 +870,7 @@ fn proc_loop(
     };
 
     let result = (|| {
-        proc_store.stats.print_progress(base, &proc_store.opts, false)?;
+        proc_store.stats.print_progress(base, &proc_store, false)?;
 
         let mut poll = mio::Poll::new()?;
         let mut events = mio::Events::with_capacity(255);
@@ -825,8 +879,12 @@ fn proc_loop(
         // im ready
         send_notify.send(()).unwrap();
 
+        let timeout = proc_store.opts.eta.then_some(Duration::from_secs(1));
         while !got_eof || !proc_store.is_empty() {
-            poll.poll(&mut events, None)?;
+            poll.poll(&mut events, timeout)?;
+            // if events is empty, we must have reached the timeout
+            let mut print_progress = events.is_empty();
+
             for event in &events {
                 if event.token() == mio::Token(0) {
                     loop {
@@ -838,10 +896,11 @@ fn proc_loop(
                                 }
                                 h.push(proc_store.opts.column.clone().into());
                                 base.on_header(h)?;
+                                print_progress = true;
                             },
                             Ok(Message::Row(row)) => {
                                 // spawn a new process
-                                proc_store.queue_proc(base, row, poll.registry())?;
+                                print_progress = proc_store.queue_proc(base, row, poll.registry())? || print_progress;
                             },
                             Ok(Message::Eof) => {
                                 // no more rows
@@ -856,15 +915,19 @@ fn proc_loop(
                         }
                     }
                 } else {
-                    proc_store.handle_event(base, event.token(), poll.registry())?;
+                    print_progress = proc_store.handle_event(base, event.token(), poll.registry())? || print_progress;
                 }
+            }
+
+            if print_progress {
+                proc_store.stats.print_progress(base, &proc_store, false)?;
             }
         }
         Ok(())
     })();
 
     let _ = base.on_eof();
-    let _ = proc_store.stats.print_progress(base, &proc_store.opts, true);
+    let _ = proc_store.stats.print_progress(base, &proc_store, true);
     result
 }
 
