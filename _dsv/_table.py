@@ -16,6 +16,17 @@ class NA:
         return NA_STRING
     def __bool__(self):
         return False
+# copy over the methods from float
+for k, v in vars(float).items():
+    if k not in vars(NA) and callable(v) and k not in {'__new__'}:
+        def na_override(*args, v=v):
+            if any(a is NA for a in args):
+                args = [math.nan if a is NA else a for a in args]
+            result = v(*args)
+            if isinstance(result, float) and math.isnan(result):
+                return NA
+            return result
+        setattr(NA, k, na_override)
 NA = NA()
 
 def to_bytes(x):
@@ -37,7 +48,8 @@ def diff(value):
     for v in value:
         result.append(v - prev)
         prev = v
-    return result[1:]
+    cls = Vec if value.__na__ else NoNaVec
+    return cls(result[1:])
 
 def parse_datetime(
     value,
@@ -304,6 +316,10 @@ class Proxy(BaseTable):
             __headers__={k: i for i, k in enumerate(apply_slice(list(parent.__headers__), cols))},
         )
 
+    @property
+    def __na__(self):
+        return self.__parent__.__na__
+
     def __numrows__(self):
         if self.__is_row__():
             return 1
@@ -367,7 +383,7 @@ class Proxy(BaseTable):
         return super().__flat__()
 
     def map(self, fn, col=False):
-        if na := self.__parent__.__na__:
+        if na := self.__na__:
             fn = na_wrapper(fn)
 
         if col and self.__is_column__():
@@ -385,6 +401,12 @@ class NoNaVec(Vectorised, list):
     def __flat__(self):
         return self
 
+    def __getitem__(self, key):
+        result = super().__getitem__(key)
+        if isinstance(key, slice):
+            return type(self)(result)
+        return result
+
     def map(self, fn):
         if self.__na__:
             fn = na_wrapper(fn)
@@ -399,7 +421,7 @@ def na_wrapper(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except (AttributeError, TypeError):
+        except (AttributeError, TypeError, statistics.StatisticsError):
             return NA
     return wrapper
 
@@ -445,7 +467,8 @@ for arity, scalar, functions in [
         elif arity == 2:
             def method(self, other, *args, fn=fn, **kwargs):
                 if isinstance(other, Vectorised):
-                    return Vec(fn(x, y, *args, **kwargs) for x, y in zip(self, other))
+                    cls = Vec if self.__na__ else NoNaVec
+                    return cls(fn(x, y, *args, **kwargs) for x, y in zip(self, other))
                 return self.map(lambda x: fn(x, other, *args, **kwargs))
 
         elif arity == -2:
