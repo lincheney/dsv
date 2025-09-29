@@ -369,6 +369,8 @@ class _Base:
 
     def format_row(self, row, colour: bool, padding=None):
         ofs = self.opts.ofs
+        if ofs is self.PRETTY_OUTPUT:
+            ofs = self.PRETTY_OUTPUT_DELIM
         row = self.format_columns(row, ofs, self.opts.ors, self.opts.quote_output)
 
         if padding:
