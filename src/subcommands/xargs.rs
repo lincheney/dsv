@@ -960,9 +960,9 @@ impl Handler {
         });
 
         let job_limit = if let Some(jobs) = opts.jobs.as_ref().or(opts.max_procs.as_ref()) {
-            if let Ok(j) = jobs.parse::<usize>() {
+            if let Ok(j) = jobs.parse() {
                 j
-            } else if jobs.ends_with('%') && let Ok(j) = jobs[..jobs.len()-1].parse::<usize>() {
+            } else if let Some(j) = jobs.strip_suffix('%').and_then(|j| j.parse::<usize>().ok()) {
                 let max = match std::thread::available_parallelism() {
                     Ok(max) => max.get(),
                     Err(e) => {
@@ -974,7 +974,7 @@ impl Handler {
             } else {
                 let cmd = crate::subcommands::Cli::command();
                 let mut err = clap::Error::new(ErrorKind::InvalidValue).with_cmd(&cmd);
-                err.insert(ContextKind::InvalidArg, ContextValue::String("--type".into()));
+                err.insert(ContextKind::InvalidArg, ContextValue::String("--jobs".into()));
                 err.insert(ContextKind::InvalidValue, ContextValue::String(jobs.clone()));
                 err.exit();
             }
