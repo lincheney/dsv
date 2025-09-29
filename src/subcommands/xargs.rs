@@ -881,7 +881,12 @@ fn proc_loop(
 
         let timeout = proc_store.opts.eta.then_some(Duration::from_secs(1));
         while !got_eof || !proc_store.is_empty() {
-            poll.poll(&mut events, timeout)?;
+            match poll.poll(&mut events, timeout) {
+                Ok(_) => (),
+                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(err) => Err(err)?,
+            }
+
             // if events is empty, we must have reached the timeout
             let mut print_progress = events.is_empty();
 
