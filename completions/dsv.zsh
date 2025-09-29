@@ -1020,6 +1020,7 @@ _shtab__dsv_xargs_options=(
   "--rainbow-rows[enable rainbow rows]:rainbow_rows:(never always auto)"
   "--dry-run[print the job to run but do not run the job]"
   "--no-tag[don\'t tag lines with the input rows]"
+  "--no-eta[don\'t show estimated time before finishing]"
   {-k,--column}"[new header column name]:column:"
   {-I,--replace-str}"[use the replacement string instead of \{\}]:replace_str:"
   "--stdin[input to command]:stdin:"

@@ -34,7 +34,7 @@ _shtab__dsv_tojson_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-head
 _shtab__dsv_tomarkdown_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_totsv_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_uniq_option_strings=('-h' '--help' '-x' '--complement' '-r' '--regex' '-c' '--count' '-C' '--count-column' '--group' '--repeated' '--repeated-all' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
-_shtab__dsv_xargs_option_strings=('-h' '--help' '-p' '-j' '--max_procs' '--jobs' '--progress-bar' '--terminal-progress-report' '-v' '--verbose' '--rainbow-rows' '--dry-run' '--no-tag' '-k' '--column' '-I' '--replace-str' '--stdin' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
+_shtab__dsv_xargs_option_strings=('-h' '--help' '-p' '-j' '--max_procs' '--jobs' '--progress-bar' '--terminal-progress-report' '-v' '--verbose' '--rainbow-rows' '--dry-run' '--no-tag' '--no-eta' '-k' '--column' '-I' '--replace-str' '--stdin' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '-Q' '--no-quoting' '--no-quote-output')
 
 
 
@@ -1114,6 +1114,7 @@ _shtab__dsv_xargs___verbose_nargs=0
 _shtab__dsv_xargs___rainbow_rows_nargs=?
 _shtab__dsv_xargs___dry_run_nargs=0
 _shtab__dsv_xargs___no_tag_nargs=0
+_shtab__dsv_xargs___no_eta_nargs=0
 _shtab__dsv_xargs__H_nargs=0
 _shtab__dsv_xargs___header_nargs=0
 _shtab__dsv_xargs__N_nargs=0
