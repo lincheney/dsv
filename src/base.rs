@@ -408,7 +408,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         crate::utils::chain_errors(
             [
                 do_callbacks.contains(Callbacks::ON_EOF).then(|| self.on_eof_detailed(base)),
-                err.err().map(|e| Err(e)),
+                err.err().map(Err),
             ].into_iter().flatten()
         )
     }
@@ -604,7 +604,7 @@ impl<'a, 'b> Base<'a, 'b> {
     }
 
     pub fn on_eof(&self) -> Result<bool> {
-        Ok(!self.sender.send(Message::Eof).is_err())
+        Ok(self.sender.send(Message::Eof).is_ok())
     }
 
     pub fn on_separator(&self) -> MaybeBreak {

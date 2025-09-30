@@ -1,3 +1,4 @@
+use std::process::ExitCode;
 use anyhow::{Result, Context};
 use crate::base;
 use bstr::BString;
@@ -56,18 +57,23 @@ impl base::Processor for Handler {
         Ok(())
     }
 
-    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
-        let success = if let Some(mut proc) = self.proc {
+    fn on_eof_detailed(self, base: &mut base::Base) -> Result<ExitCode> {
+        let exit_code = if let Some(mut proc) = self.proc {
             drop(proc.stdin.into_inner());
             base.ifs = base::Ifs::Plain(DELIM.into());
 
             base::DefaultProcessor{}.process_file(proc.stdout, base, base::Callbacks::all())?;
-            proc.child.wait()?.success()
+            let status = proc.child.wait()?;
+            if let Some(code) = status.code() {
+                ExitCode::from(code.min(255) as u8)
+            } else {
+                ExitCode::FAILURE
+            }
         } else {
-            true
+            ExitCode::SUCCESS
         };
         base.on_eof()?;
-        Ok(success)
+        Ok(exit_code)
     }
 }
 

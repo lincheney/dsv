@@ -5,8 +5,7 @@ use anyhow::{Result, Context};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::{self, Processor, Ofs};
 use bstr::{BString, BStr, ByteVec};
-use std::process::{Child, Command, ChildStdin, Stdio, ExitStatus};
-use std::os::unix::process::ExitStatusExt;
+use std::process::{Child, Command, ChildStdin, Stdio};
 use std::io::{BufReader, BufWriter, Write};
 use crate::column_slicer::ColumnSlicer;
 use clap::{Parser};
@@ -151,23 +150,27 @@ impl base::Processor for Handler {
         Break::when(self.row_sender.send(row).is_err() || end_stdin)
     }
 
-    fn on_eof(self, base: &mut base::Base) -> Result<bool> {
+    fn on_eof_detailed(self, base: &mut base::Base) -> Result<ExitCode> {
         let Self{proc, row_sender, err_receiver, ..} = self;
         drop(row_sender);
 
-        let success = if let Some(Proc{mut child, stdin}) = proc {
+        let exit_code = if let Some(Proc{mut child, stdin}) = proc {
             drop(stdin);
 
-            let result1 = err_receiver.recv().unwrap().map(|_| ExitStatus::from_raw(0));
-            let result2 = child.wait().map_err(anyhow::Error::new);
-            crate::utils::chain_errors([result1, result2])?.success()
+            let result1 = Some(child.wait().map_err(anyhow::Error::new));
+            let result2 = err_receiver.recv().unwrap().err().map(Err);
+            let status = crate::utils::chain_errors([result1, result2].into_iter().flatten())?;
+            if let Some(code) = status.code() {
+                ExitCode::from(code.min(255) as u8)
+            } else {
+                ExitCode::FAILURE
+            }
         } else {
-            true
+            ExitCode::SUCCESS
         };
 
         base.on_eof()?;
-        err_receiver.recv().unwrap()?;
-        Ok(success)
+        Ok(exit_code)
     }
 }
 
