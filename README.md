@@ -34,6 +34,7 @@ Also find shell completion scripts in [completions/](completions/dsv.zsh).
 * If you have `pypy3`, you can also run `dsv.pypy` (which is actually the same code) and this will be faster than cypython
     * for small inputs `pypy3` actually runs *slower* than `cpython` due to the JIT startup cost
 * If you want even more performance, build the *rust* version (`cargo build --release`). You should get a `./target/release/dsv`
+    * you can also download automated builds from: https://github.com/lincheney/dsv/releases/tag/nightly
     * note that there are differences between the rust and python versions
     * to run the python-based commands, you will still need `python3`
         * the other commands should work fine without python however
@@ -44,6 +45,7 @@ Note:
 * many commands have an additional `-k` flag to restrict their effects to certain columns,
     e.g. `dsv grep -k COLUMN ...` (why `-k`? because that's what `sort` uses)
 * most commands take only input from stdin (i.e. no filename argument)
+---
 
 * `!`: pipe multiple commands together
     * e.g. `dsv ! grep something ! cut -f column ! head -n10 ! tojson`
