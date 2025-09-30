@@ -65,3 +65,7 @@ impl<T> From<Break> for Result<T, Break> {
 }
 
 pub type MaybeBreak = Result<(), Break>;
+
+pub fn try_parse<T: std::str::FromStr, B: AsRef<[u8]>>(val: B) -> Option<T> {
+    std::str::from_utf8(val.as_ref()).ok()?.parse::<T>().ok()
+}

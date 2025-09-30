@@ -38,7 +38,7 @@ impl ColumnSlicer {
         for field in fields {
             if field != "-" && let Some(captures) = FIELD_REGEX.captures(field) {
                 let start = captures.get(1).map_or(1usize, |m| m.as_str().parse().unwrap()).saturating_sub(1);
-                let end = captures.get(2).map_or(usize::MAX, |m| m.as_str().parse::<usize>().unwrap());
+                let end = captures.get(2).map_or(usize::MAX, |m| m.as_str().parse().unwrap());
                 new_fields.push(Field::Range(start, end));
             } else if let Ok(index) = field.parse::<usize>() {
                 new_fields.push(Field::Index(index.saturating_sub(1)));

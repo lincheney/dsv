@@ -38,7 +38,7 @@ fn parse_size(bytes: &BStr) -> Option<f64> {
         b"pib" => 2usize.pow(50),
         _ => return None,
     };
-    let val: f64 = std::str::from_utf8(m.as_bytes()).unwrap().parse().unwrap();
+    let val: f64 = crate::utils::try_parse(m.as_bytes()).unwrap();
     Some(val * mul as f64)
 }
 
@@ -351,14 +351,14 @@ fn get_numeric_stats<F: Fn(f64) -> String>(
 }
 
 fn display_numeric(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
-    let parsed: Vec<_> = column.iter().map(|c| std::str::from_utf8(c.as_ref()?).ok()?.parse().ok()).collect();
+    let parsed: Vec<_> = column.iter().map(|c| crate::utils::try_parse(c.as_ref()?)).collect();
     let stats = get_numeric_stats(&parsed, cutoff, nice_float)?;
     Some(display_stats(base, stats.into_iter().map(|(k, v)| {
         vec![header.clone(), b"numeric".into(), k.into(), v.into()]
     })))
 }
 fn display_percentage(base: &mut base::Base, header: &BString, column: &Vec<Option<&BString>>, cutoff: f64) -> Option<Result<()>> {
-    let parsed: Vec<_> = column.iter().map(|&c| std::str::from_utf8(c?.strip_suffix(b"%")?).ok()?.parse().ok()).collect();
+    let parsed: Vec<_> = column.iter().map(|&c| crate::utils::try_parse(c?.strip_suffix(b"%")?)).collect();
     let stats = get_numeric_stats(&parsed, cutoff, |x| format!("{}%", nice_float(x)))?;
     Some(display_stats(base, stats.into_iter().map(|(k, v)| {
         vec![header.clone(), b"percent".into(), k.into(), v.into()]

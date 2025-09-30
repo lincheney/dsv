@@ -337,13 +337,13 @@ impl FormatSpec {
         let align = if align.is_empty() {
             FormatAlign::None
         } else if let Some(align) = align.strip_prefix(b"-") {
-            FormatAlign::Right{width: std::str::from_utf8(align).unwrap().parse().unwrap()}
+            FormatAlign::Right{width: crate::utils::try_parse(align).unwrap()}
         } else {
-            FormatAlign::Left{width: std::str::from_utf8(align).unwrap().parse().unwrap(), zero: align.starts_with(b"0")}
+            FormatAlign::Left{width: crate::utils::try_parse(align).unwrap(), zero: align.starts_with(b"0")}
         };
 
         let decimal = captures.get(2).map(|m| m.as_bytes());
-        let decimal = decimal.map(|x| std::str::from_utf8(&x[1..]).unwrap().parse().unwrap_or(0));
+        let decimal = decimal.map(|x| crate::utils::try_parse(&x[1..]).unwrap_or(0));
 
         let format = captures.get(3).unwrap().as_bytes();
         let format = match format {
@@ -363,14 +363,14 @@ impl FormatSpec {
     }
 
     fn format<'a>(&self, mut val: Cow<'a, [u8]>) -> Cow<'a, [u8]> {
-        if let Some(decimal) = self.decimal && let Ok(v) = std::str::from_utf8(&val) && let Ok(v) = v.parse::<f64>() {
+        if let Some(decimal) = self.decimal && let Some(v) = crate::utils::try_parse::<f64, _>(&val) {
             val = format!("{v:.decimal$}").into_bytes().into();
         }
         match self.align {
             FormatAlign::None => (),
             FormatAlign::Left{width, zero} => if width > val.len() {
                 let width = width - val.len();
-                if zero && let Ok(v) = std::str::from_utf8(&val) && v.parse::<f64>().is_ok() {
+                if zero && crate::utils::try_parse::<f64, _>(&val).is_some() {
                     val.to_mut().insert_str(0, b"0".repeat(width));
                 } else {
                     val.to_mut().insert_str(0, b" ".repeat(width));
@@ -405,7 +405,7 @@ impl Proc {
     fn lookup_key_index(keys: Option<&HashMap<BString, usize>>, val: &[u8]) -> Option<usize> {
         if val.is_empty() {
             Some(0)
-        } else if let Ok(x) = std::str::from_utf8(val) && let Ok(x) = x.parse::<usize>() {
+        } else if let Some(x) = crate::utils::try_parse(val) {
             Some(x)
         } else if let Some(&x) = keys.and_then(|keys| keys.get(val)) {
             Some(x)
@@ -460,7 +460,7 @@ impl Proc {
             } else {
                 let x: &BStr = text.into();
                 err = Err(anyhow::anyhow!("invalid placeholder: {x:?}"));
-                b"".into()
+                return b"".into()
             };
 
             if let Some(f) = formatter {
@@ -725,7 +725,7 @@ impl ProcStats {
                 let get_durations = || store.inner.values().map(|(p, _)| now.duration_since(p.start_time).as_secs_f64());
                 let running_total: f64 = get_durations().sum();
                 let running_left: f64 = get_durations().map(|d| (mean - d).max(0.)).sum();
-                let running_max = get_durations().max_by(|a, b| a.partial_cmp(&b).unwrap()).unwrap();
+                let running_max = get_durations().max_by(|a, b| a.partial_cmp(b).unwrap()).unwrap();
                 // recalc the mean with the ones still running
                 let mean = (self.total_runtime.as_secs_f64() + running_total + running_left) / (self.finished + store.inner.len()) as f64;
 
@@ -1057,7 +1057,7 @@ impl Handler {
         // for now just check for vte even though kitty supports it too
         opts.terminal_progress_report = opts.terminal_progress_report.resolve_with(|| {
             base.opts.is_stderr_tty
-            && std::env::var("VTE_VERSION").ok().and_then(|v| v.parse::<usize>().ok()).is_some_and(|v| v >= 7900)
+            && std::env::var("VTE_VERSION").ok().and_then(|v| v.parse().ok()).is_some_and(|v: usize| v >= 7900)
         });
 
         let job_limit = if let Some(jobs) = opts.jobs.as_ref().or(opts.max_procs.as_ref()) {
