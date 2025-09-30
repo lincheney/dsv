@@ -75,6 +75,8 @@ jobs:
     needs: [check-changes, build]
     if: needs.check-changes.outputs.has-changes == '1'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GITHUB_SHA: ${{ github.sha }}
