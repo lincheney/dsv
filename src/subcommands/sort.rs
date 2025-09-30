@@ -43,7 +43,7 @@ pub struct Opts {
     version_sort: bool,
 
     #[arg(long, action = ArgAction::Help, help="Print help")]
-    help: bool,
+    help: (),
 }
 
 struct Proc {
