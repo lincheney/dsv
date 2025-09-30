@@ -34,10 +34,10 @@ Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
 Choose the appropriate binary for your platform:
 
-- **Linux x86_64**: [dsv-nightly-x86_64-linux](https://github.com/lincheney/dsv/releases/download/nightly/dsv-nightly-x86_64-linux)
-    - `wget https://github.com/lincheney/dsv/releases/download/nightly/dsv-nightly-x86_64-linux`
-- **Linux ARM64**: [dsv-nightly-aarch64-linux](https://github.com/lincheney/dsv/releases/download/nightly/dsv-nightly-aarch64-linux)
-    - `wget https://github.com/lincheney/dsv/releases/download/nightly/dsv-nightly-aarch64-linux`
+- **Linux x86_64**: [dsv-nightly-x86_64-linux]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/nightly/dsv-nightly-x86_64-linux)
+    - \`wget $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/nightly/dsv-nightly-x86_64-linux\`
+- **Linux ARM64**: [dsv-nightly-aarch64-linux]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/dsv/releases/download/nightly/dsv-nightly-aarch64-linux)
+    - \`wget $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/nightly/dsv-nightly-aarch64-linux\`
 
 ⚠️  **Note**: This is a pre-release build and may contain unstable features.
 EOF
