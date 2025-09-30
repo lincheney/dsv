@@ -172,21 +172,45 @@ class xargs(_Base):
         if i is not None:
             return row[i]
 
-        i = self.get_format_arg_index(text[:-1])
-        if i is not None:
-            if text.endswith(b'.'):
-                return os.path.splitext(row[i])[0]
-            if text.endswith(b'/'):
-                return os.path.basename(row[i])
+        quote = False
+        formatter = None
+        if m := re.search(rb':(-?\d*(\.\d*)?)([fiqs]?)$', text):
+            quote = m.group(0).endswith(b'q')
+            formatter = b'%' + m.group(1) + (b's' if quote else m.group(3) or b's')
+            text = text[:m.start(0)]
+        result = None
 
-        i = self.get_format_arg_index(text[1:-3])
+        i = self.get_format_arg_index(text)
         if i is not None:
-            if text.endswith(b'//'):
-                return os.path.dirname(row[i])
-            if text.endswith(b'/.'):
-                return os.path.splitext(os.path.basename(row[i]))[0]
+            result = row[i]
 
-        raise FormattingError(f'invalid placeholder: {text!r}')
+        if result is None:
+            i = self.get_format_arg_index(text[:-1])
+            if i is not None:
+                if text.endswith(b'.'):
+                    result = os.path.splitext(row[i])[0]
+                if text.endswith(b'/'):
+                    result = os.path.basename(row[i])
+
+        if result is None:
+            i = self.get_format_arg_index(text[1:-3])
+            if i is not None:
+                if text.endswith(b'//'):
+                    result = os.path.dirname(row[i])
+                if text.endswith(b'/.'):
+                    result = os.path.splitext(os.path.basename(row[i]))[0]
+
+        if result is not None:
+            if formatter is not None:
+                try:
+                    result = formatter % result
+                except TypeError:
+                    result = (formatter.removesuffix(b'f') + b's') % result
+            if quote:
+                result = shell_quote([result])
+            return result
+
+        raise FormattingError(f'invalid placeholder: {match.group(0)!r}')
 
     async def start_proc(self, row):
         logger = Logger(self.stats.total - self.stats.queued, self, row)

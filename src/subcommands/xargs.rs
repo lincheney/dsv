@@ -1,3 +1,4 @@
+use once_cell::sync::Lazy;
 use std::process::ExitCode;
 use crate::utils::{Break, MaybeBreak};
 use crate::writer::{get_rgb};
@@ -23,6 +24,7 @@ use std::borrow::Cow;
 use std::time::{Instant, Duration};
 
 const CLEAR_PROGRESS_REPORT: &[u8] = b"\x1b]9;4;0;\x1b\\";
+static FORMAT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(-?\d*)(\.\d*)?([fiqs]?)$").unwrap());
 
 fn shell_quote<T: AsRef<[u8]>, I: IntoIterator<Item=T>>(values: I) -> BString {
     let mut new: BString = b"".into();
@@ -309,6 +311,85 @@ impl Logger {
     }
 }
 
+struct FormatSpec {
+    format: FormatSpecType,
+    decimal: Option<usize>,
+    align: FormatAlign
+}
+
+enum FormatAlign {
+    None,
+    Left{width: usize, zero: bool},
+    Right{width: usize},
+}
+
+enum FormatSpecType {
+    Default,
+    Shellquote,
+}
+
+impl FormatSpec {
+    fn parse(val: &[u8]) -> Option<(Self, &[u8])> {
+        let (left, right) = val.split_once_str(b":")?;
+        let captures = FORMAT_REGEX.captures(right)?;
+
+        let align = captures.get(1).unwrap().as_bytes();
+        let align = if align.is_empty() {
+            FormatAlign::None
+        } else if let Some(align) = align.strip_prefix(b"-") {
+            FormatAlign::Right{width: std::str::from_utf8(align).unwrap().parse().unwrap()}
+        } else {
+            FormatAlign::Left{width: std::str::from_utf8(align).unwrap().parse().unwrap(), zero: align.starts_with(b"0")}
+        };
+
+        let decimal = captures.get(2).map(|m| m.as_bytes());
+        let decimal = decimal.map(|x| std::str::from_utf8(&x[1..]).unwrap().parse().unwrap_or(0));
+
+        let format = captures.get(3).unwrap().as_bytes();
+        let format = match format {
+            b"" | b"f" | b"i" | b"s" => FormatSpecType::Default,
+            b"q" => FormatSpecType::Shellquote,
+            _ => unreachable!(),
+        };
+
+        Some((
+            Self{
+                align,
+                decimal,
+                format,
+            },
+            left,
+        ))
+    }
+
+    fn format<'a>(&self, mut val: Cow<'a, [u8]>) -> Cow<'a, [u8]> {
+        if let Some(decimal) = self.decimal && let Ok(v) = std::str::from_utf8(&val) && let Ok(v) = v.parse::<f64>() {
+            val = format!("{v:.decimal$}").into_bytes().into();
+        }
+        match self.align {
+            FormatAlign::None => (),
+            FormatAlign::Left{width, zero} => if width > val.len() {
+                let width = width - val.len();
+                if zero && let Ok(v) = std::str::from_utf8(&val) && v.parse::<f64>().is_ok() {
+                    val.to_mut().insert_str(0, b"0".repeat(width));
+                } else {
+                    val.to_mut().insert_str(0, b" ".repeat(width));
+                }
+            },
+            FormatAlign::Right{width} => if width > val.len() {
+                let width = width - val.len();
+                val.to_mut().push_str(b" ".repeat(width));
+            },
+        }
+        match self.format {
+            FormatSpecType::Default => (),
+            FormatSpecType::Shellquote => { val = shell_quote([val]).to_vec().into(); },
+        };
+        val
+    }
+}
+
+
 struct Proc {
     child: Option<(Child, mio_pidfd::PidFd)>,
     success: bool,
@@ -351,8 +432,17 @@ impl Proc {
             let as_path = |i: usize| Path::new(OsStr::from_bytes(&values[i]));
 
             if let Some(i) = Self::lookup_key_index(keys, inner) {
-                values[i].as_bytes().into()
+                return values[i].as_bytes().into()
+            }
 
+            let (formatter, inner) = if let Some((formatter, inner)) = FormatSpec::parse(inner) {
+                (Some(formatter), inner)
+            } else {
+                (None, inner)
+            };
+
+            let value = if let Some(i) = Self::lookup_key_index(keys, inner) {
+                values[i].as_bytes().into()
             } else if let Some(i) = inner.strip_suffix(b".").and_then(|x| Self::lookup_key_index(keys, x)) {
                 as_path(i).with_extension("").into_os_string().into_encoded_bytes().into()
 
@@ -371,6 +461,12 @@ impl Proc {
                 let x: &BStr = text.into();
                 err = Err(anyhow::anyhow!("invalid placeholder: {x:?}"));
                 b"".into()
+            };
+
+            if let Some(f) = formatter {
+                f.format(value)
+            } else {
+                value
             }
         });
 
