@@ -109,8 +109,9 @@ impl Writer for MarkdownWriter {
         opts: &base::BaseOptions,
         _ofs: &base::Ofs,
         colour: bool,
+        hyperlink: bool,
     ) -> BString {
-        self.inner.format_row(state, row, padding, is_header, opts, &self.ofs, colour)
+        self.inner.format_row(state, row, padding, is_header, opts, &self.ofs, colour, hyperlink)
     }
 
     fn write_header(

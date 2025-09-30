@@ -11,6 +11,10 @@ from ._table import to_bytes, parse_datetime
 def is_tty(fd):
     return os.isatty(fd)
 
+@cache
+def getpid():
+    return os.getpid()
+
 def utf8_type(x):
     return x.encode('utf8')
 

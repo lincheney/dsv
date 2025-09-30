@@ -51,6 +51,7 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
     opts: &BaseOptions,
     ofs: &Ofs,
     colour: bool,
+    hyperlinks: Option<&(u32, Vec<BString>)>,
     rgb: I,
 ) -> BString {
 
@@ -70,9 +71,15 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
     };
 
     let rgb = rgb.chain(std::iter::repeat(b"".into()));
-    for (i, ((col, rgb), &pad)) in row.iter().zip(rgb).zip(padding).enumerate() {
+    let hyperlink = hyperlinks.iter()
+        .flat_map(|(pid, h)| h.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into())).map(move |h| Some((pid, h))))
+        .chain(std::iter::repeat(None));
+    for (i, (((col, rgb), &pad), hyperlink)) in row.iter().zip(rgb).zip(padding).zip(hyperlink).enumerate() {
         if i != 0 {
             parts.extend_from_slice(ofs);
+        }
+        if let Some((pid, header)) = hyperlink {
+            write!(&mut parts, "\x1b]8;id=dsv-{}-{};{}\x1b\\", pid, i, header).unwrap();
         }
         if let Some(header_colour) = header_colour {
             parts.extend_from_slice(header_colour);
@@ -93,6 +100,9 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
         for _ in 0 .. pad {
             parts.push(b' ');
         }
+        if hyperlink.is_some() {
+            parts.extend_from_slice(b"\x1b]8;;\x1b\\");
+        }
     }
     // reset colour
     if colour && !parts.is_empty() {
@@ -111,6 +121,7 @@ pub struct WriterState {
     pub file: Option<Box<dyn Write>>,
     pub rgb_map: Vec<BString>,
     pub ors: BString,
+    pub hyperlinks: Option<(u32, Vec<BString>)>,
 }
 
 pub struct BaseWriter {
@@ -220,7 +231,7 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs, opts.colour.is_on(false));
+        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs, opts.colour.is_on(false), opts.hyperlink_columns.is_on(opts.is_stdout_tty));
         self.write_raw(state, formatted_row, true, opts, is_header, opts.is_stdout_tty)
     }
 
@@ -249,7 +260,7 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(state, row, padding, false, opts, ofs, opts.stderr_colour);
+        let formatted_row = self.format_row(state, row, padding, false, opts, ofs, opts.stderr_colour, opts.hyperlink_columns.is_on(opts.is_stderr_tty));
         self.write_raw_stderr(state, formatted_row, true, opts, opts.is_stderr_tty)
     }
 
@@ -297,12 +308,22 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
         colour: bool,
+        hyperlink: bool,
     ) -> BString {
         if colour && opts.rainbow_columns != AutoChoices::Never {
             // colour each column differently
             self.set_rgb(state, row.len());
         }
-        format_row(row, padding, is_header, opts, ofs, colour, self.get_rgb(state))
+        format_row(
+            row,
+            padding,
+            is_header,
+            opts,
+            ofs,
+            colour,
+            if hyperlink { state.hyperlinks.as_ref() } else { None },
+            self.get_rgb(state),
+        )
     }
 }
 

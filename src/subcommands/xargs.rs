@@ -856,6 +856,7 @@ impl ProcStore {
                     &base.opts,
                     &self.ofs,
                     false,
+                    None,
                     std::iter::empty(),
                 );
                 logger.write_line(base, line, false)?;

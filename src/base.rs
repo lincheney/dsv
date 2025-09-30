@@ -14,6 +14,7 @@ pub const RESET_COLOUR: &str = "\x1b[0m";
 static SPACE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
 static PPRINT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s\s+").unwrap());
 static ANSI: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;:]*[mK]|\x1b]8;;.*?\x1b\\").unwrap());
+static NON_PRINTABLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^ -~]").unwrap());
 
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone)]
@@ -151,6 +152,8 @@ pub struct BaseOptions {
     pub header_bg_colour: Option<String>,
     #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable rainbow columns")]
     pub rainbow_columns: AutoChoices,
+    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Never, help = "enable hyperlink columns")]
+    pub hyperlink_columns: AutoChoices,
     #[arg(global = true, short = 'Q', long, help = "do not handle quotes from input")]
     pub no_quoting: bool,
     #[arg(global = true, long = "no-quote-output", default_value_t = true, action = ArgAction::SetFalse, help = "don't quote output")]
@@ -763,6 +766,17 @@ impl<W: Writer> Output<W> {
     }
 
     fn on_header(&mut self, state: &mut WriterState, mut header: Vec<BString>) -> Result<()> {
+        if self.opts.hyperlink_columns.is_on(self.opts.is_stdout_tty || self.opts.is_stderr_tty) {
+            // the parameters and the URI must not contain any bytes outside of the 32-126
+            let header = header.iter()
+                .map(|h| NON_PRINTABLE.replace_all(h, |c: &regex::bytes::Captures| -> String {
+                    format!("%{:02x}", c.get(0).unwrap().as_bytes()[0])
+                }).into_owned())
+                .map(BString::new)
+                .collect();
+            state.hyperlinks = Some((std::process::id(), header));
+        }
+
         if self.opts.drop_header {
             Ok(())
         } else {
