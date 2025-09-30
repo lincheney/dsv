@@ -26,7 +26,7 @@ echo "Generating release notes..." >&2
 cat > release_notes.md << EOF
 # dsv nightly release
 
-Automated nightly build from commit: \`${GITHUB_SHA}\`
+Automated nightly build from commit: [$GITHUB_SHA]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA)
 
 Built on: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
