@@ -1,3 +1,4 @@
+use crate::utils::Break;
 use std::process::ExitCode;
 use anyhow::{Result};
 use std::sync::mpsc::{self, Receiver};
@@ -34,7 +35,7 @@ impl Handler {
 
 impl Processor for Handler {
 
-    fn run(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<std::process::ExitCode> {
+    fn run(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> {
         let (err_sender, err_receiver) = mpsc::channel();
         self.err_receiver = Some(err_receiver);
 
@@ -45,14 +46,18 @@ impl Processor for Handler {
             (base.sender, receiver) = mpsc::channel();
 
             let arg = arg.iter().map(|x| x.as_ref());
-            let (handler, base) = super::Subcommands::from_args(
+            let sub = super::Subcommands::from_args(
                 arg,
                 new_sender,
                 base.scope,
                 base.opts.is_stdout_tty && i == 0,
-            )?;
-            handler.register_cleanup();
-            handlers.push((handler, base, receiver));
+            );
+            if let Ok((handler, base)) = sub {
+                handler.register_cleanup();
+                handlers.push((handler, base, receiver));
+            } else if Break::is_break(sub)? {
+                return Ok(ExitCode::SUCCESS)
+            }
         }
 
         // first is actually last in pipeline

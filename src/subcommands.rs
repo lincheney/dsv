@@ -64,7 +64,7 @@ macro_rules! add_subcommands {
                 sender: Sender<Message>,
                 scope: &'a std::thread::Scope<'a, 'b>,
                 is_stdout_tty: bool,
-        ) -> Result<(Self, Base<'a, 'b>)> {
+            ) -> Result<(Self, Base<'a, 'b>)> {
 
                 const ARG0: &str = env!("CARGO_PKG_NAME");
                 let mut cli = Cli::parse_from(std::iter::once(ARG0).chain(args));
@@ -76,7 +76,7 @@ macro_rules! add_subcommands {
                     )*
                     Some(Command::_pipeline(_)) | None => {
                         Cli::command().print_help()?;
-                        unreachable!();
+                        return crate::utils::Break.to_err()
                     },
                 };
 
