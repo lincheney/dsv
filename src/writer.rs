@@ -317,7 +317,7 @@ impl Writer for BaseWriter {
     fn get_file(&mut self, opts: &BaseOptions, has_header: bool) -> Box<dyn Write> {
         if opts.page {
             let mut command = Command::new("less");
-            command.args(["-RX"]);
+            command.args(["-R"]);
             if has_header && !opts.drop_header {
                 command.arg("--header=1");
             }

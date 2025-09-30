@@ -403,7 +403,7 @@ class _Base:
     def start_outfile(self):
         if self.outfile is None and self.outfile_proc is None:
             if self.opts.page:
-                cmd = ['less', '-RX']
+                cmd = ['less', '-R']
                 if self.header is not None and not self.opts.drop_header:
                     cmd.append('--header=1')
                 self.outfile_proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
