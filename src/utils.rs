@@ -4,7 +4,8 @@ use std::borrow::Cow;
 use bstr::{BStr, ByteVec};
 
 pub fn chain_errors<T: Default, I: IntoIterator<Item=Result<T>>>(results: I) -> Result<T> {
-    let mut result = Ok(Default::default());
+    let mut results = results.into_iter();
+    let mut result = results.next().unwrap_or_else(|| Ok(Default::default()));
     for err in results {
         // skip breaks
         if let Err(e) = Break::is_break(err) {

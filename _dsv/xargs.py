@@ -279,6 +279,7 @@ class xargs(_Base):
         self.queue.put(None)
         if self.thread:
             self.thread.join()
+        self.exit_code = min(self.stats.finished - self.stats.succeeded, 101)
         super().on_eof()
 
     def cleanup(self):

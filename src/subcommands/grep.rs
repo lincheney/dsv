@@ -168,7 +168,7 @@ impl base::Processor for Handler {
             base.write_raw(output, true, true)?;
         }
         base.on_eof()?;
-        Ok(self.matched_count == 0)
+        Ok(self.matched_count > 0)
     }
 
 

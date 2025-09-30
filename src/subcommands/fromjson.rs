@@ -138,7 +138,7 @@ impl base::Processor for Handler {
         // silence the break
         Break::is_break(self.process_json(file, base, do_callbacks))?;
         if do_callbacks.contains(Callbacks::ON_EOF) {
-            self.on_eof(base)?;
+            return self.on_eof_detailed(base)
         }
         Ok(ExitCode::SUCCESS)
     }

@@ -7,7 +7,7 @@ use std::io::{Read, BufRead, BufReader, IsTerminal};
 use bstr::{BStr, BString, ByteSlice};
 use std::process::{ExitCode};
 use crate::utils::{Break, MaybeBreak};
-use anyhow::{Result, Context};
+use anyhow::{Result};
 
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 pub const RESET_COLOUR: &str = "\x1b[0m";
@@ -405,17 +405,15 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
             }
         }
 
-        let failed = crate::utils::chain_errors(
+        crate::utils::chain_errors(
             [
-                Some(err.map(|_| false)),
-                do_callbacks.contains(Callbacks::ON_EOF).then(|| self.on_eof(base)),
+                do_callbacks.contains(Callbacks::ON_EOF).then(|| self.on_eof_detailed(base)),
+                err.err().map(|e| Err(e)),
             ].into_iter().flatten()
-        )?;
-
-        Ok(if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS })
+        )
     }
 
-    fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<()> where Self: Sized {
+    fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
         let mut err = Ok(());
         for msg in &receiver {
             let result = match msg {
@@ -434,15 +432,10 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                 _ => {},
             }
         }
-        if let Err(e) = self.on_eof(base) {
-            err = if err.is_ok() {
-                Err(e)
-            } else {
-                err.context(e)
-            };
-        }
-        err?;
-        Ok(())
+        crate::utils::chain_errors([
+            err.map(|_| ExitCode::SUCCESS),
+            self.on_eof_detailed(base),
+        ])
     }
 
     fn parse_line(&self, base: &mut Base, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
@@ -462,6 +455,10 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
     fn on_eof(self, base: &mut Base) -> Result<bool> where Self: Sized {
         base.on_eof()
+    }
+
+    fn on_eof_detailed(self, base: &mut Base) -> Result<ExitCode> where Self: Sized {
+        self.on_eof(base).map(|success| if success { ExitCode::SUCCESS } else { ExitCode::FAILURE })
     }
 
     fn on_ofs(&mut self, base: &mut Base, ofs: Ofs) -> MaybeBreak {
@@ -607,7 +604,7 @@ impl<'a, 'b> Base<'a, 'b> {
     }
 
     pub fn on_eof(&self) -> Result<bool> {
-        Ok(self.sender.send(Message::Eof).is_err())
+        Ok(!self.sender.send(Message::Eof).is_err())
     }
 
     pub fn on_separator(&self) -> MaybeBreak {

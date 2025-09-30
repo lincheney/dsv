@@ -181,7 +181,7 @@ impl base::Processor for Handler {
             }
         }
         if do_callbacks.contains(base::Callbacks::ON_EOF) {
-            self.on_eof(base)?;
+            return self.on_eof_detailed(base)
         }
         Ok(ExitCode::SUCCESS)
     }

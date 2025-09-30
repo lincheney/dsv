@@ -1,3 +1,4 @@
+use std::process::ExitCode;
 use crate::utils::{Break, MaybeBreak};
 use crate::writer::{get_rgb};
 use crate::column_slicer::{make_header_map};
@@ -81,7 +82,7 @@ pub struct Opts {
 
 pub struct Handler {
     sender: mio_channel::Sender<Message>,
-    err_receiver: mpsc::Receiver<Result<()>>,
+    err_receiver: mpsc::Receiver<Result<ExitCode>>,
 }
 
 enum Message {
@@ -856,7 +857,7 @@ fn proc_loop(
     opts: Opts,
     job_limit: usize,
     placeholder_regex: Regex,
-) -> Result<()> {
+) -> Result<ExitCode> {
 
     let mut proc_store = ProcStore{
         opts,
@@ -869,7 +870,7 @@ fn proc_loop(
         ofs: base::Ofs::default(),
     };
 
-    let result = (|| {
+    let result: Result<()> = (|| {
         proc_store.stats.print_progress(base, &proc_store, false)?;
 
         let mut poll = mio::Poll::new()?;
@@ -933,7 +934,8 @@ fn proc_loop(
 
     let _ = base.on_eof();
     let _ = proc_store.stats.print_progress(base, &proc_store, true);
-    result
+    result?;
+    Ok(ExitCode::from(proc_store.stats.failed().min(101) as u8))
 }
 
 impl Handler {
@@ -1034,10 +1036,9 @@ impl base::Processor for Handler {
         base.on_ofs(ofs)
     }
 
-    fn on_eof(self, _base: &mut base::Base) -> Result<bool> {
+    fn on_eof_detailed(self, _base: &mut base::Base) -> Result<ExitCode> {
         self.sender.send(Message::Eof).unwrap();
-        self.err_receiver.recv().unwrap()?;
-        Ok(false)
+        self.err_receiver.recv().unwrap()
     }
 
     fn register_cleanup(&self) {

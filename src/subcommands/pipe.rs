@@ -1,3 +1,4 @@
+use std::process::ExitCode;
 use crate::utils::Break;
 use crate::utils::MaybeBreak;
 use anyhow::{Result, Context};
@@ -38,8 +39,8 @@ pub struct Handler {
     proc: Option<Proc>,
     ofs: Ofs,
     row_sender: Sender<Vec<BString>>,
-    err_sender: Sender<Result<()>>,
-    err_receiver: Receiver<Result<()>>,
+    err_sender: Sender<Result<ExitCode>>,
+    err_receiver: Receiver<Result<ExitCode>>,
 }
 
 impl Handler {
@@ -103,7 +104,7 @@ impl Handler {
             let err_sender = self.err_sender.clone();
             base.scope.spawn(move || {
                 base.opts.header = Some(false);
-                let result = PipeHandler{}.process_file(stdout, &mut base, base::Callbacks::all()).map(|_| ());
+                let result = PipeHandler{}.process_file(stdout, &mut base, base::Callbacks::all());
                 err_sender.send(result).unwrap();
             });
 
@@ -166,7 +167,7 @@ impl base::Processor for Handler {
 
         base.on_eof()?;
         err_receiver.recv().unwrap()?;
-        Ok(!success)
+        Ok(success)
     }
 }
 

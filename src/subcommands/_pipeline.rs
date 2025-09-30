@@ -1,3 +1,4 @@
+use std::process::ExitCode;
 use anyhow::{Result};
 use std::sync::mpsc::{self, Receiver, Sender};
 use crate::base::*;
@@ -17,7 +18,7 @@ enum Args {
 }
 
 pub struct Handler {
-    err_receiver: Receiver<Result<()>>,
+    err_receiver: Receiver<Result<ExitCode>>,
     writer_sender: Sender<Receiver<Message>>,
 }
 
@@ -93,8 +94,15 @@ impl Processor for Handler {
     }
 
     fn on_eof(self, base: &mut Base) -> Result<bool> {
-        base.on_eof()?;
-        crate::utils::chain_errors(self.err_receiver)?;
-        Ok(false)
+        let mut success = base.on_eof()?;
+        crate::utils::chain_errors(
+            self.err_receiver.iter()
+                .inspect(|code|
+                    if let Ok(code) = code && *code != ExitCode::SUCCESS {
+                        success = false;
+                    }
+                )
+        )?;
+        Ok(success)
     }
 }

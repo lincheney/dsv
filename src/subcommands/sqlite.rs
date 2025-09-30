@@ -67,7 +67,7 @@ impl base::Processor for Handler {
             true
         };
         base.on_eof()?;
-        Ok(!success)
+        Ok(success)
     }
 }
 
