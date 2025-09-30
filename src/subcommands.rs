@@ -1,8 +1,9 @@
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Sender, Receiver};
 use anyhow::Result;
-use crate::base::{Base, Processor, BaseOptions, Message};
+use crate::base::{Base, Processor, BaseOptions, Message, Callbacks};
 use clap::{Subcommand, Parser, CommandFactory};
+use std::io::{BufRead};
 
 #[derive(Parser)]
 #[command(version, about, long_about = None, disable_help_subcommand = true)]
@@ -88,17 +89,28 @@ macro_rules! add_subcommands {
                 }
             }
 
-            pub fn forward_messages(self, base: &mut Base, receiver: std::sync::mpsc::Receiver<Message>) -> Result<ExitCode> {
+            pub fn forward_messages(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> {
                 match self {
                     $( Self::$name(handler) => handler.forward_messages(base, receiver), )*
                 }
             }
 
-            pub fn spawn_writer(&self, base: &mut Base, receiver: Receiver<Receiver<Message>>) {
+            pub fn process_file<R: BufRead>(self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> {
+                match self {
+                    $( Self::$name(handler) => handler.process_file(file, base, do_callbacks), )*
+                }
+            }
+
+            pub fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> {
+                match self {
+                    $( Self::$name(handler) => handler.run(base, receiver), )*
+                }
+            }
+
+            pub fn spawn_writer(&self, base: &mut Base, receiver: Receiver<Message>) {
                 match self {
                     $(
                     Self::$name(handler) => {
-                        let receiver = receiver.recv().unwrap();
                         let mut writer = handler.make_writer(base.opts.clone());
                         base.scope.spawn(move || {
                             writer.run(receiver)

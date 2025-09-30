@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 use anyhow::{Result};
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver};
 use crate::base::*;
 use clap::{Parser, Subcommand};
 
@@ -18,19 +18,28 @@ enum Args {
 }
 
 pub struct Handler {
-    err_receiver: Receiver<Result<ExitCode>>,
-    writer_sender: Sender<Receiver<Message>>,
+    err_receiver: Option<Receiver<Result<ExitCode>>>,
+    args: Vec<String>,
 }
 
 impl Handler {
-    pub fn new(opts: Opts, base: &mut Base) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut Base) -> Result<Self> {
         let Args::Args(args) = opts.args;
+        Ok(Self {
+            err_receiver: None,
+            args,
+        })
+    }
+}
 
-        let (writer_sender, writer_receiver) = mpsc::channel();
+impl Processor for Handler {
+
+    fn run(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<std::process::ExitCode> {
         let (err_sender, err_receiver) = mpsc::channel();
+        self.err_receiver = Some(err_receiver);
 
         let mut handlers = vec![];
-        for (i, arg) in args.rsplit(|a| a == "!").enumerate() {
+        for (i, arg) in self.args.rsplit(|a| a == "!").enumerate() {
             let new_sender = base.sender.clone();
             let receiver;
             (base.sender, receiver) = mpsc::channel();
@@ -46,57 +55,62 @@ impl Handler {
             handlers.push((handler, base, receiver));
         }
 
+        // first is actually last in pipeline
+        let first = handlers.pop().unwrap();
         let mut handlers = handlers.into_iter();
 
-        let base_opts;
-        // first is actually last in pipeline
-        {
-            let (handler, mut base, receiver) = handlers.next().unwrap();
+        if let Some(last) = handlers.next() {
+
+            let (handler, mut base, recv) = last;
+            // last gets to create the writer
+            handler.spawn_writer(&mut base, receiver);
             // take opts from the last handler?
-            base_opts = base.opts.clone();
-            let err_sender = err_sender.clone();
-            base.scope.spawn(move || {
-                handler.spawn_writer(&mut base, writer_receiver);
-                let result = handler.forward_messages(&mut base, receiver);
-                err_sender.send(result).unwrap();
-            });
+            let last_opts = base.opts.clone();
+            {
+                let err_sender = err_sender.clone();
+                base.scope.spawn(move || {
+                    let result = handler.forward_messages(&mut base, recv);
+                    err_sender.send(result).unwrap();
+                });
+            }
+
+            // spawn all the other handlers
+            for (handler, mut base, recv) in handlers {
+                let err_sender = err_sender.clone();
+                base.scope.spawn(move || {
+                    let result = handler.forward_messages(&mut base, recv);
+                    err_sender.send(result).unwrap();
+                });
+            }
+
+            // first handler gets to read from stdin
+            let (handler, mut base, _) = first;
+            base.opts = BaseOptions{
+                ifs: base.opts.ifs.clone(),
+                tsv: base.opts.tsv,
+                csv: base.opts.csv,
+                ssv: base.opts.ssv,
+                plain_ifs: base.opts.plain_ifs,
+                ..last_opts
+            };
+            let result = handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all());
+            err_sender.send(result).unwrap();
+
+        } else {
+            // exactly 1 handler, just run it
+            let (handler, mut base, _) = first;
+            let result = handler.run(&mut base, receiver);
+            err_sender.send(result).unwrap();
         }
+        drop(err_sender);
 
-        for (handler, mut base, receiver) in handlers {
-            let err_sender = err_sender.clone();
-            base.scope.spawn(move || {
-                let result = handler.forward_messages(&mut base, receiver);
-                err_sender.send(result).unwrap();
-            });
-        }
-
-        base.opts = BaseOptions{
-            ifs: base.opts.ifs.clone(),
-            tsv: base.opts.tsv,
-            csv: base.opts.csv,
-            ssv: base.opts.ssv,
-            plain_ifs: base.opts.plain_ifs,
-            ..base_opts
-        };
-
-        Ok(Self {
-            err_receiver,
-            writer_sender,
-        })
-    }
-}
-
-impl Processor for Handler {
-
-    fn run(self, base: &mut Base, receiver: Receiver<Message>) -> Result<std::process::ExitCode> {
-        self.writer_sender.send(receiver).unwrap();
-        self.process_file(std::io::stdin().lock(), base, Callbacks::all())
+        self.on_eof_detailed(base)
     }
 
     fn on_eof(self, base: &mut Base) -> Result<bool> {
         let mut success = base.on_eof()?;
         crate::utils::chain_errors(
-            self.err_receiver.iter()
+            self.err_receiver.unwrap().iter()
                 .inspect(|code|
                     if let Ok(code) = code && *code != ExitCode::SUCCESS {
                         success = false;
