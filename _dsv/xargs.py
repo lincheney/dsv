@@ -367,7 +367,7 @@ class xargs(_Base):
         )).format('', **vars)
 
         if failed:
-            bar += " ({failed} failed)".format(**vars),
+            bar += " ({failed} failed)".format(**vars)
 
         if cleanup:
             bar += '\n'
