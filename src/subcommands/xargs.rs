@@ -721,24 +721,27 @@ impl ProcStats {
         } else {
             if store.opts.eta && self.finished > 0 && !store.inner.is_empty() {
                 let now = Instant::now();
-                let mean = self.total_runtime / self.finished as u32;
-                let running_left: Duration = store.inner.values().map(|(p, _)| mean.saturating_sub(now.duration_since(p.start_time))).sum();
-                let running_max = store.inner.values().map(|(p, _)| now.duration_since(p.start_time)).max().unwrap();
+                let mean = self.total_runtime.as_secs_f64() / self.finished as f64;
+                let get_durations = || store.inner.values().map(|(p, _)| now.duration_since(p.start_time).as_secs_f64());
+                let running_total: f64 = get_durations().sum();
+                let running_left: f64 = get_durations().map(|d| (mean - d).max(0.)).sum();
+                let running_max = get_durations().max_by(|a, b| a.partial_cmp(&b).unwrap()).unwrap();
+                // recalc the mean with the ones still running
+                let mean = (self.total_runtime.as_secs_f64() + running_total + running_left) / (self.finished + store.inner.len()) as f64;
 
-                if running_max >= self.max_runtime && self.queued == 0 {
+                if running_max >= self.max_runtime.as_secs_f64() && self.queued == 0 {
                     // running longer than expected and there are no more queued jobs
                     // so we don't know how long it will take
                     write!(&mut bar, " ??:?? remaining").unwrap();
                 } else {
                     let remaining = if let Some(limit) = store.job_limit {
-                        let limit = limit.get() as f64;
-                        let remaining = running_left.as_secs_f64() + mean.as_secs_f64() * self.queued as f64;
+                        let remaining = running_left + mean * self.queued as f64;
                         let unfinished = self.unfinished() as f64;
-                        remaining / unfinished * (unfinished / limit).ceil()
+                        remaining / unfinished * (unfinished / limit.get() as f64).ceil()
                     } else {
-                        mean.as_secs_f64()
+                        mean
                     };
-                    let remaining = remaining.max(1.);
+                    let remaining = remaining.ceil().max(1.);
                     bar.push(' ');
                     if remaining >= 3600. {
                         write!(&mut bar, "{}:", (remaining / 3600.).floor()).unwrap();

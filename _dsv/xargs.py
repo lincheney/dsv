@@ -401,8 +401,11 @@ class xargs(_Base):
             if self.opts.eta and stats.finished > 0 and self.proc_tasks:
                 now = time.time()
                 mean = stats.total_runtime / stats.finished
+                running_total = sum(now - t for t in self.proc_tasks.values())
                 running_left = sum(max(0, mean - (now - t)) for t in self.proc_tasks.values())
                 running_max = max(now - t for t in self.proc_tasks.values())
+                # recalc the mean with the ones still running
+                mean = (stats.total_runtime + running_total + running_left) / (stats.finished + len(self.proc_tasks))
 
                 if running_max >= stats.max_runtime and stats.queued == 0:
                     # running longer than expected and there are no more queued jobs
@@ -414,7 +417,7 @@ class xargs(_Base):
                         remaining = running_left + mean * stats.queued
                         unfinished = stats.total - stats.finished
                         remaining = remaining / unfinished * math.ceil(unfinished / self.job_limit)
-                    remaining = max(1, remaining)
+                    remaining = max(1, math.ceil(remaining))
                     bar += ' '
                     if remaining >= 3600:
                         bar += f"{remaining // 3600}:"
