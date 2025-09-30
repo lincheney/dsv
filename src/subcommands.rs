@@ -5,7 +5,7 @@ use crate::base::{Base, Processor, BaseOptions, Message};
 use clap::{Subcommand, Parser, CommandFactory};
 
 #[derive(Parser)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, disable_help_subcommand = true)]
 #[command(propagate_version = true)]
 pub struct Cli {
     #[command(subcommand)]

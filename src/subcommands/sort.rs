@@ -4,7 +4,7 @@ use bstr::{BString, ByteSlice};
 use crate::column_slicer::ColumnSlicer;
 use std::process::{Command, Child, ChildStdin, ChildStdout, Stdio};
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use clap::{Parser};
+use clap::{Parser, ArgAction};
 
 const ORS: u8 = b'\x00';
 
@@ -41,6 +41,9 @@ pub struct Opts {
     reverse: bool,
     #[arg(short = 'V', long, help="natural sort of version numbers within text")]
     version_sort: bool,
+
+    #[arg(long, action = ArgAction::Help, help="Print help")]
+    help: bool,
 }
 
 struct Proc {
