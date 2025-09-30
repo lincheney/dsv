@@ -1,3 +1,4 @@
+use crate::utils::Break;
 use anyhow::{Result, Context};
 use crate::base::{self, Processor, Callbacks};
 use bstr::{BStr, BString};
@@ -134,7 +135,8 @@ impl base::Processor for Handler {
     fn process_file<R: Read>(mut self, file: R, base: &mut base::Base, do_callbacks: Callbacks) -> anyhow::Result<ExitCode> {
         let ofs = self.determine_delimiters(b"".into(), &base.opts).1;
         base.on_ofs(ofs)?;
-        self.process_json(file, base, do_callbacks)?;
+        // silence the break
+        Break::is_break(self.process_json(file, base, do_callbacks))?;
         if do_callbacks.contains(Callbacks::ON_EOF) {
             self.on_eof(base)?;
         }
