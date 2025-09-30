@@ -2,6 +2,7 @@ use crate::base::*;
 use std::io::{Write, BufWriter};
 use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{Command, Stdio};
+use std::iter::repeat;
 use anyhow::{Result};
 use colorutils_rs::Hsv;
 
@@ -57,7 +58,7 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
 
     let mut parts = BString::new(vec![]);
     let tmp_padding = vec![];
-    let padding = padding.unwrap_or(&tmp_padding).iter().chain(std::iter::repeat(&0));
+    let padding = padding.unwrap_or(&tmp_padding).iter().chain(repeat(&0));
     let ofs = ofs.as_bstr();
     let header_colour = if is_header && colour {
         opts.header_colour.as_deref().map(|x| x.as_bytes()).or(Some(b"\x1b[1;4m"))
@@ -70,10 +71,10 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
         None
     };
 
-    let rgb = rgb.chain(std::iter::repeat(b"".into()));
+    let rgb = rgb.chain(repeat(b"".into()));
     let hyperlink = hyperlinks.iter()
-        .flat_map(|(pid, h)| h.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into())).map(move |h| Some((pid, h))))
-        .chain(std::iter::repeat(None));
+        .flat_map(|(pid, h)| h.iter().map(|x| x.as_bstr()).chain(repeat(b"".into())).map(move |h| Some((pid, h))))
+        .chain(repeat(None));
     for (i, (((col, rgb), &pad), hyperlink)) in row.iter().zip(rgb).zip(padding).zip(hyperlink).enumerate() {
         if i != 0 {
             parts.extend_from_slice(ofs);
@@ -141,7 +142,7 @@ pub trait Writer {
     }
 
     fn get_rgb<'a>(&self, state: &'a WriterState) -> impl Iterator<Item=&'a BStr> {
-        state.rgb_map.iter().map(|x| x.as_bstr()).chain(std::iter::repeat(b"".into()))
+        state.rgb_map.iter().map(|x| x.as_bstr()).chain(repeat(b"".into()))
     }
 
     fn format_columns(row: Vec<BString>, ofs: &Ofs, ors: &BStr, quote_output: bool) -> FormattedRow {
