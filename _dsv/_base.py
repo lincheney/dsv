@@ -87,6 +87,7 @@ class _Base:
     outfile = None
     outfile_proc = None
     out_header = None
+    exit_code = 0
 
     def __init__(self, opts, outfile=None):
         self.opts = opts

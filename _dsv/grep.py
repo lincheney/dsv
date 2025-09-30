@@ -247,3 +247,8 @@ class grep(_ColumnSlicer):
         # quit if reached max count
         if self.matched_count >= self.opts.max_count and self.last_matched + self.after <= self.row_num:
             return True
+
+    def on_eof(self):
+        if not self.matched_count:
+            self.exit_code = 1
+        super().on_eof()

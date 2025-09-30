@@ -23,9 +23,10 @@ def main():
         list(handler.process_file(sys.stdin.buffer))
     finally:
         handler.cleanup()
+    return handler.exit_code
 
 if __name__ == '__main__':
     try:
-        main()
+        sys.exit(main())
     except BrokenPipeError:
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())

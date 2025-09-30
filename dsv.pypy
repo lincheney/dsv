@@ -7,7 +7,7 @@ import sys
 if __name__ == '__main__':
     try:
         import _dsv.__main__
-        _dsv.__main__.main()
+        sys.exit(_dsv.__main__.main())
     except (BrokenPipeError, KeyboardInterrupt):
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
 
