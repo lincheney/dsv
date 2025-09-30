@@ -419,12 +419,12 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
             let result = match msg {
                 Message::Row(row) => self.on_row(base, row),
                 Message::Header(header) => self.on_header(base, header),
-                Message::Eof => { break },
+                Message::Eof => Break.to_err(),
                 Message::Separator => Ok(()), // do nothing
-                Message::Raw(value, ors, clear) => if base.write_raw(value, ors, clear).is_err() { break } else { Ok(()) },
-                Message::Ofs(ofs) => if self.on_ofs(base, ofs).is_err() { break } else { Ok(()) },
-                Message::Stderr(row) => if base.write_stderr(row).is_err() { break } else { Ok(()) },
-                Message::RawStderr(value, ors, clear) => if base.write_raw_stderr(value, ors, clear).is_err() { break } else { Ok(()) },
+                Message::Raw(value, ors, clear) => Break::when(base.write_raw(value, ors, clear).is_err()),
+                Message::Ofs(ofs) => Break::when(self.on_ofs(base, ofs).is_err()),
+                Message::Stderr(row) => Break::when(base.write_stderr(row).is_err()),
+                Message::RawStderr(value, ors, clear) => Break::when(base.write_raw_stderr(value, ors, clear).is_err()),
             };
             match Break::is_break(result) {
                 Ok(true) => break,

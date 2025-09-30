@@ -354,9 +354,9 @@ impl FormatSpec {
 
         Some((
             Self{
-                align,
-                decimal,
                 format,
+                decimal,
+                align,
             },
             left,
         ))
@@ -384,7 +384,7 @@ impl FormatSpec {
         match self.format {
             FormatSpecType::Default => (),
             FormatSpecType::Shellquote => { val = shell_quote([val]).to_vec().into(); },
-        };
+        }
         val
     }
 }
@@ -595,11 +595,11 @@ impl Proc {
                             }
                             Ok(())
                         });
-                        crate::utils::chain_errors([r1, r2.map(|_| ()), r3.map(|_| ())])
+                        crate::utils::chain_errors([r1, r2.map(|_| ()), r3])
                     }),
                     // write in the remaining lines
-                    self.handle_event(EventType::Stdout, registry, logger, base, opts).map(|_| ()),
-                    self.handle_event(EventType::Stderr, registry, logger, base, opts).map(|_| ()),
+                    self.handle_event(EventType::Stdout, registry, logger, base, opts),
+                    self.handle_event(EventType::Stderr, registry, logger, base, opts),
                 ])?;
             },
         }
