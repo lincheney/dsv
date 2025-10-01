@@ -12,16 +12,16 @@ use std::fmt::{Write as FmtWrite};
 use std::ffi::{OsString, OsStr};
 use std::os::unix::{ffi::OsStringExt, ffi::OsStrExt, process::ExitStatusExt};
 use std::collections::{VecDeque, HashMap, hash_map::Entry};
-use std::os::fd::{AsFd, RawFd, AsRawFd};
+use std::os::fd::{AsFd, RawFd};
 use std::process::{Child, Command, Stdio, ChildStdin, ChildStdout, ChildStderr};
 use std::io::{Read, Write};
 use bstr::{BString, BStr, ByteSlice, ByteVec};
 use clap::{Parser, CommandFactory, ArgAction, error::{ErrorKind, ContextKind, ContextValue}};
 use nix::sys::stat::{fstat, SFlag};
-use nix::fcntl::{fcntl, FcntlArg, OFlag, FdFlag};
 use nix::sys::signal::{kill, SIGTERM};
 use std::borrow::Cow;
 use std::time::{Instant, Duration};
+use crate::io::{Reader, LineReader, Writer};
 
 const CLEAR_PROGRESS_REPORT: &[u8] = b"\x1b]9;4;0;\x1b\\";
 static FORMAT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"(-?\d*)(\.\d*)?([fiqs]?)$").unwrap());
@@ -95,27 +95,20 @@ enum Message {
 }
 
 struct BufferedReader<R> {
-    inner: R,
+    inner: Reader<R>,
     fd: Option<RawFd>,
-    buffer: BString,
-    used: usize,
 }
 
 impl<R: Read+AsFd> BufferedReader<R> {
     fn new(inner: R, token: mio::Token, registry: &mio::Registry) -> Result<Self> {
-        let fd = inner.as_fd();
-        if fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK)).is_err()
-        || fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).is_err() {
-            return Err(std::io::Error::last_os_error())?;
-        }
+        let mut reader = Reader::new(inner);
+        reader.make_non_blocking()?;
 
-        let fd = fd.as_raw_fd();
+        let fd = reader.get_raw_fd();
         registry.register(&mut mio::unix::SourceFd(&fd), token, mio::Interest::READABLE)?;
         Ok(Self{
+            inner: reader,
             fd: Some(fd),
-            inner,
-            buffer: vec![].into(),
-            used: 0,
         })
     }
 
@@ -131,88 +124,35 @@ impl<R: Read+AsFd> BufferedReader<R> {
         Ok(())
     }
 
-    fn read_once(&mut self, registry: &mio::Registry) -> Result<()> {
-        let slice = &mut self.buffer[self.used..];
-        match self.inner.read(slice) {
-            Ok(0) => {
-                // eof
-                self.close(registry)?;
-                Break.to_err()
-            },
-            Ok(count) => {
-                self.used += count;
-                Break::when(count < slice.len())
-            },
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Break.to_err(),
-            Err(err) => Err(err)?,
-        }
-    }
-
     fn read(&mut self, registry: &mio::Registry) -> Result<&mut Self> {
-        const READ_AMOUNT: usize = 4096;
-        loop {
-            // more space
-            let new_size = self.used + READ_AMOUNT;
-            if self.buffer.len() < new_size {
-                self.buffer.resize(new_size, 0);
-            }
-            if Break::is_break(self.read_once(registry))? {
-                return Ok(self)
-            }
+        self.inner.read()?;
+        if self.inner.is_eof {
+            self.close(registry)?;
         }
+        Ok(self)
     }
 
-    fn get_lines(&mut self, irs: &BStr) -> impl Iterator<Item=BString> {
-        let mut start = 0;
-        std::iter::from_fn(move || {
-            let slice = &self.buffer[start..self.used];
-            if let Some(i) = slice.find(irs) {
-                start = self.used.min(start + i + irs.len());
-                Some(slice[..i].into())
-
-            // this is the last line - output if eof, otherwise save it for later
-            } else if self.is_eof() {
-                self.used = 0;
-                start = 0;
-                if slice.is_empty() {
-                    None
-                } else {
-                    Some(slice.into())
-                }
-            } else {
-                if self.used != start {
-                    self.buffer.drain(..start);
-                }
-                self.used -= start;
-                None
-            }
-        })
+    fn line_reader<'a>(&'a mut self) -> LineReader<'a, R> {
+        self.inner.line_reader()
     }
 }
 
 struct BufferedWriter<W> {
-    inner: W,
+    inner: Writer<W>,
     fd: Option<RawFd>,
-    buffer: BString,
-    used: usize,
 }
 
 impl<W: Write+AsFd> BufferedWriter<W> {
     fn new(inner: W, token: mio::Token, registry: &mio::Registry, buffer: BString) -> Result<Self> {
-        let fd = inner.as_fd();
-        if fcntl(fd, FcntlArg::F_SETFL(OFlag::O_NONBLOCK)).is_err()
-        || fcntl(fd, FcntlArg::F_SETFD(FdFlag::FD_CLOEXEC)).is_err() {
-            return Err(std::io::Error::last_os_error())?;
-        }
+        let mut writer = Writer::new(inner);
+        writer.make_non_blocking()?;
+        writer.write(buffer);
 
-        let fd = fd.as_raw_fd();
+        let fd = writer.get_raw_fd();
         registry.register(&mut mio::unix::SourceFd(&fd), token, mio::Interest::WRITABLE)?;
         Ok(Self{
+            inner: writer,
             fd: Some(fd),
-            inner,
-            buffer,
-            used: 0,
         })
     }
 
@@ -228,25 +168,9 @@ impl<W: Write+AsFd> BufferedWriter<W> {
         Ok(())
     }
 
-    fn write_once(&mut self, registry: &mio::Registry) -> Result<()> {
-        let slice = &mut self.buffer[self.used..];
-        match self.inner.write(slice) {
-            Ok(count) => {
-                self.used += count;
-                if count == 0 || self.used == self.buffer.len() {
-                    // eof
-                    self.close(registry)?;
-                }
-                Break.to_err()
-            },
-            Err(err) if err.kind() == std::io::ErrorKind::Interrupted => Ok(()),
-            Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => Break.to_err(),
-            Err(err) => Err(err)?,
-        }
-    }
-
-    fn write(&mut self, registry: &mio::Registry) -> Result<&mut Self> {
-        while !Break::is_break(self.write_once(registry))? {
+    fn flush(&mut self, registry: &mio::Registry) -> Result<&mut Self> {
+        if !self.inner.flush()? {
+            self.close(registry)?;
         }
         Ok(self)
     }
@@ -564,20 +488,22 @@ impl Proc {
         match et {
             EventType::Stdin => {
                 let stdin = self.stdin.as_mut().unwrap();
-                stdin.write(registry)?;
+                stdin.flush(registry)?;
                 if stdin.is_eof() {
                     // close stdin
                     self.stdin = None;
                 }
             },
             EventType::Stdout => {
-                for line in self.stdout.read(registry)?.get_lines(base.irs.as_ref()) {
-                    logger.write_line(base, line, false)?;
+                let mut lines = self.stdout.read(registry)?.line_reader();
+                while let Some((line, _)) = lines.get_line(base.irs.as_ref()) {
+                    logger.write_line(base, line.into(), false)?;
                 }
             },
             EventType::Stderr => {
-                for line in self.stderr.read(registry)?.get_lines(base.irs.as_ref()) {
-                    logger.write_line(base, line, true)?;
+                let mut lines = self.stderr.read(registry)?.line_reader();
+                while let Some((line, _)) = lines.get_line(base.irs.as_ref()) {
+                    logger.write_line(base, line.into(), true)?;
                 }
             },
             EventType::Pidfd => {

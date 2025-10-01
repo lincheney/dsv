@@ -3,11 +3,12 @@ use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer, WriterState};
-use std::io::{Read, BufRead, BufReader, IsTerminal};
+use std::io::{Read, BufRead, IsTerminal};
 use bstr::{BStr, BString, ByteSlice};
 use std::process::{ExitCode};
 use crate::utils::{Break, MaybeBreak};
 use anyhow::{Result};
+use crate::io::{Reader};
 
 const UTF8_BOM: &[u8] = b"\xEF\xBB\xBF";
 pub const RESET_COLOUR: &str = "\x1b[0m";
@@ -315,105 +316,70 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         (ifs, ofs)
     }
 
-    fn process_file<R: BufRead>(self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
-        self._process_file(file, base, do_callbacks)
-    }
-
-    fn _process_file<R: Read>(mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
-        let mut reader = BufReader::new(file);
-        let mut buffer = BString::new(vec![]);
-        let mut row = vec![];
-        let mut got_row = false;
-        let mut got_line = false;
-
-        let mut eof = false;
-        let mut err = Ok(());
-        while !eof {
-            let (mut line, offset) = if base.irs.len() == 1 {
-                reader.read_until(base.irs[0], &mut buffer).unwrap();
-                eof = !buffer.ends_with(&base.irs);
-                let mut offset = if eof { 0 } else { 1 };
-                if base.irs == b"\n" && buffer.ends_with(b"\r\n") {
-                    offset += 1;
-                }
-                (&buffer[.. buffer.len() - offset], offset)
-            } else if let Some((left, _)) = buffer.split_once_str(&base.irs) {
-                (left, base.irs.len())
-            } else {
-                // read some more
-                let buf = reader.fill_buf().unwrap();
-                buffer.extend_from_slice(buf);
-                eof = buf.is_empty();
-                if !eof {
-                    continue
-                }
-                (&buffer[..], base.irs.len())
-            };
-
-            if eof && row.is_empty() && line.is_empty() {
-                break
-            }
-
-            let line_len = line.len() + offset;
-
-            if ! got_line {
-                got_line = true;
-                if line.starts_with(UTF8_BOM) {
-                    line = &line[UTF8_BOM.len()..]; // Remove UTF-8 BOM
-                }
-                let (ifs, ofs) = self.determine_delimiters(line.into(), &base.opts);
-                base.ifs = ifs;
-                if do_callbacks.contains(Callbacks::ON_OFS) && self.on_ofs(base, ofs).is_err() {
-                    break
-                }
-                if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
-                    base.opts.combine_trailing_columns = true;
-                }
-            }
-
-            let incomplete;
-            (row, incomplete) = self.parse_line(base, line.into(), row, b'"');
-            if !incomplete || eof {
-
-                let is_header = if got_row {
-                    false
-                } else {
-                    // got the first row, is it a header
-                    got_row = true;
-                    base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
-                };
-
-                if is_header {
-                    base.header_len = Some(row.len());
-                    if do_callbacks.contains(Callbacks::ON_HEADER) {
-                        match Break::is_break(self.on_header(base, row)) {
-                            Ok(true) => { break; },
-                            Ok(false) => (),
-                            Err(e) => { err = Err(e); break; },
-                        }
-                    }
-                } else if do_callbacks.contains(Callbacks::ON_ROW) {
-                    match Break::is_break(self.on_row(base, row)) {
-                        Ok(true) => { break; },
-                        Ok(false) => (),
-                        Err(e) => { err = Err(e); break; },
-                    }
-                }
-
-                row = vec![];
-            }
-
-            if !eof {
-                buffer.drain(..line_len);
-            }
-        }
-
+    fn process_file<R: BufRead>(mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
+        let result = self._process_file(file, base, do_callbacks);
         crate::utils::chain_errors(
             [
                 do_callbacks.contains(Callbacks::ON_EOF).then(|| self.on_eof_detailed(base)),
-                err.err().map(Err),
+                Some(result.map(|_| ExitCode::SUCCESS)),
             ].into_iter().flatten()
         )
+    }
+
+    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<()> where Self: Sized {
+        let mut reader = Reader::new(file);
+        let mut prev_row = vec![];
+        let mut first_row = true;
+        let mut first_read = true;
+
+        while !reader.is_eof {
+            reader.read()?;
+
+            let mut lines = reader.line_reader();
+            while let Some((mut line, last_line)) = lines.get_line(base.irs.as_ref()) {
+
+                if first_read {
+                    first_read = false;
+                    // Remove UTF-8 BOM
+                    line = line.strip_prefix(UTF8_BOM).unwrap_or(line).into();
+
+                    let (ifs, ofs) = self.determine_delimiters(line, &base.opts);
+                    base.ifs = ifs;
+                    if do_callbacks.contains(Callbacks::ON_OFS) && self.on_ofs(base, ofs).is_err() {
+                        break
+                    }
+                    if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
+                        base.opts.combine_trailing_columns = true;
+                    }
+                }
+
+                let (row, incomplete) = self.parse_line(base, line, prev_row, b'"');
+                if !incomplete || (lines.is_eof() && last_line) {
+
+                    let is_header = if first_row {
+                        // got the first row, is it a header
+                        first_row = true;
+                        base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
+                    } else {
+                        false
+                    };
+
+                    if is_header {
+                        base.header_len = Some(row.len());
+                        if do_callbacks.contains(Callbacks::ON_HEADER) {
+                            self.on_header(base, row)?;
+                        }
+                    } else if do_callbacks.contains(Callbacks::ON_ROW) {
+                        self.on_row(base, row)?;
+                    }
+                    prev_row = vec![];
+                } else {
+                    prev_row = row;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {

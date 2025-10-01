@@ -45,6 +45,7 @@ pub fn format_columns<S: AsRef<BStr>>(mut row: Vec<BString>, ofs: &Ofs<S>, ors: 
     FormattedRow(row)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
     row: Vec<BString>,
     padding: Option<&Vec<usize>>,
