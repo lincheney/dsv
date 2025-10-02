@@ -383,7 +383,7 @@ class _Base:
                 if p > 0:
                     row[i] += b' ' * p
 
-        if self.opts.hyperlink_columns != 'never':
+        if self.opts.hyperlink_columns:
             for i, (col, h) in enumerate(zip(row, self.header)):
                 # the parameters and the URI must not contain any bytes outside of the 32-126
                 h = re.sub(rb'[^ -~]', lambda m: urllib.parse.quote(m.group(0)), h)
