@@ -48,8 +48,7 @@ def diff(value):
     for v in value:
         result.append(v - prev)
         prev = v
-    cls = Vec if value.__na__ else NoNaVec
-    return cls(result[1:])
+    return result[1:]
 
 def parse_datetime(
     value,
@@ -425,14 +424,14 @@ def na_wrapper(fn):
             return NA
     return wrapper
 
-for arity, scalar, functions in [
-    (1, False, (
+for arity, mapped, functions in [
+    (1, True, (
         '__round__', '__floor__', '__ceil__', '__neg__', '__pos__', '__invert__', '__index__',
         math.ceil, math.fabs, math.floor, math.isfinite, math.isinf, math.isnan, math.isqrt, math.prod, math.trunc, math.exp, math.log, math.log2, math.log10, math.sqrt,
         abs,
         as_float, parse_datetime,
     )),
-    (1, True, (
+    (1, False, (
         sum,
         statistics.mean, statistics.fmean, statistics.geometric_mean, statistics.harmonic_mean, statistics.median, statistics.median_low, statistics.median_high, statistics.median_grouped, statistics.mode, statistics.multimode, statistics.quantiles, statistics.pstdev, statistics.pvariance, statistics.stdev, statistics.variance,
         diff,
@@ -456,13 +455,17 @@ for arity, scalar, functions in [
                 def fn(x, *args, fn=fnname, **kwargs):
                     return getattr(x, fn)(*args, **kwargs)
 
-        if arity == 1 and scalar:
+        if arity == 1 and mapped:
             def method(self, *args, fn=fn, **kwargs):
-                return fn(self.__flat__(), *args, **kwargs)
+                return self.map(lambda x: fn(x, *args, **kwargs))
 
         elif arity == 1:
             def method(self, *args, fn=fn, **kwargs):
-                return self.map(lambda x: fn(x, *args, **kwargs))
+                result = fn(self.__flat__(), *args, **kwargs)
+                if isinstance(result, list):
+                    cls = Vec if self.__na__ else NoNaVec
+                    result = cls(result)
+                return result
 
         elif arity == 2:
             def method(self, other, *args, fn=fn, **kwargs):
