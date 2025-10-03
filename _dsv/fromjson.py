@@ -22,6 +22,7 @@ class fromjson(_Base):
     ''' convert from json '''
     parser = argparse.ArgumentParser()
     parser.add_argument('-f', '--flatten', nargs='?', const='.', help='flatten objects and arrays. (default seperator: %(const)s)')
+    parser.add_argument('-s', '--slurp', action='store_true', help='determine header after reading all input')
 
     def parse_json(self, buffer, json_decoder=json.JSONDecoder()):
         try:
@@ -48,18 +49,35 @@ class fromjson(_Base):
                         value, rest = self.parse_json(rest)
                     except json.JSONDecodeError:
                         break
-                    yield value
+                    if isinstance(value, dict):
+                        if self.opts.flatten:
+                            value = flatten(value, self.opts.flatten)
+                        yield value
+                    else:
+                        print('not a json object:', value, file=sys.stderr)
             except UnicodeDecodeError:
                 break
 
         if rest:
             print('invalid json:', rest, file=sys.stderr)
 
+    def calc_header(self, rows: list[dict]):
+        self.header = list({key.encode('utf8'): None for row in rows for key in row})
+
     def process_file(self, file):
         self.determine_delimiters(b'')
-        for row in self.iter_json(file):
+        rows = self.iter_json(file)
+
+        if self.opts.slurp:
+            rows = list(rows)
+            self.calc_header(rows)
+            if super().on_header(self.header):
+                return True
+
+        for row in rows:
             if self.on_row(row):
                 break
+
         self.on_eof()
         return ()
 
@@ -67,14 +85,8 @@ class fromjson(_Base):
         return self.on_row(header)
 
     def on_row(self, row):
-        if not isinstance(row, dict):
-            print('not a json object:', row, file=sys.stderr)
-            return
-
-        if self.opts.flatten:
-            row = flatten(row, self.opts.flatten)
         if self.header is None:
-            self.header = [x.encode('utf8') for x in row.keys()]
+            self.calc_header([row])
             if super().on_header(self.header):
                 return True
 
