@@ -108,6 +108,15 @@ impl AutoChoices {
             Self::Auto => is_tty(),
         }
     }
+
+    pub fn from_option(val: Option<Option<Self>>) -> Option<Self> {
+        Some(val?.unwrap_or(AutoChoices::Always))
+    }
+
+    pub fn from_option_auto(val: Option<Option<Self>>) -> Self {
+        Self::from_option(val).unwrap_or(Self::Auto)
+    }
+
 }
 
 #[derive(Debug, Parser, Clone, Default)]
@@ -119,9 +128,13 @@ pub struct BaseOptions {
     pub no_header: bool,
     #[arg(global = true, long, help = "do or not print the header")]
     pub drop_header: bool,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "print a trailer")]
+    #[arg(global = true, long = "trailer", value_enum, num_args = 0..=1, require_equals = true, help = "print a trailer")]
+    pub _trailer: Option<Option<AutoChoices>>,
+    #[clap(skip)]
     pub trailer: AutoChoices,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "number the columns in the header")]
+    #[arg(global = true, long = "numbered-columns", value_enum, num_args = 0..=1, require_equals = true, help = "number the columns in the header")]
+    pub _numbered_columns: Option<Option<AutoChoices>>,
+    #[clap(skip)]
     pub numbered_columns: AutoChoices,
     #[arg(global = true, short = 'd', long, help = "input field separator")]
     pub ifs: Option<String>,
@@ -145,15 +158,21 @@ pub struct BaseOptions {
     pub pretty: bool,
     #[arg(global = true, long, help = "show output in a pager (less)")]
     pub page: bool,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable colour")]
+    #[arg(global = true, long = "colour", alias = "color", value_enum, num_args = 0..=1, require_equals = true, help = "enable colour")]
+    pub _colour: Option<Option<AutoChoices>>,
+    #[clap(skip)]
     pub colour: AutoChoices,
     #[arg(global = true, long, help = "ansi escape code for the header")]
     pub header_colour: Option<String>,
     #[arg(global = true, long, help = "ansi escape code for the header background")]
     pub header_bg_colour: Option<String>,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Auto, help = "enable rainbow columns")]
+    #[arg(global = true, long, value_enum, num_args = 0..=1, require_equals = true, help = "enable rainbow columns")]
+    pub _rainbow_columns: Option<Option<AutoChoices>>,
+    #[clap(skip)]
     pub rainbow_columns: AutoChoices,
-    #[arg(global = true, long, value_enum, default_value_t = AutoChoices::Never, help = "enable hyperlink columns")]
+    #[arg(global = true, long, value_enum, num_args = 0..=1, require_equals = true, help = "enable hyperlink columns")]
+    pub _hyperlink_columns: Option<Option<AutoChoices>>,
+    #[clap(skip)]
     pub hyperlink_columns: AutoChoices,
     #[arg(global = true, short = 'Q', long, help = "do not handle quotes from input")]
     pub no_quoting: bool,
@@ -184,16 +203,22 @@ impl BaseOptions {
         if self.ors.is_none() {
             self.ors = self.irs.clone();
         }
-        self.stderr_colour = !self.page && self.colour.is_on(self.is_stderr_tty);
-        self.colour = self.colour.resolve(self.is_stdout_tty);
         if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
             self.colour = AutoChoices::Never;
             self.stderr_colour = false;
+        } else {
+            let colour = AutoChoices::from_option_auto(self._colour);
+            self.colour = colour.resolve(self.is_stdout_tty);
+            self.stderr_colour = !self.page && colour.is_on(self.is_stderr_tty);
         }
-        self.numbered_columns = self.numbered_columns.resolve(self.is_stdout_tty);
         if self.header_bg_colour.is_none() {
             self.header_bg_colour = Some("\x1b[48;5;237m".into());
         }
+        self.numbered_columns = AutoChoices::from_option_auto(self._numbered_columns);
+        self.trailer = AutoChoices::from_option_auto(self._trailer);
+        self.rainbow_columns = AutoChoices::from_option_auto(self._rainbow_columns);
+        // hyperlinks are off by default right now
+        self.hyperlink_columns = AutoChoices::from_option(self._hyperlink_columns).unwrap_or(AutoChoices::Never);
         // let ors = opts.ors.as_deref().unwrap_or("\n").into();
     }
 

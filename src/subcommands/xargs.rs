@@ -7,7 +7,7 @@ use regex::bytes::{Regex, Captures};
 use std::path::Path;
 use anyhow::{Result};
 use std::sync::{mpsc};
-use crate::base;
+use crate::base::{self, AutoChoices};
 use std::fmt::{Write as FmtWrite};
 use std::ffi::{OsString, OsStr};
 use std::os::unix::{ffi::OsStringExt, ffi::OsStrExt, process::ExitStatusExt};
@@ -60,12 +60,18 @@ pub struct Opts {
     max_procs: Option<String>,
     #[arg(short, long, overrides_with = "max_procs", help = "run up to num processes at a time, the default is 1")]
     jobs: Option<String>,
-    #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "print a progress bar")]
-    progress_bar: base::AutoChoices,
-    #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "enable rainbow rows")]
-    rainbow_rows: base::AutoChoices,
-    #[arg(long, value_enum, default_value_t = base::AutoChoices::Auto, help = "enable conemu progress reporting")]
-    terminal_progress_report: base::AutoChoices,
+    #[arg(long, value_enum, num_args = 0..=1, require_equals = true, help = "print a progress bar")]
+    _progress_bar: Option<Option<AutoChoices>>,
+    #[clap(skip)]
+    progress_bar: AutoChoices,
+    #[arg(long, value_enum, num_args = 0..=1, require_equals = true, help = "enable rainbow rows")]
+    _rainbow_rows: Option<Option<AutoChoices>>,
+    #[clap(skip)]
+    rainbow_rows: AutoChoices,
+    #[arg(long, value_enum, num_args = 0..=1, require_equals = true, help = "enable conemu progress reporting")]
+    _terminal_progress_report: Option<Option<AutoChoices>>,
+    #[clap(skip)]
+    terminal_progress_report: AutoChoices,
     #[arg(short, long, action = ArgAction::Count, help = "enable verbose logging")]
     verbose: u8,
     #[arg(long, help = "print the job to run but do not run the job")]
@@ -966,7 +972,7 @@ fn proc_loop(
 
 impl Handler {
     pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
-        opts.progress_bar = opts.progress_bar.resolve_with(|| {
+        opts.progress_bar = AutoChoices::from_option_auto(opts._progress_bar).resolve_with(|| {
             base.opts.is_stderr_tty && (
                 base.opts.is_stdout_tty
                 || fstat(std::io::stdout().as_fd())
@@ -975,14 +981,15 @@ impl Handler {
             )
         });
 
-        opts.rainbow_rows = opts.rainbow_rows.resolve(base.opts.colour.is_on(base.opts.is_stdout_tty) && base.opts.is_stdout_tty);
+        opts.rainbow_rows = AutoChoices::from_option_auto(opts._rainbow_rows)
+            .resolve(base.opts.colour.is_on(base.opts.is_stdout_tty) && base.opts.is_stdout_tty);
         if opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
             base.opts.rainbow_columns = base::AutoChoices::Never;
         }
 
         // ermmm only supported on some terminals
         // for now just check for vte even though kitty supports it too
-        opts.terminal_progress_report = opts.terminal_progress_report.resolve_with(|| {
+        opts.terminal_progress_report = AutoChoices::from_option_auto(opts._terminal_progress_report).resolve_with(|| {
             base.opts.is_stderr_tty
             && std::env::var("VTE_VERSION").ok().and_then(|v| v.parse().ok()).is_some_and(|v: usize| v >= 7900)
         });

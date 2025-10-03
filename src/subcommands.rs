@@ -1,3 +1,4 @@
+use std::ffi::{OsStr};
 use std::process::ExitCode;
 use std::sync::mpsc::{self, Sender, Receiver};
 use anyhow::Result;
@@ -45,7 +46,10 @@ macro_rules! add_subcommands {
                     $(
                         Some(Command::$name(opts)) => $name::Handler::new(opts, &mut base)?.run(&mut base, receiver),
                     )*
-                    Some(Command::_pipeline(opts)) => _pipeline::Handler::new(opts, &mut base)?.run(&mut base, receiver),
+                    Some(Command::_pipeline(opts)) => {
+                        let args = std::env::args_os().collect();
+                        _pipeline::Handler::new(opts, &mut base, args)?.run(&mut base, receiver)
+                    },
                     None => default(&mut base, receiver),
                 }
             })
@@ -59,7 +63,7 @@ macro_rules! add_subcommands {
         }
 
         impl Subcommands {
-            pub fn from_args<'a, 'b, 'c, I: Iterator<Item=&'c str>>(
+            pub fn from_args<'a, 'b, 'c, I: Iterator<Item=&'c OsStr>>(
                 args: I,
                 sender: Sender<Message>,
                 scope: &'a std::thread::Scope<'a, 'b>,
@@ -67,7 +71,7 @@ macro_rules! add_subcommands {
             ) -> Result<(Self, Base<'a, 'b>)> {
 
                 const ARG0: &str = env!("CARGO_PKG_NAME");
-                let mut cli = Cli::parse_from(std::iter::once(ARG0).chain(args));
+                let mut cli = Cli::parse_from(std::iter::once(ARG0.as_ref()).chain(args));
                 cli.opts.post_process(Some(is_stdout_tty));
                 let mut base = Base::new(cli.opts, sender, scope);
                 let handler = match cli.command {

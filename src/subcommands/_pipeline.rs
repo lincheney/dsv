@@ -1,3 +1,4 @@
+use std::ffi::{OsString};
 use crate::utils::Break;
 use std::process::ExitCode;
 use anyhow::{Result};
@@ -20,14 +21,21 @@ enum Args {
 
 pub struct Handler {
     err_receiver: Option<Receiver<Result<ExitCode>>>,
+    flags: Vec<OsString>,
     args: Vec<String>,
 }
 
 impl Handler {
-    pub fn new(opts: Opts, _base: &mut Base) -> Result<Self> {
+    pub fn new(opts: Opts, _base: &mut Base, mut cli_args: Vec<OsString>) -> Result<Self> {
         let Args::Args(args) = opts.args;
+
+        drop(cli_args.drain(cli_args.len() - args.len() .. ));
+        cli_args.pop().unwrap();
+        cli_args.remove(0);
+
         Ok(Self {
             err_receiver: None,
+            flags: cli_args,
             args,
         })
     }
@@ -45,7 +53,7 @@ impl Processor for Handler {
             let receiver;
             (base.sender, receiver) = mpsc::channel();
 
-            let arg = arg.iter().map(|x| x.as_ref());
+            let arg = self.flags.iter().map(|f| f.as_ref()).chain(arg.iter().map(|x| x.as_ref()));
             let sub = super::Subcommands::from_args(
                 arg,
                 new_sender,
@@ -70,7 +78,6 @@ impl Processor for Handler {
             // last gets to create the writer
             handler.spawn_writer(&mut base, receiver);
             // take opts from the last handler?
-            let last_opts = base.opts.clone();
             {
                 let err_sender = err_sender.clone();
                 base.scope.spawn(move || {
@@ -90,14 +97,6 @@ impl Processor for Handler {
 
             // first handler gets to read from stdin
             let (handler, mut base, _) = first;
-            base.opts = BaseOptions{
-                ifs: base.opts.ifs.clone(),
-                tsv: base.opts.tsv,
-                csv: base.opts.csv,
-                ssv: base.opts.ssv,
-                plain_ifs: base.opts.plain_ifs,
-                ..last_opts
-            };
             let result = handler.process_file(std::io::stdin().lock(), &mut base, Callbacks::all());
             err_sender.send(result).unwrap();
 
