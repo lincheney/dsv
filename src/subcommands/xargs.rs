@@ -84,7 +84,7 @@ pub struct Opts {
     column: String,
     #[arg(long, default_value = "", help = "input to command")]
     stdin: String,
-    #[arg(trailing_var_arg = true, help = "command and arguments to run")]
+    #[arg(help = "command and arguments to run")]
     command: Vec<String>,
 }
 
