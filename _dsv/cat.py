@@ -1,11 +1,12 @@
 import argparse
 from ._base import _Base
+from ._utils import shtab
 
 class cat(_Base):
     ''' concatenate files by row '''
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--number', action='store_true', help='number all output lines')
-    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*', help='other files to concatenate to stdin')
+    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*', help='other files to concatenate to stdin').complete = shtab.FILE
 
     def __init__(self, opts):
         self.original_opts = argparse.Namespace(**vars(opts))

@@ -10,4 +10,3 @@ if __name__ == '__main__':
         sys.exit(_dsv.__main__.main())
     except (BrokenPipeError, KeyboardInterrupt):
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-

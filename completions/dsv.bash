@@ -36,7 +36,13 @@ _shtab__dsv_totsv_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-heade
 _shtab__dsv_uniq_option_strings=('-h' '--help' '-x' '--complement' '-r' '--regex' '-c' '--count' '-C' '--count-column' '--group' '--repeated' '--repeated-all' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_xargs_option_strings=('-h' '--help' '-p' '-j' '--max_procs' '--jobs' '--progress-bar' '--terminal-progress-report' '-v' '--verbose' '--rainbow-rows' '--dry-run' '--no-tag' '--no-eta' '-k' '--column' '-I' '--replace-str' '--stdin' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 
-
+_shtab__dsv_cat_pos_0_COMPGEN=_shtab_compgen_files
+_shtab__dsv_grep__f_COMPGEN=_shtab_compgen_files
+_shtab__dsv_grep___file_COMPGEN=_shtab_compgen_files
+_shtab__dsv_join_pos_0_COMPGEN=_shtab_compgen_files
+_shtab__dsv_paste_pos_0_COMPGEN=_shtab_compgen_files
+_shtab__dsv_replace__f_COMPGEN=_shtab_compgen_files
+_shtab__dsv_replace___file_COMPGEN=_shtab_compgen_files
 
 _shtab__dsv_pos_0_choices=('!' 'cat' 'cut' 'flip' 'fromhtml' 'fromjson' 'frommarkdown' 'grep' 'head' 'join' 'page' 'paste' 'pipe' 'pretty' 'py' 'py-filter' 'py-groupby' 'replace' 'reshape-long' 'reshape-wide' 'set-header' 'sort' 'sqlite' 'summary' 'tac' 'tail' 'tocsv' 'tojson' 'tomarkdown' 'totsv' 'uniq' 'xargs')
 _shtab__dsv___trailer_choices=('never' 'always' 'auto')

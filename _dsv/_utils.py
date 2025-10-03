@@ -49,3 +49,10 @@ def parse_value(value):
         return float(value)
     except ValueError:
         return value
+
+class shtab:
+    def __getattr__(self, key):
+        if os.environ.get('ENABLE_SHTAB') == '1':
+            import shtab
+            return getattr(shtab, key)
+shtab = shtab()

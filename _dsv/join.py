@@ -7,7 +7,7 @@ from . import _utils
 class join(_ColumnSlicer):
     ''' join lines of two files on a common field '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('file', type=argparse.FileType('rb'), metavar='FILE', help='join stdin with FILE')
+    parser.add_argument('file', type=argparse.FileType('rb'), metavar='FILE', help='join stdin with FILE').complete = _utils.shtab.FILE
     parser.add_argument('fields', nargs='*', help='join on these fields from stdin and FILE')
     parser.add_argument('-1', dest='left_fields', action='append', help='join on these fields from stdin')
     parser.add_argument('-2', dest='right_fields', action='append', help='join on these fields from FILE')

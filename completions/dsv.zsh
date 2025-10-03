@@ -121,7 +121,7 @@ _shtab__dsv_cat_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::other files to concatenate to stdin:"
+  "(*)::other files to concatenate to stdin:_files"
 )
 
 _shtab__dsv_cut_options=(
@@ -273,7 +273,7 @@ _shtab__dsv_grep_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "*"{-e,--regexp}"[pattern to search for]:patterns:"
   {-F,--fixed-strings}"[treat all patterns as literals instead of as regular expressions]"
-  "*"{-f,--file}"[obtain patterns from FILE, one per line]:file:"
+  "*"{-f,--file}"[obtain patterns from FILE, one per line]:file:_files"
   {-w,--word-regexp}"[select only those matches surrounded by word boundaries]"
   {-x,--field-regexp}"[select only those matches that exactly match the column]"
   {-s,--case-sensitive}"[search case sensitively]"
@@ -381,7 +381,7 @@ _shtab__dsv_join_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  ":join stdin with FILE:"
+  ":join stdin with FILE:_files"
   "(*)::join on these fields from stdin and FILE:"
 )
 
@@ -437,7 +437,7 @@ _shtab__dsv_paste_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::other files to concatenate to stdin:"
+  "(*)::other files to concatenate to stdin:_files"
 )
 
 _shtab__dsv_pipe_options=(
@@ -611,7 +611,7 @@ _shtab__dsv_replace_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "*"{-e,--regexp}"[pattern to search for]:patterns:"
   {-F,--fixed-strings}"[treat all patterns as literals instead of as regular expressions]"
-  "*"{-f,--file}"[obtain patterns from FILE, one per line]:file:"
+  "*"{-f,--file}"[obtain patterns from FILE, one per line]:file:_files"
   {-w,--word-regexp}"[select only those matches surrounded by word boundaries]"
   {-x,--field-regexp}"[select only those matches that exactly match the column]"
   {-s,--case-sensitive}"[search case sensitively]"

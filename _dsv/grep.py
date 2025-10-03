@@ -10,7 +10,7 @@ class grep(_ColumnSlicer):
     parent = argparse.ArgumentParser(add_help=False)
     parent.add_argument('-e', '--regexp', dest='patterns', action='append', help='pattern to search for')
     parent.add_argument('-F', '--fixed-strings', action='store_true', help='treat all patterns as literals instead of as regular expressions')
-    parent.add_argument('-f', '--file', action='append', help='obtain patterns from FILE, one per line')
+    parent.add_argument('-f', '--file', action='append', help='obtain patterns from FILE, one per line').complete = _utils.shtab.FILE
     parent.add_argument('-w', '--word-regexp', action='store_true', help='select only those matches surrounded by word boundaries')
     parent.add_argument('-x', '--field-regexp', action='store_true', help='select only those matches that exactly match the column')
     parent.add_argument('-s', '--case-sensitive', action='store_true', help='search case sensitively')

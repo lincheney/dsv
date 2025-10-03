@@ -1,11 +1,12 @@
 import argparse
 import itertools
 from ._base import _Base
+from ._utils import shtab
 
 class paste(_Base):
     ''' concatenate files by column '''
     parser = argparse.ArgumentParser()
-    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*', help='other files to concatenate to stdin')
+    parser.add_argument('files', type=argparse.FileType('rb'), nargs='*', help='other files to concatenate to stdin').complete = shtab.FILE
 
     empty_rows = None
 
