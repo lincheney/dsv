@@ -36,13 +36,54 @@ _shtab__dsv_totsv_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-heade
 _shtab__dsv_uniq_option_strings=('-h' '--help' '-x' '--complement' '-r' '--regex' '-c' '--count' '-C' '--count-column' '--group' '--repeated' '--repeated-all' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_xargs_option_strings=('-h' '--help' '-p' '-j' '--max_procs' '--jobs' '--progress-bar' '--terminal-progress-report' '-v' '--verbose' '--rainbow-rows' '--dry-run' '--no-tag' '--no-eta' '-k' '--column' '-I' '--replace-str' '--stdin' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 
+_shtab__dsv___pos_0_COMPGEN=_shtab__dsv_pipeline_dsv_custom_complete
+    _shtab__dsv_original_ifs="$IFS"
+    _shtab__dsv_pipeline_dsv_custom_complete() {
+        local IFS="$_shtab__dsv_original_ifs"
+        local _drop=${#COMP_WORDS[@]}
+        while [[ $_drop > 0 && "${COMP_WORDS[$_drop-1]}" != '!' ]]; do (( _drop -- )); done
+        local COMP_WORDS=( dsv "${COMP_WORDS[@]:$_drop}" )
+        local COMP_CWORD=$(( COMP_CWORD+1-_drop ))
+        _shtab__dsv
+        printf '%s\n' "${COMPREPLY[@]}"
+    }
 _shtab__dsv_cat_pos_0_COMPGEN=_shtab_compgen_files
 _shtab__dsv_grep__f_COMPGEN=_shtab_compgen_files
 _shtab__dsv_grep___file_COMPGEN=_shtab_compgen_files
 _shtab__dsv_join_pos_0_COMPGEN=_shtab_compgen_files
 _shtab__dsv_paste_pos_0_COMPGEN=_shtab_compgen_files
+_shtab__dsv_pipe_pos_0_COMPGEN=_shtab__dsv_pipe_dsv_custom_complete
+    _shtab__dsv_original_ifs="$IFS"
+    _shtab__dsv_pipe_dsv_custom_complete() {
+        local IFS="$_shtab__dsv_original_ifs"
+        local _drop=0
+        # no idea where the command really begins
+        while [[ "$_drop" < "${#COMP_WORDS[@]}" && "${COMP_WORDS[$_drop]}" != pipe ]]; do (( _drop ++ )); done
+        (( _drop ++ ))
+        while [[ "$_drop" < "${#COMP_WORDS[@]}" && "${COMP_WORDS[$_drop]}" == -* ]]; do (( _drop ++ )); done
+        local COMP_WORDS=( "${COMP_WORDS[@]:$_drop}" )
+        local COMP_CWORD=$(( COMP_CWORD-_drop ))
+        local COMP_LINE="${COMP_WORDS[*]}"
+        _command_offset 0
+        printf '%s\n' "${COMPREPLY[@]}"
+    }
 _shtab__dsv_replace__f_COMPGEN=_shtab_compgen_files
 _shtab__dsv_replace___file_COMPGEN=_shtab_compgen_files
+_shtab__dsv_xargs_pos_0_COMPGEN=_shtab__dsv_pipe_dsv_custom_complete
+    _shtab__dsv_original_ifs="$IFS"
+    _shtab__dsv_pipe_dsv_custom_complete() {
+        local IFS="$_shtab__dsv_original_ifs"
+        local _drop=0
+        # no idea where the command really begins
+        while [[ "$_drop" < "${#COMP_WORDS[@]}" && "${COMP_WORDS[$_drop]}" != pipe ]]; do (( _drop ++ )); done
+        (( _drop ++ ))
+        while [[ "$_drop" < "${#COMP_WORDS[@]}" && "${COMP_WORDS[$_drop]}" == -* ]]; do (( _drop ++ )); done
+        local COMP_WORDS=( "${COMP_WORDS[@]:$_drop}" )
+        local COMP_CWORD=$(( COMP_CWORD-_drop ))
+        local COMP_LINE="${COMP_WORDS[*]}"
+        _command_offset 0
+        printf '%s\n' "${COMPREPLY[@]}"
+    }
 
 _shtab__dsv_pos_0_choices=('!' 'cat' 'cut' 'flip' 'fromhtml' 'fromjson' 'frommarkdown' 'grep' 'head' 'join' 'page' 'paste' 'pipe' 'pretty' 'py' 'py-filter' 'py-groupby' 'replace' 'reshape-long' 'reshape-wide' 'set-header' 'sort' 'sqlite' 'summary' 'tac' 'tail' 'tocsv' 'tojson' 'tomarkdown' 'totsv' 'uniq' 'xargs')
 _shtab__dsv___trailer_choices=('never' 'always' 'auto')
@@ -276,6 +317,7 @@ _shtab__dsv___hyperlink_columns_nargs=?
 _shtab__dsv__Q_nargs=0
 _shtab__dsv___no_quoting_nargs=0
 _shtab__dsv___no_quote_output_nargs=0
+_shtab__dsv___pos_0_nargs=*
 _shtab__dsv____h_nargs=0
 _shtab__dsv_____help_nargs=0
 _shtab__dsv____H_nargs=0
@@ -1327,7 +1369,7 @@ _shtab__dsv() {
 
   # Generate the completions
 
-  if [[ $pos_only = 0 && "${completing_word}" == -* ]]; then
+  if [[ $pos_only = 0 && "$current_action_compgen" != _shtab__dsv_*_dsv_custom_complete && "${completing_word}" == -* ]]; then
     # optional argument started: use option strings
     COMPREPLY=( $(compgen -W "${current_option_strings[*]}" -- "${completing_word}") )
   elif [[ "${previous_word}" == ">" || "${previous_word}" == ">>" ||

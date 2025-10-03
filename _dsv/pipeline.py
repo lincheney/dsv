@@ -1,9 +1,35 @@
 import argparse
 from ._base import _Base, get_all_handlers, make_main_parser
+from ._shtab import _quote
+
+completion = {
+    'zsh': _quote('''{() {
+        local _drop=${words[(I)!]}
+        local words=( dsv "${words[@]:$_drop}" )
+        local CURRENT=$(( CURRENT+1-_drop ))
+        _normal
+    } }'''),
+    'bash': '''
+    _shtab__dsv_pipeline_dsv_custom_complete
+    _shtab__dsv_original_ifs="$IFS"
+    _shtab__dsv_pipeline_dsv_custom_complete() {
+        local IFS="$_shtab__dsv_original_ifs"
+        local _drop=${#COMP_WORDS[@]}
+        while [[ $_drop > 0 && "${COMP_WORDS[$_drop-1]}" != '!' ]]; do (( _drop -- )); done
+        local COMP_WORDS=( dsv "${COMP_WORDS[@]:$_drop}" )
+        local COMP_CWORD=$(( COMP_CWORD+1-_drop ))
+        _shtab__dsv
+        printf '%s\\n' "${COMPREPLY[@]}"
+    }
+    '''.strip(),
+}
 
 class pipeline(_Base):
     ''' pipe multiple dsv commands together '''
     name = '!'
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('command', nargs='*', action='append', help='pattern to search for').complete = completion
 
     DEFAULTS = dict(
         #  ofs = b'\t',

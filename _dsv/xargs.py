@@ -13,6 +13,7 @@ import time
 from . import _utils
 from ._column_slicer import _ColumnSlicer
 from ._base import _Base
+from ._shtab import shtab
 
 class FormattingError(Exception):
     pass
@@ -73,7 +74,7 @@ class xargs(_Base):
     parser.add_argument('-k', '--column', type=_utils.utf8_type, default=b'output', help="new header column name")
     parser.add_argument('-I', '--replace-str', default='{}', help='use the replacement string instead of {}')
     parser.add_argument('--stdin', default=b'', type=_utils.utf8_type, help='input to command')
-    parser.add_argument('command', nargs='*', type=_utils.utf8_type, help='command and arguments to run')
+    parser.add_argument('command', nargs='*', type=_utils.utf8_type, help='command and arguments to run').complete = shtab.COMMAND
 
     def should_have_progress_bar(self, fd):
         return _utils.is_tty(fd) and ( _utils.is_tty(1) or not stat.S_ISFIFO(os.fstat(1).st_mode))

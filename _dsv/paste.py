@@ -1,7 +1,7 @@
 import argparse
 import itertools
 from ._base import _Base
-from ._utils import shtab
+from ._shtab import shtab
 
 class paste(_Base):
     ''' concatenate files by column '''

@@ -5,6 +5,7 @@ import threading
 from collections import deque
 from ._base import _Base
 from ._utils import utf8_type
+from ._shtab import shtab
 from ._column_slicer import _ColumnSlicer
 
 class pipe(_ColumnSlicer):
@@ -15,7 +16,7 @@ class pipe(_ColumnSlicer):
     parser.add_argument('-r', '--regex', action='store_true', help='treat fields as regexes')
     parser.add_argument('-a', '--append-columns', action='append', default=[], type=utf8_type, help='append output as extra fields rather than replacing')
     parser.add_argument('-q', '--no-quote-input', action='store_true', help='do not do CSV quoting on the input')
-    parser.add_argument('command', nargs='+', help='command to pipe rows through')
+    parser.add_argument('command', nargs='+', help='command to pipe rows through').complete = shtab.COMMAND
 
     def __init__(self, opts):
         opts.command.extend(opts.extras)

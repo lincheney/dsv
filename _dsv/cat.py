@@ -1,6 +1,6 @@
 import argparse
 from ._base import _Base
-from ._utils import shtab
+from ._shtab import shtab
 
 class cat(_Base):
     ''' concatenate files by row '''

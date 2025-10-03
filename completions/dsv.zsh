@@ -93,6 +93,12 @@ _shtab__dsv___options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
+  "*::pattern to search for:{() {
+        local _drop=\${words[(I)!]}
+        local words=( dsv \"\${words[@]:\$_drop}\" )
+        local CURRENT=\$(( CURRENT+1-_drop ))
+        _normal
+    } }"
 )
 
 _shtab__dsv_cat_options=(
@@ -121,7 +127,7 @@ _shtab__dsv_cat_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::other files to concatenate to stdin:_files"
+  "*::other files to concatenate to stdin:_files"
 )
 
 _shtab__dsv_cut_options=(
@@ -152,7 +158,7 @@ _shtab__dsv_cut_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::select only these fields:"
+  "*::select only these fields:"
 )
 
 _shtab__dsv_flip_options=(
@@ -313,7 +319,7 @@ _shtab__dsv_grep_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::pattern to search for:"
+  "*::pattern to search for:"
 )
 
 _shtab__dsv_head_options=(
@@ -382,7 +388,7 @@ _shtab__dsv_join_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
   ":join stdin with FILE:_files"
-  "(*)::join on these fields from stdin and FILE:"
+  "*::join on these fields from stdin and FILE:"
 )
 
 _shtab__dsv_page_options=(
@@ -437,7 +443,7 @@ _shtab__dsv_paste_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::other files to concatenate to stdin:_files"
+  "*::other files to concatenate to stdin:_files"
 )
 
 _shtab__dsv_pipe_options=(
@@ -470,7 +476,7 @@ _shtab__dsv_pipe_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*):command to pipe rows through:"
+  "*:::command to pipe rows through:{_normal}"
 )
 
 _shtab__dsv_pretty_options=(
@@ -532,7 +538,7 @@ _shtab__dsv_py_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*):python statements to run:"
+  "*:python statements to run:"
 )
 
 _shtab__dsv_py_filter_options=(
@@ -566,7 +572,7 @@ _shtab__dsv_py_filter_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*):python statements to run:"
+  "*:python statements to run:"
 )
 
 _shtab__dsv_py_groupby_options=(
@@ -604,7 +610,7 @@ _shtab__dsv_py_groupby_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*):python statements to run:"
+  "*:python statements to run:"
 )
 
 _shtab__dsv_replace_options=(
@@ -676,7 +682,7 @@ _shtab__dsv_reshape_long_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
   ":value field (timevar\/wide variable):"
-  "(*)::reshape only these fields:"
+  "*::reshape only these fields:"
 )
 
 _shtab__dsv_reshape_wide_options=(
@@ -709,7 +715,7 @@ _shtab__dsv_reshape_wide_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
   ":value field (timevar\/wide variable):"
-  "(*):fields to group by (idvar\/long variable):"
+  "*:fields to group by (idvar\/long variable):"
 )
 
 _shtab__dsv_set_header_options=(
@@ -740,7 +746,7 @@ _shtab__dsv_set_header_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::new header names:"
+  "*::new header names:"
 )
 
 _shtab__dsv_sort_options=(
@@ -782,7 +788,7 @@ _shtab__dsv_sort_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::sort based only on these fields:"
+  "*::sort based only on these fields:"
 )
 
 _shtab__dsv_sqlite_options=(
@@ -811,7 +817,7 @@ _shtab__dsv_sqlite_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*):sql statements to run:"
+  "*:sql statements to run:"
 )
 
 _shtab__dsv_summary_options=(
@@ -843,7 +849,7 @@ _shtab__dsv_summary_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::select only these fields:"
+  "*::select only these fields:"
 )
 
 _shtab__dsv_tac_options=(
@@ -1041,7 +1047,7 @@ _shtab__dsv_uniq_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::check these only fields for uniqueness:"
+  "*::check these only fields for uniqueness:"
 )
 
 _shtab__dsv_xargs_options=(
@@ -1080,12 +1086,12 @@ _shtab__dsv_xargs_options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "(*)::command and arguments to run:"
+  "*::command and arguments to run:{_normal}"
 )
 
 
 _shtab__dsv() {
-  local context state line curcontext="$curcontext" one_or_more='(-)*' remainder='(*)'
+  local context state line curcontext="$curcontext" one_or_more='(-)*' remainder='*'
 
   if ((${_shtab__dsv_options[(I)${(q)one_or_more}*]} + ${_shtab__dsv_options[(I)${(q)remainder}*]} == 0)); then  # noqa: E501
     _shtab__dsv_options+=(': :_shtab__dsv_commands' '*::: :->dsv')
