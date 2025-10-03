@@ -8,14 +8,14 @@ class set_header(_Base):
     parser.add_argument('fields', nargs='*', type=_utils.utf8_type, help='new header names')
     parser.add_argument('--only', action='store_true', help='drop all other header names')
     parser.add_argument('-r', '--rename', nargs=2, action='append', type=_utils.utf8_type, metavar=('A', 'B'), help='rename field A to B')
-    parser.add_argument('--auto', nargs='?', const='col%i', type=_utils.utf8_type, help='automatically name the headers, only useful if there is no input header')
+    parser.add_argument('--auto', nargs='?', const='col%s', type=_utils.utf8_type, help='automatically name the headers, only useful if there is no input header')
 
     set_header = False
 
     def on_row(self, row):
         if not self.set_header:
             if self.opts.auto:
-                header = [self.opts.auto % (i+1) for i in range(len(row))]
+                header = [self.opts.auto % str(i+1).encode() if b'%' in self.opts.auto else self.opts.auto for i in range(len(row))]
             else:
                 header = []
             if self.on_header(header):

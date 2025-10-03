@@ -1,26 +1,12 @@
 use crate::utils::Break;
 use crate::utils::MaybeBreak;
 use anyhow::{Result, Context};
-use regex::bytes::{Regex, Captures};
 use std::sync::mpsc::{self, Sender, Receiver};
 use crate::base::*;
-use bstr::{BString, BStr};
+use bstr::{BString};
 use std::collections::{HashSet, HashMap, hash_map::Entry};
 use crate::column_slicer::ColumnSlicer;
 use clap::{Parser};
-use once_cell::sync::Lazy;
-
-static PERCENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"%.").unwrap());
-
-fn percent_format(format: &BStr, value: &BStr) -> BString {
-    PERCENT_REGEX.replace_all(format, |c: &Captures| {
-        if c.get(0).unwrap().as_bytes().ends_with(b"%") {
-            b"%" as &[u8]
-        } else {
-            value
-        }
-    }).into_owned().into()
-}
 
 #[derive(Parser, Clone)]
 #[command(about = "join lines of two files on a common field")]
@@ -224,12 +210,12 @@ impl Joiner {
 
                         if let Some(rename) = &opts.rename_1 {
                             for h in &mut left {
-                                *h = percent_format(rename.as_bytes().into(), h.as_ref());
+                                *h = crate::utils::percent_format(rename.as_bytes().into(), h.as_ref());
                             }
                         }
                         if let Some(rename) = &opts.rename_2 {
                             for h in &mut right {
-                                *h = percent_format(rename.as_bytes().into(), h.as_ref());
+                                *h = crate::utils::percent_format(rename.as_bytes().into(), h.as_ref());
                             }
                         }
 

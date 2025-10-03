@@ -1,7 +1,9 @@
+use regex::bytes::{Regex, Captures};
+use once_cell::sync::Lazy;
 use anyhow::{Result, Context};
 use std::default::Default;
 use std::borrow::Cow;
-use bstr::{BStr, ByteVec};
+use bstr::{BString, BStr, ByteVec};
 
 pub fn chain_errors<T: Default, I: IntoIterator<Item=Result<T>>>(results: I) -> Result<T> {
     let mut results = results.into_iter();
@@ -68,4 +70,16 @@ pub type MaybeBreak = Result<(), Break>;
 
 pub fn try_parse<T: std::str::FromStr, B: AsRef<[u8]>>(val: B) -> Option<T> {
     std::str::from_utf8(val.as_ref()).ok()?.parse::<T>().ok()
+}
+
+static PERCENT_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"%.").unwrap());
+
+pub fn percent_format(format: &BStr, value: &BStr) -> BString {
+    PERCENT_REGEX.replace_all(format, |c: &Captures| {
+        if c.get(0).unwrap().as_bytes().ends_with(b"%") {
+            b"%" as &[u8]
+        } else {
+            value
+        }
+    }).into_owned().into()
 }

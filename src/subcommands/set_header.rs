@@ -13,8 +13,8 @@ pub struct Opts {
     only: bool,
     #[arg(num_args = 2, long, value_names = ["A", "B"], help = "rename field A to B")]
     rename: Vec<String>,
-    #[arg(long, help = "automatically name the headers, only useful if there is no input")]
-    auto: bool,
+    #[arg(long, num_args = 0..=1, help = "automatically name the headers, only useful if there is no input")]
+    auto: Option<Option<String>>,
 }
 
 pub struct Handler {
@@ -35,9 +35,10 @@ impl base::Processor for Handler {
 
     fn on_row(&mut self, base: &mut base::Base, row: Vec<BString>) -> Result<()> {
         if !self.got_header {
-            let header = if self.opts.auto {
-                (0..row.len()).map(|i| format!("col{i}").into()).collect()
-                // header = [self.opts.auto % (i+1) for i in range(len(row))]
+
+            let header = if let Some(fmt) = self.opts.auto.as_ref() {
+                let fmt = fmt.as_ref().map_or("col%i", |x| x.as_ref()).into();
+                (0..row.len()).map(|i| crate::utils::percent_format(fmt, i.to_string().as_str().into())).collect()
             } else {
                 vec![]
             };
