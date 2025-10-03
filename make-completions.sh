@@ -7,7 +7,7 @@ for shell in bash zsh; do
     output="$(
         ENABLE_SHTAB=1 PYTHONPATH= shtab --shell="$shell" _dsv.__main__.make_main_parser --error-unimportable --prog dsv \
         | if [[ "$shell" == zsh ]]; then
-            sed -e 's/(\*)/*/' -e 's/"\*:command /"*:::command /'
+            sed -e 's/(\*)/*/' -e '/{_normal}/s/"\*:command /"*:::command /'
         elif [[ "$shell" == bash ]]; then
             sed 's/\$pos_only = 0/& \&\& "$current_action_compgen" != _shtab__dsv_*_dsv_custom_complete/'
         fi
