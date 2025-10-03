@@ -427,7 +427,7 @@ impl GilHandle<'_> {
         unsafe {
             (self.py.PyErr_Fetch)(std::ptr::from_mut(&mut typ), std::ptr::from_mut(&mut value), std::ptr::from_mut(&mut tb));
             (self.py.PyErr_SetExcInfo)(typ, value, tb);
-            let exc = self._exec_code(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
+            let exc = self.exec_code_raw(self.inner.get_exception, dict.as_ptr(), dict.as_ptr()).unwrap();
             // then clear it
             (self.py.PyErr_SetExcInfo)(null_mut(), null_mut(), null_mut());
             anyhow!(self.convert_py_to_bytes(exc).unwrap().to_owned())
@@ -435,7 +435,7 @@ impl GilHandle<'_> {
     }
 
 
-    fn _exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Option<Object> {
+    fn exec_code_raw(&self, code: Object, globals: Pointer, locals: Pointer) -> Option<Object> {
         unsafe{
             (self.py.PyErr_Clear)();
             Object::new((self.py.PyEval_EvalCode)(code.as_ptr(), globals, locals))
@@ -476,7 +476,7 @@ impl GilHandle<'_> {
     }
 
     pub fn exec_code(&self, code: Object, globals: Pointer, locals: Pointer) -> Result<Object> {
-        self._exec_code(code, globals, locals).ok_or_else(|| self.get_exception())
+        self.exec_code_raw(code, globals, locals).ok_or_else(|| self.get_exception())
     }
 
     pub fn exec(&self, code: &CStr, filename: Option<&CStr>, globals: Pointer, locals: Pointer) -> Result<()> {

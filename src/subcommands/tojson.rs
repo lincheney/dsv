@@ -16,7 +16,7 @@ pub struct Handler {
 
 impl Handler {
     pub fn new(_opts: Opts, base: &mut base::Base) -> Result<Self> {
-        base.opts.numbered_columns = base::AutoChoices::Never;
+        base.opts.inner.numbered_columns = base::AutoChoices::Never;
         base.opts.drop_header = false;
         base.opts.quote_output = false;
         Ok(Self {})
@@ -57,7 +57,7 @@ impl Writer for JsonWriter {
 
         let output = keys.zip(values).collect();
         let output = serde_json::Value::Object(output);
-        self.write_raw_with(state, opts, false, opts.is_stdout_tty, |mut file| {
+        self.write_raw_with(state, opts, false, opts.inner.is_stdout_tty, |mut file| {
             serde_json::to_writer(&mut file, &output)?;
             Ok(file)
         })

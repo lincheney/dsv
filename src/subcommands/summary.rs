@@ -126,7 +126,7 @@ impl Handler {
         Ok(Self{
             complement: opts.complement,
             column_slicer: (!opts.fields.is_empty()).then(|| ColumnSlicer::new(&opts.fields, opts.regex)),
-            col_sep: opts.col_sep.is_on(base.opts.is_stdout_tty),
+            col_sep: opts.col_sep.is_on(base.opts.inner.is_stdout_tty),
             header: None,
             rows: vec![],
             types,

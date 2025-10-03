@@ -3,7 +3,7 @@ use clap::{Parser, ArgAction};
 use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer, WriterState};
-use std::io::{Read, BufRead, IsTerminal};
+use std::io::{BufRead, IsTerminal};
 use bstr::{BStr, BString, ByteSlice};
 use std::process::{ExitCode};
 use crate::utils::{Break, MaybeBreak};
@@ -128,14 +128,10 @@ pub struct BaseOptions {
     pub no_header: bool,
     #[arg(global = true, long, help = "do or not print the header")]
     pub drop_header: bool,
-    #[arg(global = true, long = "trailer", value_enum, num_args = 0..=1, require_equals = true, help = "print a trailer")]
-    pub _trailer: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    pub trailer: AutoChoices,
-    #[arg(global = true, long = "numbered-columns", value_enum, num_args = 0..=1, require_equals = true, help = "number the columns in the header")]
-    pub _numbered_columns: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    pub numbered_columns: AutoChoices,
+    #[arg(global = true, long, value_enum, num_args = 0..=1, require_equals = true, help = "print a trailer")]
+    pub trailer: Option<Option<AutoChoices>>,
+    #[arg(global = true, long, value_enum, num_args = 0..=1, require_equals = true, help = "number the columns in the header")]
+    pub numbered_columns: Option<Option<AutoChoices>>,
     #[arg(global = true, short = 'd', long, help = "input field separator")]
     pub ifs: Option<String>,
     #[arg(global = true, long, help = "treat input field separator as a literal not a regex")]
@@ -158,39 +154,41 @@ pub struct BaseOptions {
     pub pretty: bool,
     #[arg(global = true, long, help = "show output in a pager (less)")]
     pub page: bool,
-    #[arg(global = true, long = "colour", alias = "color", value_enum, num_args = 0..=1, require_equals = true, help = "enable colour")]
-    pub _colour: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    pub colour: AutoChoices,
+    #[arg(global = true, long, alias = "color", value_enum, num_args = 0..=1, require_equals = true, help = "enable colour")]
+    pub colour: Option<Option<AutoChoices>>,
     #[arg(global = true, long, help = "ansi escape code for the header")]
     pub header_colour: Option<String>,
     #[arg(global = true, long, help = "ansi escape code for the header background")]
     pub header_bg_colour: Option<String>,
     #[arg(global = true, long, value_enum, num_args = 0..=1, require_equals = true, help = "enable rainbow columns")]
-    pub _rainbow_columns: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    pub rainbow_columns: AutoChoices,
+    pub rainbow_columns: Option<Option<AutoChoices>>,
     #[arg(global = true, long, value_enum, num_args = 0..=1, require_equals = true, help = "enable hyperlink columns")]
-    pub _hyperlink_columns: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    pub hyperlink_columns: AutoChoices,
+    pub hyperlink_columns: Option<Option<AutoChoices>>,
     #[arg(global = true, short = 'Q', long, help = "do not handle quotes from input")]
     pub no_quoting: bool,
     #[arg(global = true, long = "no-quote-output", default_value_t = true, action = ArgAction::SetFalse, help = "don't quote output")]
     pub quote_output: bool,
 
     #[clap(skip)]
+    pub inner: BaseOptionsInner,
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct BaseOptionsInner {
+    pub trailer: AutoChoices,
+    pub numbered_columns: AutoChoices,
+    pub colour: AutoChoices,
+    pub hyperlink_columns: AutoChoices,
+    pub rainbow_columns: AutoChoices,
     pub is_stdout_tty: bool,
-    #[clap(skip)]
     pub is_stderr_tty: bool,
-    #[clap(skip)]
     pub stderr_colour: bool,
 }
 
 impl BaseOptions {
     pub fn post_process(&mut self, is_stdout_tty: Option<bool>) {
-        self.is_stdout_tty = is_stdout_tty.unwrap_or_else(|| std::io::stdout().is_terminal());
-        self.is_stderr_tty = std::io::stderr().is_terminal();
+        self.inner.is_stdout_tty = is_stdout_tty.unwrap_or_else(|| std::io::stdout().is_terminal());
+        self.inner.is_stderr_tty = std::io::stderr().is_terminal();
 
         if self.no_header {
             self.header = Some(false);
@@ -204,21 +202,21 @@ impl BaseOptions {
             self.ors = self.irs.clone();
         }
         if std::env::var("NO_COLOR").is_ok_and(|x| !x.is_empty()) {
-            self.colour = AutoChoices::Never;
-            self.stderr_colour = false;
+            self.inner.colour = AutoChoices::Never;
+            self.inner.stderr_colour = false;
         } else {
-            let colour = AutoChoices::from_option_auto(self._colour);
-            self.colour = colour.resolve(self.is_stdout_tty);
-            self.stderr_colour = !self.page && colour.is_on(self.is_stderr_tty);
+            let colour = AutoChoices::from_option_auto(self.colour);
+            self.inner.colour = colour.resolve(self.inner.is_stdout_tty);
+            self.inner.stderr_colour = !self.page && colour.is_on(self.inner.is_stderr_tty);
         }
         if self.header_bg_colour.is_none() {
             self.header_bg_colour = Some("\x1b[48;5;237m".into());
         }
-        self.numbered_columns = AutoChoices::from_option_auto(self._numbered_columns);
-        self.trailer = AutoChoices::from_option_auto(self._trailer);
-        self.rainbow_columns = AutoChoices::from_option_auto(self._rainbow_columns);
+        self.inner.numbered_columns = AutoChoices::from_option_auto(self.numbered_columns);
+        self.inner.trailer = AutoChoices::from_option_auto(self.trailer);
+        self.inner.rainbow_columns = AutoChoices::from_option_auto(self.rainbow_columns);
         // hyperlinks are off by default right now
-        self.hyperlink_columns = AutoChoices::from_option(self._hyperlink_columns).unwrap_or(AutoChoices::Never);
+        self.inner.hyperlink_columns = AutoChoices::from_option(self.hyperlink_columns).unwrap_or(AutoChoices::Never);
         // let ors = opts.ors.as_deref().unwrap_or("\n").into();
     }
 
@@ -280,7 +278,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
         match ifs {
             Ifs::Space | Ifs::Pretty => {
-                if opts.colour == AutoChoices::Always {
+                if opts.inner.colour == AutoChoices::Always {
                     Ofs::Pretty
                 } else {
                     Ofs::Plain(b"    ".into())
@@ -342,69 +340,69 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
     }
 
     fn process_file<R: BufRead>(mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
-        let result = self._process_file(file, base, do_callbacks);
+
+        let result = (|| {
+            let mut reader = Reader::new(file);
+            let mut prev_row = vec![];
+            let mut first_row = true;
+            let mut first_read = true;
+
+            while !reader.is_eof {
+                reader.read()?;
+
+                let mut lines = reader.line_reader();
+                while let Some((mut line, last_line)) = lines.get_line(base.irs.as_ref()) {
+
+                    if first_read {
+                        first_read = false;
+                        // Remove UTF-8 BOM
+                        line = line.strip_prefix(UTF8_BOM).unwrap_or(line).into();
+
+                        let (ifs, ofs) = self.determine_delimiters(line, &base.opts);
+                        base.ifs = ifs;
+                        if do_callbacks.contains(Callbacks::ON_OFS) && self.on_ofs(base, ofs).is_err() {
+                            break
+                        }
+                        if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
+                            base.opts.combine_trailing_columns = true;
+                        }
+                    }
+
+                    let (row, incomplete) = self.parse_line(base, line, prev_row, b'"');
+                    if !incomplete || (lines.is_eof() && last_line) {
+
+                        let is_header = if first_row {
+                            // got the first row, is it a header
+                            first_row = true;
+                            base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
+                        } else {
+                            false
+                        };
+
+                        if is_header {
+                            base.header_len = Some(row.len());
+                            if do_callbacks.contains(Callbacks::ON_HEADER) {
+                                self.on_header(base, row)?;
+                            }
+                        } else if do_callbacks.contains(Callbacks::ON_ROW) {
+                            self.on_row(base, row)?;
+                        }
+                        prev_row = vec![];
+                    } else {
+                        prev_row = row;
+                    }
+                }
+            }
+
+            Ok(())
+        })();
+
         crate::utils::chain_errors(
             [
                 do_callbacks.contains(Callbacks::ON_EOF).then(|| self.on_eof_detailed(base)),
-                Some(result.map(|_| ExitCode::SUCCESS)),
+                Some(result.and(Ok(ExitCode::SUCCESS)))
             ].into_iter().flatten()
         )
-    }
-
-    fn _process_file<R: Read>(&mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<()> where Self: Sized {
-        let mut reader = Reader::new(file);
-        let mut prev_row = vec![];
-        let mut first_row = true;
-        let mut first_read = true;
-
-        while !reader.is_eof {
-            reader.read()?;
-
-            let mut lines = reader.line_reader();
-            while let Some((mut line, last_line)) = lines.get_line(base.irs.as_ref()) {
-
-                if first_read {
-                    first_read = false;
-                    // Remove UTF-8 BOM
-                    line = line.strip_prefix(UTF8_BOM).unwrap_or(line).into();
-
-                    let (ifs, ofs) = self.determine_delimiters(line, &base.opts);
-                    base.ifs = ifs;
-                    if do_callbacks.contains(Callbacks::ON_OFS) && self.on_ofs(base, ofs).is_err() {
-                        break
-                    }
-                    if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
-                        base.opts.combine_trailing_columns = true;
-                    }
-                }
-
-                let (row, incomplete) = self.parse_line(base, line, prev_row, b'"');
-                if !incomplete || (lines.is_eof() && last_line) {
-
-                    let is_header = if first_row {
-                        // got the first row, is it a header
-                        first_row = true;
-                        base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
-                    } else {
-                        false
-                    };
-
-                    if is_header {
-                        base.header_len = Some(row.len());
-                        if do_callbacks.contains(Callbacks::ON_HEADER) {
-                            self.on_header(base, row)?;
-                        }
-                    } else if do_callbacks.contains(Callbacks::ON_ROW) {
-                        self.on_row(base, row)?;
-                    }
-                    prev_row = vec![];
-                } else {
-                    prev_row = row;
-                }
-            }
-        }
-
-        Ok(())
     }
 
     fn forward_messages(mut self, base: &mut Base, receiver: Receiver<Message>) -> Result<ExitCode> where Self: Sized {
@@ -427,7 +425,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
             }
         }
         crate::utils::chain_errors([
-            err.map(|_| ExitCode::SUCCESS),
+            err.and(Ok(ExitCode::SUCCESS)),
             self.on_eof_detailed(base),
         ])
     }
@@ -660,7 +658,7 @@ impl<W: Writer> Output<W> {
         fn row_filter_fn<'a>(row: &'a GatheredRow, empty_vec: &'a FormattedRow) -> &'a FormattedRow {
             match row {
                 GatheredRow::Row(row) | GatheredRow::Stderr(row) => row,
-                _ => empty_vec,
+                GatheredRow::Separator => empty_vec,
             }
         }
         let empty_vec = FormattedRow(vec![]);
@@ -687,7 +685,7 @@ impl<W: Writer> Output<W> {
 
     fn on_eof(&mut self, state: &mut WriterState) -> Result<()> {
         let mut header_padding = None;
-        let trailer = if let Some(header) = &self.gathered_header && self.opts.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
+        let trailer = if let Some(header) = &self.gathered_header && self.opts.inner.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
             Some(header.clone())
         } else {
             None
@@ -745,7 +743,7 @@ impl<W: Writer> Output<W> {
             } else {
                 self.gathered_rows.push(GatheredRow::Row(row));
             },
-            _ => if is_header {
+            Ofs::Plain(_) => if is_header {
                 self.gathered_header = Some(row.clone());
                 self.writer.write_header(state, row, None, &self.opts, &self.ofs)?;
             } else {
@@ -770,7 +768,7 @@ impl<W: Writer> Output<W> {
         if self.opts.drop_header {
             Ok(())
         } else {
-            if self.opts.numbered_columns == AutoChoices::Always {
+            if self.opts.inner.numbered_columns == AutoChoices::Always {
                 for (i, col) in header.iter_mut().enumerate() {
                     let prefix = format!("{} ", i + 1);
                     let leading_space = col.iter().take(prefix.len()).take_while(|&&x| x == b' ').count();
@@ -802,8 +800,8 @@ impl<W: Writer> Output<W> {
     pub fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
         let mut state = WriterState{
             ors: self.opts.get_ors(),
-            hyperlinks: self.opts.hyperlink_columns
-                .is_on(self.opts.is_stdout_tty)
+            hyperlinks: self.opts.inner.hyperlink_columns
+                .is_on(self.opts.inner.is_stdout_tty)
                 .then(|| (std::process::id(), vec![])),
             ..WriterState::default()
         };

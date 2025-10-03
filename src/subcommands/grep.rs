@@ -120,7 +120,7 @@ impl Handler {
 
         // construct the replace pattern
         // no need to replace if invert and not passthru
-        let replace = if (!opts.invert_match || opts.passthru) && !opts.count && base.opts.colour == base::AutoChoices::Always {
+        let replace = if (!opts.invert_match || opts.passthru) && !opts.count && base.opts.inner.colour == base::AutoChoices::Always {
             if let Some(mut replace) = opts.replace.take() {
                 replace.insert_str(0, MATCH_COLOUR);
                 replace.push_str(base::RESET_COLOUR);

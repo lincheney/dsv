@@ -23,8 +23,8 @@ pub struct Handler {
 impl Handler {
     pub fn new(_opts: Opts, base: &mut base::Base) -> Result<Self> {
         base.opts.header_colour.get_or_insert_with(|| "\x1b[1m".into());
-        base.opts.trailer = base::AutoChoices::Never;
-        base.opts.numbered_columns = base::AutoChoices::Never;
+        base.opts.inner.trailer = base::AutoChoices::Never;
+        base.opts.inner.numbered_columns = base::AutoChoices::Never;
         let drop_header = base.opts.drop_header;
         base.opts.drop_header = false;
         base.opts.pretty = true;

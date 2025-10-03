@@ -58,7 +58,7 @@ impl Processor for Handler {
                 arg,
                 new_sender,
                 base.scope,
-                base.opts.is_stdout_tty && i == 0,
+                base.opts.inner.is_stdout_tty && i == 0,
             );
             if let Ok((handler, base)) = sub {
                 handler.register_cleanup();

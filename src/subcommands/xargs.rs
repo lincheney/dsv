@@ -61,17 +61,11 @@ pub struct Opts {
     #[arg(short, long, overrides_with = "max_procs", help = "run up to num processes at a time, the default is 1")]
     jobs: Option<String>,
     #[arg(long, value_enum, num_args = 0..=1, require_equals = true, help = "print a progress bar")]
-    _progress_bar: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    progress_bar: AutoChoices,
+    progress_bar: Option<Option<AutoChoices>>,
     #[arg(long, value_enum, num_args = 0..=1, require_equals = true, help = "enable rainbow rows")]
-    _rainbow_rows: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    rainbow_rows: AutoChoices,
+    rainbow_rows: Option<Option<AutoChoices>>,
     #[arg(long, value_enum, num_args = 0..=1, require_equals = true, help = "enable conemu progress reporting")]
-    _terminal_progress_report: Option<Option<AutoChoices>>,
-    #[clap(skip)]
-    terminal_progress_report: AutoChoices,
+    terminal_progress_report: Option<Option<AutoChoices>>,
     #[arg(short, long, action = ArgAction::Count, help = "enable verbose logging")]
     verbose: u8,
     #[arg(long, help = "print the job to run but do not run the job")]
@@ -86,6 +80,16 @@ pub struct Opts {
     stdin: String,
     #[arg(help = "command and arguments to run")]
     command: Vec<String>,
+
+    #[clap(skip)]
+    inner: OptsInner,
+}
+
+#[derive(Default, Clone)]
+struct OptsInner {
+    progress_bar: AutoChoices,
+    rainbow_rows: AutoChoices,
+    terminal_progress_report: AutoChoices,
 }
 
 pub struct Handler {
@@ -138,7 +142,7 @@ impl<R: Read+AsFd> BufferedReader<R> {
         Ok(self)
     }
 
-    fn line_reader<'a>(&'a mut self) -> LineReader<'a, R> {
+    fn line_reader(&mut self) -> LineReader<'_, R> {
         self.inner.line_reader()
     }
 }
@@ -527,7 +531,7 @@ impl Proc {
                             }
                             Ok(())
                         });
-                        crate::utils::chain_errors([r1, r2.map(|_| ()), r3])
+                        crate::utils::chain_errors([r1, r2.and(Ok(())), r3])
                     }),
                     // write in the remaining lines
                     self.handle_event(EventType::Stdout, registry, logger, base, opts),
@@ -581,7 +585,7 @@ impl ProcStats {
     fn print_progress_bar(&self, base: &mut base::Base, store: &ProcStore, cleanup: bool) -> MaybeBreak {
         const WIDTH: usize = 40;
 
-        if !store.opts.progress_bar.is_on(false) {
+        if !store.opts.inner.progress_bar.is_on(false) {
             return Ok(())
         }
 
@@ -618,7 +622,7 @@ impl ProcStats {
 
         let [(succeeded, _), (failed, _), (running, _), (queued, _)] = bars;
 
-        let colour = base.opts.stderr_colour;
+        let colour = base.opts.inner.stderr_colour;
         let mut bar = format!(
             concat!(
                 "{clear}[{succeeded_colour}{0:",
@@ -688,7 +692,7 @@ impl ProcStats {
     }
 
     fn print_progress_report(&self, base: &mut base::Base, store: &ProcStore, cleanup: bool) -> MaybeBreak {
-        if !store.opts.progress_bar.is_on(false) {
+        if !store.opts.inner.progress_bar.is_on(false) {
             return Ok(())
         }
 
@@ -768,7 +772,7 @@ impl ProcStore {
             row: values,
             dirty: false,
             tag,
-            colour: if base.opts.colour.is_on(base.opts.is_stdout_tty) && self.opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
+            colour: if base.opts.inner.colour.is_on(base.opts.inner.is_stdout_tty) && self.opts.inner.rainbow_rows.is_on(base.opts.inner.is_stdout_tty) {
                 Some((
                     get_rgb(token-1, None, Some(0.5)),
                     get_rgb(token-1, None, Some(0.2)),
@@ -972,25 +976,25 @@ fn proc_loop(
 
 impl Handler {
     pub fn new(mut opts: Opts, base: &mut base::Base) -> Result<Self> {
-        opts.progress_bar = AutoChoices::from_option_auto(opts._progress_bar).resolve_with(|| {
-            base.opts.is_stderr_tty && (
-                base.opts.is_stdout_tty
+        opts.inner.progress_bar = AutoChoices::from_option_auto(opts.progress_bar).resolve_with(|| {
+            base.opts.inner.is_stderr_tty && (
+                base.opts.inner.is_stdout_tty
                 || fstat(std::io::stdout().as_fd())
                     .map(|s| !SFlag::S_IFIFO.intersects(SFlag::from_bits_truncate(s.st_mode)))
                     .unwrap_or(false)
             )
         });
 
-        opts.rainbow_rows = AutoChoices::from_option_auto(opts._rainbow_rows)
-            .resolve(base.opts.colour.is_on(base.opts.is_stdout_tty) && base.opts.is_stdout_tty);
-        if opts.rainbow_rows.is_on(base.opts.is_stdout_tty) {
-            base.opts.rainbow_columns = base::AutoChoices::Never;
+        opts.inner.rainbow_rows = AutoChoices::from_option_auto(opts.rainbow_rows)
+            .resolve(base.opts.inner.colour.is_on(base.opts.inner.is_stdout_tty) && base.opts.inner.is_stdout_tty);
+        if opts.inner.rainbow_rows.is_on(base.opts.inner.is_stdout_tty) {
+            base.opts.inner.rainbow_columns = base::AutoChoices::Never;
         }
 
         // ermmm only supported on some terminals
         // for now just check for vte even though kitty supports it too
-        opts.terminal_progress_report = AutoChoices::from_option_auto(opts._terminal_progress_report).resolve_with(|| {
-            base.opts.is_stderr_tty
+        opts.inner.terminal_progress_report = AutoChoices::from_option_auto(opts.terminal_progress_report).resolve_with(|| {
+            base.opts.inner.is_stderr_tty
             && std::env::var("VTE_VERSION").ok().and_then(|v| v.parse().ok()).is_some_and(|v: usize| v >= 7900)
         });
 

@@ -84,7 +84,7 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
             if header.is_empty() {
                 header = b" ".into();
             }
-            write!(&mut parts, "\x1b]8;id=dsv-{}-{};{}\x1b\\", pid, i, header).unwrap();
+            write!(&mut parts, "\x1b]8;id=dsv-{pid}-{i};{header}\x1b\\").unwrap();
         }
         if let Some(header_colour) = header_colour {
             parts.extend_from_slice(header_colour);
@@ -189,7 +189,7 @@ pub trait Writer {
         opts: &BaseOptions,
     ) -> Result<()> {
         let mut sep: BString;
-        let sep = if opts.colour == AutoChoices::Always {
+        let sep = if opts.inner.colour == AutoChoices::Always {
             let width = termsize::get().map_or(80, |size| size.cols) as usize;
             sep = b"\x1b[2m".into();
             sep.push_str(b"-".repeat(width));
@@ -236,8 +236,8 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs, opts.colour.is_on(false), opts.hyperlink_columns.is_on(opts.is_stdout_tty));
-        self.write_raw(state, formatted_row, true, opts, is_header, opts.is_stdout_tty)
+        let formatted_row = self.format_row(state, row, padding, is_header, opts, ofs, opts.inner.colour.is_on(false), opts.inner.hyperlink_columns.is_on(opts.inner.is_stdout_tty));
+        self.write_raw(state, formatted_row, true, opts, is_header, opts.inner.is_stdout_tty)
     }
 
     fn write_raw_stderr(
@@ -265,8 +265,8 @@ pub trait Writer {
         opts: &BaseOptions,
         ofs: &Ofs,
     ) -> Result<()> {
-        let formatted_row = self.format_row(state, row, padding, false, opts, ofs, opts.stderr_colour, opts.hyperlink_columns.is_on(opts.is_stderr_tty));
-        self.write_raw_stderr(state, formatted_row, true, opts, opts.is_stderr_tty)
+        let formatted_row = self.format_row(state, row, padding, false, opts, ofs, opts.inner.stderr_colour, opts.inner.hyperlink_columns.is_on(opts.inner.is_stderr_tty));
+        self.write_raw_stderr(state, formatted_row, true, opts, opts.inner.is_stderr_tty)
     }
 
     fn write_to_file<W: Write>(
@@ -315,7 +315,7 @@ pub trait Writer {
         colour: bool,
         hyperlink: bool,
     ) -> BString {
-        if colour && opts.rainbow_columns != AutoChoices::Never {
+        if colour && opts.inner.rainbow_columns != AutoChoices::Never {
             // colour each column differently
             self.set_rgb(state, row.len());
         }

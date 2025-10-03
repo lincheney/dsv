@@ -67,7 +67,7 @@ impl<R: Read> Reader<R> {
         Ok(self)
     }
 
-    pub fn line_reader<'a>(&'a mut self) -> LineReader<'a, R> {
+    pub fn line_reader(&mut self) -> LineReader<'_, R> {
         LineReader{ inner: self, start: 0 }
     }
 

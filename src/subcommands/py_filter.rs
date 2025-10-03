@@ -37,7 +37,7 @@ impl Handler {
 
         Ok(Self{
             passthru: opts.passthru,
-            colour: base.opts.colour == base::AutoChoices::Always,
+            colour: base.opts.inner.colour == base::AutoChoices::Always,
             inner,
             all,
         })
