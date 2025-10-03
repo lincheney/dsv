@@ -216,6 +216,7 @@ _shtab__dsv_fromhtml_options=(
 _shtab__dsv_fromjson_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-f,--flatten}"[flatten objects and arrays. (default seperator\: .)]:flatten:"
+  {-s,--slurp}"[determine header after reading all input]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
