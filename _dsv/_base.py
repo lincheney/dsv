@@ -4,6 +4,7 @@ import sys
 import shutil
 import pkgutil
 import argparse
+import itertools
 import urllib.parse
 import colorsys
 import subprocess
@@ -48,7 +49,7 @@ def make_parser(**kwargs):
     group.add_argument('--header-colour', type=_utils.utf8_type, help='ansi escape code for the header')
     group.add_argument('--header-bg-colour', type=_utils.utf8_type, help='ansi escape code for the header background')
     group.add_argument('--rainbow-columns', choices=('never', 'always', 'auto'), nargs='?', help='enable rainbow columns')
-    group.add_argument('--hyperlink-columns', choices=('never', 'always', 'auto'), nargs='?', default='never', help='enable hyperlink columns')
+    group.add_argument('--hyperlink-columns', choices=('never', 'always', 'auto'), nargs='?', default=argparse.SUPPRESS, help='enable hyperlink columns')
     group.add_argument('-Q', '--no-quoting', action='store_true', help='do not handle quotes from input')
     group.add_argument('--no-quote-output', action='store_false', dest='quote_output', help="don't quote output")
     return parser
@@ -135,7 +136,7 @@ class _Base:
         opts.colour = os.environ.get('NO_COLOR', '') == '' and _utils.resolve_tty_auto(opts.colour or 'auto')
         opts.numbered_columns = _utils.resolve_tty_auto(opts.numbered_columns or 'auto')
         opts.rainbow_columns = opts.rainbow_columns or 'auto'
-        opts.hyperlink_columns = _utils.resolve_tty_auto(opts.hyperlink_columns or 'auto')
+        opts.hyperlink_columns = _utils.resolve_tty_auto(getattr(opts, 'hyperlink_columns', 'never') or 'auto') or 'never'
         opts.header_colour = opts.header_colour or b'\x1b[1;4m'
         opts.header_bg_colour = opts.header_bg_colour or b'\x1b[48;5;237m'
 
@@ -383,10 +384,11 @@ class _Base:
                 if p > 0:
                     row[i] += b' ' * p
 
-        if self.opts.hyperlink_columns:
-            for i, (col, h) in enumerate(zip(row, self.header)):
+        if self.opts.hyperlink_columns != 'never':
+            header = itertools.chain(self.header or (), itertools.repeat(None))
+            for i, (col, h) in enumerate(zip(row, header)):
                 # the parameters and the URI must not contain any bytes outside of the 32-126
-                h = re.sub(rb'[^ -~]', lambda m: urllib.parse.quote(m.group(0)), h)
+                h = re.sub(rb'[^ -~]', lambda m: urllib.parse.quote(m.group(0)), h or b' ')
                 row[i] = b'\x1b]8;id=dsv-%i-%i;%s\x1b\\%s\x1b]8;;\x1b\\' % (_utils.getpid(), i, h, col)
 
         if colour and self.opts.rainbow_columns != 'never':

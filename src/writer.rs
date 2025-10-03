@@ -80,7 +80,10 @@ pub fn format_row<'a, I: Iterator<Item=&'a BStr>>(
         if i != 0 {
             parts.extend_from_slice(ofs);
         }
-        if let Some((pid, header)) = hyperlink {
+        if let Some((pid, mut header)) = hyperlink {
+            if header.is_empty() {
+                header = b" ".into();
+            }
             write!(&mut parts, "\x1b]8;id=dsv-{}-{};{}\x1b\\", pid, i, header).unwrap();
         }
         if let Some(header_colour) = header_colour {

@@ -732,15 +732,14 @@ impl<W: Writer> Output<W> {
     }
 
     fn on_header(&mut self, state: &mut WriterState, mut header: Vec<BString>) -> Result<()> {
-        if self.opts.hyperlink_columns.is_on(self.opts.is_stdout_tty || self.opts.is_stderr_tty) {
+        if let Some(hyperlinks) = state.hyperlinks.as_mut() {
             // the parameters and the URI must not contain any bytes outside of the 32-126
-            let header = header.iter()
+            hyperlinks.1 = header.iter()
                 .map(|h| NON_PRINTABLE.replace_all(h, |c: &regex::bytes::Captures| -> String {
                     format!("%{:02x}", c.get(0).unwrap().as_bytes()[0])
                 }).into_owned())
                 .map(BString::new)
                 .collect();
-            state.hyperlinks = Some((std::process::id(), header));
         }
 
         if self.opts.drop_header {
@@ -776,7 +775,13 @@ impl<W: Writer> Output<W> {
     }
 
     pub fn run(&mut self, receiver: Receiver<Message>) -> Result<()> {
-        let mut state = WriterState{ ors: self.opts.get_ors(), ..WriterState::default() };
+        let mut state = WriterState{
+            ors: self.opts.get_ors(),
+            hyperlinks: self.opts.hyperlink_columns
+                .is_on(self.opts.is_stdout_tty)
+                .then(|| (std::process::id(), vec![])),
+            ..WriterState::default()
+        };
         for msg in receiver {
             self.handle_message(&mut state, msg)?;
         }

@@ -11,6 +11,7 @@ class pipeline(_Base):
         colour = False,
         numbered_columns = False,
         rainbow_columns = False,
+        hyperlink_columns = False,
         drop_header = False,
         page = False,
     )
