@@ -249,7 +249,7 @@ class Table(BaseTable):
     def __setitem__(self, key, value):
         real_rows, real_cols, rows, cols = self.__parse_key__(key, new=True)
         # non scalar if value is non scalar and exactly one of rows/cols is non scalar
-        non_scalar = isinstance(value, (list, tuple)) and isinstance(rows, int) != isinstance(cols, int)
+        non_scalar = isinstance(value, (list, tuple, Vectorised)) and isinstance(rows, int) != isinstance(cols, int)
         rows = apply_slice(self.__data__, rows)
 
         if real_cols == FULL_SLICE:
