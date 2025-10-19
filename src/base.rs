@@ -373,7 +373,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
                         let is_header = if first_row {
                             // got the first row, is it a header
-                            first_row = true;
+                            first_row = false;
                             base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
                         } else {
                             false
