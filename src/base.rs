@@ -368,7 +368,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                         }
                     }
 
-                    let (row, incomplete) = self.parse_line(base, line, prev_row, b'"');
+                    let (row, incomplete) = self.parse_line(base, line, prev_row, b'"')?;
                     if !incomplete || (lines.is_eof() && last_line) {
 
                         let is_header = if first_row {
@@ -430,8 +430,8 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         ])
     }
 
-    fn parse_line(&self, base: &mut Base, line: &BStr, row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
-        base.parse_line(line, row, quote)
+    fn parse_line(&self, base: &mut Base, line: &BStr, row: Vec<BString>, quote: u8) -> Result<(Vec<BString>, bool)> {
+        Ok(base.parse_line(line, row, quote))
     }
 
     fn register_cleanup(&self) {

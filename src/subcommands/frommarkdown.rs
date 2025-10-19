@@ -46,26 +46,26 @@ impl base::Processor for Handler {
         base.on_row(row)
     }
 
-    fn parse_line(&self, _base: &mut base::Base, line: &BStr, mut row: Vec<BString>, _quote: u8) -> (Vec<BString>, bool) {
+    fn parse_line(&self, base: &mut base::Base, line: &BStr, mut row: Vec<BString>, _quote: u8) -> Result<(Vec<BString>, bool)> {
         row.clear();
 
-        let mut line = TABLE_REGEX.find_iter(line).map(|m| m.as_bytes());
+        let mut matches = TABLE_REGEX.find_iter(line).map(|m| m.as_bytes());
         // first column should be empty
-        if line.next().is_none_or(|col| col.trim().len() != col.len()) {
-            // print('invalid markdown table row:', line, file=sys.stderr)
-            return (row, true)
+        if matches.next().is_none_or(|col| col.trim().len() != col.len()) {
+            base.write_raw_stderr(format!("invalid markdown table row: {line}\n").into(), false, true)?;
+            return Ok((row, true))
         }
 
-        let line = line.map(|col| ESCAPE.replace_all(col.trim(), b"$1").into_owned().into());
-        row.extend(line);
+        let columns = matches.map(|col| ESCAPE.replace_all(col.trim(), b"$1").into_owned().into());
+        row.extend(columns);
 
         // last column should be empty
         if row.pop().is_none_or(|col| col.trim().len() != col.len()) || row.is_empty() {
-            // print('invalid markdown table row:', line, file=sys.stderr)
-            return (row, true)
+            base.write_raw_stderr(format!("invalid markdown table row: {line}\n").into(), false, true)?;
+            return Ok((row, true))
         }
 
-        (row, false)
+        Ok((row, false))
     }
 
 }

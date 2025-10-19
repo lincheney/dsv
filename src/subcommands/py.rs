@@ -275,7 +275,7 @@ impl InnerHandler {
                 base.write_raw(bytes.to_owned(), true, true)?;
             } else {
                 py.dict_set(self.locals, py.to_str("X").unwrap(), result);
-                py.exec(c"raise ValueError(X)", None, self.locals.as_ptr(), self.locals.as_ptr()).unwrap();
+                py.exec(c"raise ValueError(X)", None, self.locals.as_ptr(), self.locals.as_ptr())?;
             }
         }
         Ok(())
