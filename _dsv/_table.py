@@ -2,7 +2,7 @@ import sys
 import re
 import datetime
 import itertools
-from functools import cache, wraps
+from functools import cache, wraps, reduce
 import operator
 import math
 import statistics
@@ -35,12 +35,14 @@ def to_bytes(x):
     return x
 
 def as_float(value, warn=True):
-    try:
-        return float(value)
-    except ValueError as e:
-        if warn:
+    if warn:
+        try:
+            return float(value)
+        except ValueError as e:
             print(e, file=sys.stderr)
-        return math.nan
+            raise
+    else:
+        return float(value)
 
 def diff(value):
     result = []
@@ -87,6 +89,18 @@ def parse_datetime(
         return datetime.datetime.fromtimestamp(value)
 
     return value
+
+def _replace_na(vec, replacement):
+    return (replacement if x is NA else x for x in vec)
+
+def product(vec, na=NA):
+    return reduce(lambda x, y: x * y, _replace_na(vec, na), 1)
+
+def cumsum(vec, na=NA):
+    return type(vec)(itertools.accumulate(_replace_na(vec, na)))
+
+def cumproduct(vec, na=NA):
+    return type(vec)(itertools.accumulate(_replace_na(vec, na), lambda x, y: x * y, initial=1))
 
 def is_list_of(value, types):
     return isinstance(value, list) and all(isinstance(x, types) for x in value)
@@ -420,7 +434,7 @@ def na_wrapper(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except (AttributeError, TypeError, statistics.StatisticsError):
+        except (AttributeError, TypeError, ValueError, statistics.StatisticsError):
             return NA
     return wrapper
 
@@ -434,7 +448,7 @@ for arity, mapped, functions in [
     (1, False, (
         sum,
         statistics.mean, statistics.fmean, statistics.geometric_mean, statistics.harmonic_mean, statistics.median, statistics.median_low, statistics.median_high, statistics.median_grouped, statistics.mode, statistics.multimode, statistics.quantiles, statistics.pstdev, statistics.pvariance, statistics.stdev, statistics.variance,
-        diff,
+        diff, product, cumsum, cumproduct,
     )),
     (2, True, (
         '__lt__', '__gt__', '__le__', '__ge__', '__eq__', '__ne__', '__add__', '__sub__', '__mul__', '__matmul__', '__truediv__', '__floordiv__', '__mod__', '__lshift__', '__rshift__', '__and__', '__xor__', '__or__', '__pow__', '__divmod__',
@@ -479,6 +493,6 @@ for arity, mapped, functions in [
                 return self.map(lambda x: fn(other, x, *args, **kwargs))
 
         else:
-            raise NotImplementedError(arity, scalar)
+            raise NotImplementedError(arity, mapped)
 
         setattr(Vectorised, name, method)
