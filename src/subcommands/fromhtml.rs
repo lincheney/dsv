@@ -111,7 +111,7 @@ impl base::Processor for Handler {
                                             if let Some(span) = crate::utils::try_parse(&attr.value) && span > 0 {
                                                 add_rowspan(&mut rowspans, current_row.len(), span, b"".into());
                                             } else {
-                                                base.write_raw_stderr(format!("invalid rowspan {:?}\n", attr.value).into(), false, true)?;
+                                                base.log(format!("invalid rowspan {:?}\n", attr.value))?;
                                             }
                                         }
                                     }
@@ -153,7 +153,7 @@ impl base::Processor for Handler {
 
                     if had_tr && !state.iter().any(|x| x == b"tr") {
                         if had_thead && got_header {
-                            base.write_raw_stderr("got duplicate html table header\n".into(), false, true)?;
+                            base.log("got duplicate html table header\n")?;
                         } else if had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {
                             self.on_header(base, current_row.clone())?;
                         } else if !had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {

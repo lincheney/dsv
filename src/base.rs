@@ -627,6 +627,10 @@ impl<'a, 'b> Base<'a, 'b> {
         Break::when(self.sender.send(Message::RawStderr(value, ors, clear)).is_err())
     }
 
+    pub fn log<T: Into<BString>>(&self, line: T) -> MaybeBreak {
+        self.write_raw_stderr(line.into(), false, true)
+    }
+
 }
 
 pub struct Output<W: Writer=BaseWriter> {

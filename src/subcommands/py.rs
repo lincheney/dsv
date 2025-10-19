@@ -176,7 +176,7 @@ impl Handler {
             }
             Err(e) => {
                 if ! self.opts.common.quiet {
-                    base.write_raw_stderr(format!("{e}\n").into(), false, true)?;
+                    base.log(format!("{e}\n"))?;
                 }
                 if self.opts.common.remove_errors || (self.opts.common.ignore_errors && self.inner.expr) {
                     Ok(None)

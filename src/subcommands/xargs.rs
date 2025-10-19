@@ -1005,7 +1005,7 @@ impl Handler {
                 let max = match std::thread::available_parallelism() {
                     Ok(max) => max.get(),
                     Err(e) => {
-                        base.write_raw_stderr(format!("{e}\n").into(), false, true)?;
+                        base.log(format!("{e}\n"))?;
                         1
                     },
                 };

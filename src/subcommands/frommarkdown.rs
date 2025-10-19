@@ -52,7 +52,7 @@ impl base::Processor for Handler {
         let mut matches = TABLE_REGEX.find_iter(line).map(|m| m.as_bytes());
         // first column should be empty
         if matches.next().is_none_or(|col| col.trim().len() != col.len()) {
-            base.write_raw_stderr(format!("invalid markdown table row: {line}\n").into(), false, true)?;
+            base.log(format!("invalid markdown table row: {line}\n"))?;
             return Ok((row, true))
         }
 
@@ -61,7 +61,7 @@ impl base::Processor for Handler {
 
         // last column should be empty
         if row.pop().is_none_or(|col| col.trim().len() != col.len()) || row.is_empty() {
-            base.write_raw_stderr(format!("invalid markdown table row: {line}\n").into(), false, true)?;
+            base.log(format!("invalid markdown table row: {line}\n"))?;
             return Ok((row, true))
         }
 
