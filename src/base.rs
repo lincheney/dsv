@@ -268,7 +268,17 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         }
     }
 
-    fn determine_ofs(&self, ifs: &Ifs, opts: &BaseOptions) -> Ofs {
+    fn determine_ofs(&self, opts: &BaseOptions) -> Option<Ofs> {
+        if let Some(ofs) = &opts.ofs {
+            Some(Ofs::Plain(crate::utils::unescape_str(ofs).into_owned()))
+        } else if opts.pretty {
+            Some(Ofs::Pretty)
+        } else {
+            None
+        }
+    }
+
+    fn determine_ofs_from_ifs(&self, ifs: &Ifs, opts: &BaseOptions) -> Ofs {
         if let Some(ofs) = &opts.ofs {
             return Ofs::Plain(crate::utils::unescape_str(ofs).into_owned())
         }
@@ -335,7 +345,7 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
 
     fn determine_delimiters(&self, line: &BStr, opts: &BaseOptions) -> (Ifs, Ofs) {
         let ifs = self.determine_ifs(line, opts);
-        let ofs = self.determine_ofs(&ifs, opts);
+        let ofs = self.determine_ofs(opts).unwrap_or_else(|| self.determine_ofs_from_ifs(&ifs, opts));
         (ifs, ofs)
     }
 
@@ -414,7 +424,11 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                 Message::Eof => Break.to_err(),
                 Message::Separator => Ok(()), // do nothing
                 Message::Raw(value, ors, clear) => Break::when(base.write_raw(value, ors, clear).is_err()),
-                Message::Ofs(ofs) => Break::when(self.on_ofs(base, ofs).is_err()),
+                Message::Ofs(ofs) => {
+                    // override the ofs with our own
+                    let ofs = self.determine_ofs(&base.opts).unwrap_or(ofs);
+                    Break::when(self.on_ofs(base, ofs).is_err())
+                },
                 Message::Stderr(row) => Break::when(base.write_stderr(row).is_err()),
                 Message::RawStderr(value, ors, clear) => Break::when(base.write_raw_stderr(value, ors, clear).is_err()),
             };

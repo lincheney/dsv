@@ -68,7 +68,7 @@ impl Processor for Handler {
             }
         }
 
-        // first is actually last in pipeline
+        // handlers is in reverse order
         let first = handlers.pop().unwrap();
         let mut handlers = handlers.into_iter();
 
