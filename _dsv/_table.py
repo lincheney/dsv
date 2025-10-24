@@ -97,10 +97,10 @@ def product(vec, na=NA):
     return reduce(lambda x, y: x * y, _replace_na(vec, na), 1)
 
 def cumsum(vec, na=NA):
-    return type(vec)(itertools.accumulate(_replace_na(vec, na)))
+    return (Vec if vec.__na__ else NoNaVec)(itertools.accumulate(_replace_na(vec, na)))
 
 def cumproduct(vec, na=NA):
-    return type(vec)(itertools.accumulate(_replace_na(vec, na), lambda x, y: x * y, initial=1))
+    return (Vec if vec.__na__ else NoNaVec)(itertools.accumulate(_replace_na(vec, na), lambda x, y: x * y, initial=1))
 
 def is_list_of(value, types):
     return isinstance(value, list) and all(isinstance(x, types) for x in value)
