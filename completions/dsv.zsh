@@ -93,7 +93,7 @@ _shtab__dsv___options=(
   "--hyperlink-columns[enable hyperlink columns]:hyperlink_columns:(never always auto)"
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
-  "*::pattern to search for:{() {
+  "(-)*:command:{() {
         local _drop=\${words[(I)!]}
         local words=( dsv \"\${words[@]:\$_drop}\" )
         local CURRENT=\$(( CURRENT+1-_drop ))

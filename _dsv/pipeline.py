@@ -29,7 +29,7 @@ class pipeline(_Base):
     name = '!'
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', nargs='*', action='append', help='pattern to search for').complete = completion
+    parser.add_argument('command', nargs=argparse.REMAINDER).complete = completion
 
     DEFAULTS = dict(
         #  ofs = b'\t',
@@ -53,7 +53,7 @@ class pipeline(_Base):
             kwargs.pop('command', None)
 
             self.pipeline = [[]]
-            for arg in opts.extras:
+            for arg in opts.command:
                 if arg == '!':
                     self.pipeline.append([])
                 else:
