@@ -4,7 +4,7 @@ use regex::bytes::Regex;
 use once_cell::sync::Lazy;
 use crate::writer::{BaseWriter, Writer, WriterState};
 use std::io::{BufRead, IsTerminal};
-use bstr::{BStr, BString, ByteSlice};
+use bstr::{BStr, BString, ByteSlice, ByteVec};
 use std::process::{ExitCode};
 use crate::utils::{Break, MaybeBreak};
 use anyhow::{Result};
@@ -400,6 +400,10 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
                         prev_row = vec![];
                     } else {
                         prev_row = row;
+                        // add the embedded newline
+                        if let Some(last) = prev_row.last_mut() {
+                            last.push_str(&base.irs);
+                        }
                     }
                 }
             }
