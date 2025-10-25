@@ -9,6 +9,7 @@ import statistics
 
 FULL_SLICE = slice(None)
 MISSING = b''
+__sentinel__ = object()
 
 NA_STRING = 'NA'
 class NA:
@@ -224,6 +225,22 @@ class BaseTable(Vectorised):
             raise IndexError(key)
 
         return real_rows, real_cols, rows, cols
+
+    def has(self, key):
+        if isinstance(key, int):
+            return key < len(self.__numcols__())
+        return to_bytes(key) in self.__headers__
+
+    def get(self, key, default=__sentinel__):
+        if self.has(key):
+            return self[key]
+        if default is __sentinel__:
+            cls = Vec if self.__na__ else NoNaVec
+            default = cls()
+        return default
+
+    def __contains__(self, value):
+        return value in self.__flat__()
 
     def __flat__(self):
         return itertools.chain.from_iterable(self.__data__)
