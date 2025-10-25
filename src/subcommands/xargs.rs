@@ -363,10 +363,10 @@ impl Proc {
 
             let text = c.get(0).unwrap().as_bytes();
             let inner = &text[1..text.len()-1];
-            let as_path = |i: usize| Path::new(OsStr::from_bytes(&values[i]));
+            let as_path = |i: usize| values.get(i).map_or(Path::new(""), |x| Path::new(OsStr::from_bytes(x)));
 
             if let Some(i) = Self::lookup_key_index(keys, inner) {
-                return values[i].as_bytes().into()
+                return values.get(i).map_or(b"" as _, |x| x.as_bytes()).into()
             }
 
             let (formatter, inner) = if let Some((formatter, inner)) = FormatSpec::parse(inner) {
@@ -376,7 +376,7 @@ impl Proc {
             };
 
             let value = if let Some(i) = Self::lookup_key_index(keys, inner) {
-                values[i].as_bytes().into()
+                values.get(i).map_or(b"" as _, |x| x.as_bytes()).into()
             } else if let Some(i) = inner.strip_suffix(b".").and_then(|x| Self::lookup_key_index(keys, x)) {
                 as_path(i).with_extension("").into_os_string().into_encoded_bytes().into()
 

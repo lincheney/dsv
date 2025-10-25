@@ -171,7 +171,7 @@ class xargs(_Base):
         text = match.group(0)[1:-1]
         i = self.get_format_arg_index(text)
         if i is not None:
-            return row[i]
+            return row[i] if i < len(row) else b''
 
         quote = False
         formatter = None
@@ -183,23 +183,25 @@ class xargs(_Base):
 
         i = self.get_format_arg_index(text)
         if i is not None:
-            result = row[i]
+            result = row[i] if i < len(row) else b''
 
         if result is None:
             i = self.get_format_arg_index(text[:-1])
             if i is not None:
+                col = row[i] if i < len(row) else b''
                 if text.endswith(b'.'):
-                    result = os.path.splitext(row[i])[0]
+                    result = os.path.splitext(col)[0]
                 if text.endswith(b'/'):
-                    result = os.path.basename(row[i])
+                    result = os.path.basename(col)
 
         if result is None:
             i = self.get_format_arg_index(text[1:-3])
             if i is not None:
+                col = row[i] if i < len(row) else b''
                 if text.endswith(b'//'):
-                    result = os.path.dirname(row[i])
+                    result = os.path.dirname(col)
                 if text.endswith(b'/.'):
-                    result = os.path.splitext(os.path.basename(row[i]))[0]
+                    result = os.path.splitext(os.path.basename(col))[0]
 
         if result is not None:
             if formatter is not None:
