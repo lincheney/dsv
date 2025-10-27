@@ -22,12 +22,13 @@ pub fn get_rgb(i: usize, step: Option<f32>, saturation: Option<f32>) -> BString 
 
 pub fn format_columns<S: AsRef<BStr>>(mut row: Vec<BString>, ofs: &Ofs<S>, ors: &BStr, quote_output: bool) -> FormattedRow {
     if quote_output {
-        // if pretty output, don't allow >1 space, no matter how long the ofs is
-        let pretty_output = matches!(ofs, Ofs::Pretty);
         let ofs = ofs.as_bstr();
+        // if ofs is space, make sure to quote empty columns otherwise they will just look like
+        // they are part of a string of whitespace
+        let ofs_is_space = ofs.iter().all(|c| c.is_ascii_whitespace());
 
         for col in &mut row {
-            if (pretty_output && col.is_empty()) || needs_quoting(col, ofs, ors) {
+            if (ofs_is_space && col.is_empty()) || needs_quoting(col, ofs, ors) {
                 let mut quoted_col = vec![];
                 quoted_col.push(b'"');
                 for (i, part) in col.split_str(b"\"").enumerate() {
