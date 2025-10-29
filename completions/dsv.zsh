@@ -104,6 +104,7 @@ _shtab__dsv___options=(
 _shtab__dsv_cat_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--number}"[number all output lines]"
+  {-s,--slurp}"[determine header after reading all input]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"

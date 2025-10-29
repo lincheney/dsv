@@ -17,6 +17,8 @@ static PPRINT: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s\s+").unwrap());
 static ANSI: Lazy<Regex> = Lazy::new(|| Regex::new(r"\x1b\[[0-9;:]*[mK]|\x1b]8;;.*?\x1b\\").unwrap());
 static NON_PRINTABLE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^ -~]").unwrap());
 
+pub type Row = Vec<BString>;
+
 bitflags::bitflags! {
     #[derive(Debug, Copy, Clone)]
     pub struct Callbacks: u8 {
@@ -30,13 +32,13 @@ bitflags::bitflags! {
 
 #[derive(Debug)]
 pub enum Message {
-    Header(Vec<BString>),
-    Row(Vec<BString>),
+    Header(Row),
+    Row(Row),
     Separator,
     Eof,
     Raw(BString, bool, bool),
     Ofs(Ofs),
-    Stderr(Vec<BString>),
+    Stderr(Row),
     RawStderr(BString, bool, bool),
 }
 
@@ -226,7 +228,7 @@ impl BaseOptions {
 }
 
 #[derive(Debug, Clone)]
-pub struct FormattedRow(pub Vec<BString>);
+pub struct FormattedRow(pub Row);
 
 #[derive(Debug)]
 pub enum GatheredRow {
@@ -349,6 +351,66 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         (ifs, ofs)
     }
 
+    fn process_one_row<R: BufRead>(
+        &mut self,
+        reader: &mut Reader<R>,
+        base: &mut Base,
+        do_callbacks: Callbacks,
+        mut prev_row: Row,
+        mut first_read: bool,
+        first_row: bool,
+    ) -> Result<Option<(Row, bool, Row)>> where Self: Sized {
+
+        loop {
+            let mut lines = reader.line_reader();
+            while let Some((mut line, last_line)) = lines.get_line(base.irs.as_ref()) {
+
+                if first_read {
+                    first_read = false;
+                    // Remove UTF-8 BOM
+                    line = line.strip_prefix(UTF8_BOM).unwrap_or(line).into();
+
+                    let (ifs, ofs) = self.determine_delimiters(line, &base.opts);
+                    base.ifs = ifs;
+                    if do_callbacks.contains(Callbacks::ON_OFS) {
+                        self.on_ofs(base, ofs)?;
+                    }
+                    if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
+                        base.opts.combine_trailing_columns = true;
+                    }
+                }
+
+                let (row, incomplete) = self.parse_line(base, line, prev_row, b'"')?;
+                if !incomplete || (lines.is_eof() && last_line) {
+
+                    let is_header = if first_row {
+                        // got the first row, is it a header
+                        base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
+                    } else {
+                        false
+                    };
+
+                    if is_header {
+                        base.header_len = Some(row.len());
+                    }
+                    return Ok(Some((row, is_header, vec![])))
+                }
+
+                prev_row = row;
+                // add the embedded newline
+                if let Some(last) = prev_row.last_mut() {
+                    last.push_str(&base.irs);
+                }
+            }
+
+            drop(lines);
+            if reader.is_eof {
+                return Ok(None)
+            }
+            reader.read()?;
+        }
+    }
+
     fn process_file<R: BufRead>(mut self, file: R, base: &mut Base, do_callbacks: Callbacks) -> Result<ExitCode> where Self: Sized {
 
         let result = (|| {
@@ -357,54 +419,16 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
             let mut first_row = true;
             let mut first_read = true;
 
-            while !reader.is_eof {
-                reader.read()?;
-
-                let mut lines = reader.line_reader();
-                while let Some((mut line, last_line)) = lines.get_line(base.irs.as_ref()) {
-
-                    if first_read {
-                        first_read = false;
-                        // Remove UTF-8 BOM
-                        line = line.strip_prefix(UTF8_BOM).unwrap_or(line).into();
-
-                        let (ifs, ofs) = self.determine_delimiters(line, &base.opts);
-                        base.ifs = ifs;
-                        if do_callbacks.contains(Callbacks::ON_OFS) && self.on_ofs(base, ofs).is_err() {
-                            break
-                        }
-                        if matches!(base.ifs, Ifs::Space | Ifs::Pretty) {
-                            base.opts.combine_trailing_columns = true;
-                        }
-                    }
-
-                    let (row, incomplete) = self.parse_line(base, line, prev_row, b'"')?;
-                    if !incomplete || (lines.is_eof() && last_line) {
-
-                        let is_header = if first_row {
-                            // got the first row, is it a header
-                            first_row = false;
-                            base.opts.header.unwrap_or_else(|| row.iter().all(|c| matches!(c.first(), Some(b'_' | b'a' ..= b'z' | b'A' ..= b'Z'))))
-                        } else {
-                            false
-                        };
-
-                        if is_header {
-                            base.header_len = Some(row.len());
-                            if do_callbacks.contains(Callbacks::ON_HEADER) {
-                                self.on_header(base, row)?;
-                            }
-                        } else if do_callbacks.contains(Callbacks::ON_ROW) {
-                            self.on_row(base, row)?;
-                        }
-                        prev_row = vec![];
-                    } else {
-                        prev_row = row;
-                        // add the embedded newline
-                        if let Some(last) = prev_row.last_mut() {
-                            last.push_str(&base.irs);
-                        }
-                    }
+            while let Some(val) = self.process_one_row(&mut reader, base, do_callbacks, prev_row, first_row, first_read)? {
+                let row = val.0;
+                let is_header = val.1;
+                prev_row = val.2;
+                first_row = false;
+                first_read = false;
+                if is_header && do_callbacks.contains(Callbacks::ON_HEADER) {
+                    self.on_header(base, row)?;
+                } else if !is_header && do_callbacks.contains(Callbacks::ON_ROW) {
+                    self.on_row(base, row)?;
                 }
             }
 
@@ -448,18 +472,18 @@ pub trait Processor<W: Writer + Send + 'static=BaseWriter> {
         ])
     }
 
-    fn parse_line(&self, base: &mut Base, line: &BStr, row: Vec<BString>, quote: u8) -> Result<(Vec<BString>, bool)> {
+    fn parse_line(&self, base: &mut Base, line: &BStr, row: Row, quote: u8) -> Result<(Row, bool)> {
         Ok(base.parse_line(line, row, quote))
     }
 
     fn register_cleanup(&self) {
     }
 
-    fn on_row(&mut self, base: &mut Base, row: Vec<BString>) -> Result<()> {
+    fn on_row(&mut self, base: &mut Base, row: Row) -> Result<()> {
         base.on_row(row)
     }
 
-    fn on_header(&mut self, base: &mut Base, header: Vec<BString>) -> Result<()> {
+    fn on_header(&mut self, base: &mut Base, header: Row) -> Result<()> {
         base.on_header(header)
     }
 
@@ -480,24 +504,44 @@ pub struct DefaultProcessor{}
 impl Processor for DefaultProcessor{}
 
 #[derive(Clone)]
-pub struct Base<'a, 'b> {
+pub struct ScopelessBase {
     pub sender: Sender<Message>,
     pub opts: BaseOptions,
     header_len: Option<usize>,
     pub ifs: Ifs,
     pub irs: BString,
+}
+
+#[derive(Clone)]
+pub struct Base<'a, 'b> {
+    pub inner: ScopelessBase,
     pub scope: &'a std::thread::Scope<'a, 'b>,
+}
+
+impl<'a, 'b> std::ops::Deref for Base<'a, 'b> {
+    type Target = ScopelessBase;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
+impl<'a, 'b> std::ops::DerefMut for Base<'a, 'b> {
+    fn deref_mut(&mut self) -> &mut ScopelessBase {
+        &mut self.inner
+    }
 }
 
 impl<'a, 'b> Base<'a, 'b> {
 
     pub fn new(opts: BaseOptions, sender: Sender<Message>, scope: &'a std::thread::Scope<'a, 'b>) -> Self {
         Self {
-            sender,
-            header_len: None,
-            ifs: Ifs::Pretty,
-            irs: crate::utils::unescape_str(opts.irs.as_deref().unwrap_or("\n")).into_owned(),
-            opts,
+            inner: ScopelessBase {
+                sender,
+                header_len: None,
+                ifs: Ifs::Pretty,
+                irs: crate::utils::unescape_str(opts.irs.as_deref().unwrap_or("\n")).into_owned(),
+                opts,
+            },
             scope,
         }
     }
@@ -519,7 +563,7 @@ impl<'a, 'b> Base<'a, 'b> {
         Some((start + m.start(), start + m.end()))
     }
 
-    fn parse_line(&self, line: &BStr, mut row: Vec<BString>, quote: u8) -> (Vec<BString>, bool) {
+    fn parse_line(&self, line: &BStr, mut row: Row, quote: u8) -> (Row, bool) {
         let allow_quoted = !self.opts.no_quoting;
         let maxcols = if self.opts.combine_trailing_columns && let Some(header_len) = self.header_len {
             Some(header_len)
@@ -621,11 +665,11 @@ impl<'a, 'b> Base<'a, 'b> {
         Break::when(self.sender.send(Message::Separator).is_err())
     }
 
-    pub fn on_row(&self, row: Vec<BString>) -> Result<()> {
+    pub fn on_row(&self, row: Row) -> Result<()> {
         Break::when(self.sender.send(Message::Row(row)).is_err())
     }
 
-    pub fn on_header(&self, header: Vec<BString>) -> Result<()> {
+    pub fn on_header(&self, header: Row) -> Result<()> {
         Break::when(self.sender.send(Message::Header(header)).is_err())
     }
 
@@ -637,7 +681,7 @@ impl<'a, 'b> Base<'a, 'b> {
         Break::when(self.sender.send(Message::Ofs(ofs)).is_err())
     }
 
-    pub fn write_stderr(&self, row: Vec<BString>) -> MaybeBreak {
+    pub fn write_stderr(&self, row: Row) -> MaybeBreak {
         Break::when(self.sender.send(Message::Stderr(row)).is_err())
     }
 
@@ -748,7 +792,7 @@ impl<W: Writer> Output<W> {
         Ok(())
     }
 
-    fn on_row(&mut self, state: &mut WriterState, row: Vec<BString>, is_header: bool, stderr: bool) -> Result<()> {
+    fn on_row(&mut self, state: &mut WriterState, row: Row, is_header: bool, stderr: bool) -> Result<()> {
         if self.col_count.is_none() {
             self.col_count = Some(row.len());
         }
@@ -776,7 +820,7 @@ impl<W: Writer> Output<W> {
         Ok(())
     }
 
-    fn on_header(&mut self, state: &mut WriterState, mut header: Vec<BString>) -> Result<()> {
+    fn on_header(&mut self, state: &mut WriterState, mut header: Row) -> Result<()> {
         if let Some(hyperlinks) = state.hyperlinks.as_mut() {
             // the parameters and the URI must not contain any bytes outside of the 32-126
             hyperlinks.1 = header.iter()
@@ -811,7 +855,7 @@ impl<W: Writer> Output<W> {
         Ok(())
     }
 
-    fn on_stderr(&mut self, state: &mut WriterState, row: Vec<BString>) -> Result<()> {
+    fn on_stderr(&mut self, state: &mut WriterState, row: Row) -> Result<()> {
         self.on_row(state, row, false, true)
     }
 
