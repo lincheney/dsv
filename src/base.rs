@@ -834,7 +834,7 @@ impl<W: Writer> Output<W> {
         if self.opts.drop_header {
             Ok(())
         } else {
-            if self.opts.inner.numbered_columns == AutoChoices::Always {
+            if self.opts.inner.numbered_columns.is_on(self.opts.inner.is_stdout_tty) {
                 for (i, col) in header.iter_mut().enumerate() {
                     let prefix = format!("{} ", i + 1);
                     let leading_space = col.iter().take(prefix.len()).take_while(|&&x| x == b' ').count();
