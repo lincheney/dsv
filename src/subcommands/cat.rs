@@ -21,7 +21,7 @@ pub struct Handler {
     opts: Opts,
     row_count: usize,
     children: Option<Vec<Child>>,
-    column_mapping: Option<Vec<Vec<usize>>>,
+    have_combined: bool,
 }
 
 impl Handler {
@@ -30,7 +30,7 @@ impl Handler {
             row_count: 0,
             opts,
             children: None,
-            column_mapping: None,
+            have_combined: false,
         })
     }
 
@@ -68,6 +68,7 @@ impl Handler {
     }
 
     fn make_combined_header(&mut self, base: &mut base::Base, row: Vec<BString>, is_header: bool) -> Result<Option<Vec<BString>>> {
+        self.have_combined = true;
         let mut headers = if is_header {
             row.into_iter().map(Some).collect()
         } else {
@@ -105,12 +106,24 @@ impl Handler {
         }
     }
 
+    fn on_child_row(&mut self, base: &mut base::Base, child: &Child, row: Vec<BString>) -> Result<()> {
+        if self.opts.slurp {
+            let mut template = vec![b"".into(); child.mapping.iter().copied().max().unwrap_or(0) + 1];
+            for (i, col) in child.mapping.iter().zip(row) {
+                template[*i] = col;
+            }
+            self.on_row(base, template)
+        } else {
+            self.on_row(base, row)
+        }
+    }
+
 }
 
 impl Processor for Handler {
 
     fn on_header(&mut self, base: &mut base::Base, mut header: Vec<BString>) -> Result<()> {
-        if self.column_mapping.is_none() && self.opts.slurp {
+        if !self.have_combined && self.opts.slurp {
             header = self.make_combined_header(base, header, true)?.unwrap();
         }
 
@@ -121,7 +134,7 @@ impl Processor for Handler {
     }
 
     fn on_row(&mut self, base: &mut base::Base, mut row: Vec<BString>) -> Result<()> {
-        if self.column_mapping.is_none() && self.opts.slurp && let Some(header) = self.make_combined_header(base, row.clone(), false)? {
+        if !self.have_combined && self.opts.slurp && let Some(header) = self.make_combined_header(base, row.clone(), false)? {
             self.on_header(base, header)?;
         }
 
@@ -133,7 +146,7 @@ impl Processor for Handler {
     }
 
     fn on_eof(mut self, base: &mut base::Base) -> Result<bool> {
-        while self.column_mapping.is_none() && self.opts.slurp && !self.opts.files.is_empty() {
+        while !self.have_combined && self.opts.slurp && !self.opts.files.is_empty() {
             // we got no rows, process the next file
             let file = self.opts.files.remove(0);
             if let Some(file) = Self::open_file(base, &file)? {
@@ -143,24 +156,12 @@ impl Processor for Handler {
 
         self.get_children(base)?;
         for mut child in self.children.take().unwrap() {
-            let mut handle_row = |base, row| {
-                if self.opts.slurp {
-                    let mut template = vec![b"".into(); child.mapping.iter().copied().max().unwrap_or(0) + 1];
-                    for (i, col) in child.mapping.iter().zip(row) {
-                        template[*i] = col;
-                    }
-                    self.on_row(base, template)
-                } else {
-                    self.on_row(base, row)
-                }
-            };
-
             if let Some(row) = child.extra_row.take() {
-                handle_row(base, row)?;
+                self.on_child_row(base, &child, row)?;
             }
             while let Some((row, is_header)) = child.process_one_row(base, base::Callbacks::None)? {
                 if !is_header {
-                    self.on_row(base, row)?;
+                    self.on_child_row(base, &child, row)?;
                 }
             }
         }
