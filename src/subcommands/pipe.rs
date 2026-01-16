@@ -189,6 +189,9 @@ struct JoinHandler {
 
 impl base::Processor for JoinHandler {
     fn on_header(&mut self, base: &mut base::Base, header: Vec<BString>) -> Result<()> {
+        if let Some(slicer) = &mut self.column_slicer {
+            slicer.make_header_map(&header);
+        }
         self.header_len = header.len();
         base.on_header(header)
     }

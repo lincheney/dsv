@@ -10,13 +10,13 @@ pub fn make_header_map(header: &[BString]) -> HashMap<BString, usize> {
     header.iter().enumerate().map(|(i, k)| (k.clone(), i)).collect()
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ColumnSlicer {
     fields: Vec<Field>,
     headers: HashMap<BString, usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 enum Field {
     Range(usize, usize),
     Index(usize),
