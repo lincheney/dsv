@@ -159,13 +159,15 @@ impl base::Processor for Handler {
 
             let result1 = Some(child.wait().map_err(anyhow::Error::new));
             let result2 = err_receiver.recv().unwrap().err().map(Err);
-            let status = crate::utils::chain_errors([result1, result2].into_iter().flatten())?;
+            let result3 = err_receiver.recv().unwrap().err().map(Err);
+            let status = crate::utils::chain_errors([result1, result2, result3].into_iter().flatten())?;
             if let Some(code) = status.code() {
                 ExitCode::from(code.min(255) as u8)
             } else {
                 ExitCode::FAILURE
             }
         } else {
+            err_receiver.recv().unwrap()?;
             ExitCode::SUCCESS
         };
 
