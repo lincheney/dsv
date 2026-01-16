@@ -82,16 +82,13 @@ impl ColumnSlicer {
     }
 
     pub fn indices(&self, len: usize, complement: bool) -> impl Iterator<Item=usize> {
-        enum Iter<A, B, C> {
-            A(A), B(B), C(C)
-        }
 
-        let mut iter = if complement {
+        let iters = if complement {
             let iter = (0..len).filter(|&index| !self.matches(index));
-            Iter::A(iter)
+            (Some(iter), None, None)
         } else if self.fields.is_empty() {
             // actually means you want everything
-            Iter::B(0..len)
+            (None, Some(0..len), None)
         } else {
             let iter = self.fields.iter()
                 .filter_map(move |field| match field {
@@ -105,16 +102,10 @@ impl ColumnSlicer {
                         self.headers.iter().filter(|(k, _)| regex.is_match(k)).map(|(_, &v)| v .. v+1)
                     })
                 ).flatten();
-            Iter::C(iter)
+            (None, None, Some(iter))
         };
 
-        std::iter::from_fn(move || {
-            match &mut iter {
-                Iter::A(x) => x.next(),
-                Iter::B(x) => x.next(),
-                Iter::C(x) => x.next(),
-            }
-        })
+        iters.0.into_iter().flatten().chain(iters.1.into_iter().flatten()).chain(iters.2.into_iter().flatten())
     }
 
     pub fn slice(
