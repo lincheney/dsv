@@ -463,7 +463,7 @@ impl GilHandle<'_> {
                 self.list_append(lines, self.to_str(std::str::from_utf8(line).ok()?)?);
             }
             let list = self.list_from_iter([
-                self.to_int((code.count_bytes() - 1).try_into().unwrap())?,
+                self.to_int(code.count_bytes().saturating_sub(1).try_into().unwrap())?,
                 self.get_none(),
                 lines,
                 filename,
