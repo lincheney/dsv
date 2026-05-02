@@ -56,8 +56,8 @@ impl<R: Read> Reader<R> {
                     self.used += count;
                     if count < slice.len() {
                         self.is_eof = count == 0;
-                        break
                     }
+                    break
                 },
                 Err(err) if err.kind() == std::io::ErrorKind::Interrupted => (),
                 Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => break,
