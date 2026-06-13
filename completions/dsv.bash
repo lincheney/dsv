@@ -7,7 +7,7 @@ _shtab__dsv___option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '
 _shtab__dsv_cat_option_strings=('-h' '--help' '-n' '--number' '-s' '--slurp' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_cut_option_strings=('-h' '--help' '-f' '--fields' '-x' '--complement' '-r' '--regex' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_flip_option_strings=('-h' '--help' '-n' '--lines' '--row-sep' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
-_shtab__dsv_fromhtml_option_strings=('-h' '--help' '--strict' '--inner-html' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
+_shtab__dsv_fromhtml_option_strings=('-h' '--help' '--strict' '--inner-html' '-s' '--slurp' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_fromjson_option_strings=('-h' '--help' '-f' '--flatten' '-s' '--slurp' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_frommarkdown_option_strings=('-h' '--help' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
 _shtab__dsv_grep_option_strings=('-h' '--help' '-e' '--regexp' '-F' '--fixed-strings' '-f' '--file' '-w' '--word-regexp' '-x' '--field-regexp' '-s' '--case-sensitive' '-m' '--max-count' '-o' '--only-matching' '-k' '--fields' '-r' '--regex' '--complement' '--replace' '-n' '--line-number' '--passthru' '-A' '--after-context' '-B' '--before-context' '-C' '--context' '-c' '--count' '-v' '--invert-match' '-H' '--header' '-N' '--no-header' '--drop-header' '--trailer' '--numbered-columns' '-d' '--ifs' '--plain-ifs' '-D' '--ofs' '--irs' '--ors' '--csv' '--tsv' '--ssv' '--combine-trailing-columns' '-P' '--pretty' '--page' '--colour' '--color' '--header-colour' '--header-bg-colour' '--rainbow-columns' '--hyperlink-columns' '-Q' '--no-quoting' '--no-quote-output')
@@ -428,6 +428,8 @@ _shtab__dsv_fromhtml__h_nargs=0
 _shtab__dsv_fromhtml___help_nargs=0
 _shtab__dsv_fromhtml___strict_nargs=0
 _shtab__dsv_fromhtml___inner_html_nargs=0
+_shtab__dsv_fromhtml__s_nargs=0
+_shtab__dsv_fromhtml___slurp_nargs=0
 _shtab__dsv_fromhtml__H_nargs=0
 _shtab__dsv_fromhtml___header_nargs=0
 _shtab__dsv_fromhtml__N_nargs=0
@@ -1356,6 +1358,7 @@ _shtab__dsv() {
 
       if [[ "$current_action_nargs" != "*" ]] && \
          [[ "$current_action_nargs" != "+" ]] && \
+         [[ "$current_action_nargs" != "?" ]] && \
          [[ "$current_action_nargs" != *"..." ]] && \
          (( $word_index + 1 - $current_action_args_start_index - $pos_only >= \
             $current_action_nargs )); then

@@ -68,6 +68,9 @@ _shtab__dsv_options=(
   "--no-quote-output[don\'t quote output]"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_defaults_added=0
+
 _shtab__dsv___options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -101,6 +104,9 @@ _shtab__dsv___options=(
     } }"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv___defaults_added=0
+
 _shtab__dsv_cat_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--number}"[number all output lines]"
@@ -130,6 +136,9 @@ _shtab__dsv_cat_options=(
   "--no-quote-output[don\'t quote output]"
   "*::other files to concatenate to stdin:_files"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_cat_defaults_added=0
 
 _shtab__dsv_cut_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -162,6 +171,9 @@ _shtab__dsv_cut_options=(
   "*::select only these fields:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_cut_defaults_added=0
+
 _shtab__dsv_flip_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--lines}"[print the first NUM lines]:lines:"
@@ -191,10 +203,14 @@ _shtab__dsv_flip_options=(
   "--no-quote-output[don\'t quote output]"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_flip_defaults_added=0
+
 _shtab__dsv_fromhtml_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--strict[only allow valid table]"
   "--inner-html[output the innerHTML of table cells, not the innerText]"
+  {-s,--slurp}"[determine header after reading all input]"
   {-H,--header}"[treat first row as a header]"
   {-N,--no-header}"[do not treat first row as header]"
   "--drop-header[do not print the header]"
@@ -219,6 +235,9 @@ _shtab__dsv_fromhtml_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_fromhtml_defaults_added=0
 
 _shtab__dsv_fromjson_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -249,6 +268,9 @@ _shtab__dsv_fromjson_options=(
   "--no-quote-output[don\'t quote output]"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_fromjson_defaults_added=0
+
 _shtab__dsv_frommarkdown_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -275,6 +297,9 @@ _shtab__dsv_frommarkdown_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_frommarkdown_defaults_added=0
 
 _shtab__dsv_grep_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -323,6 +348,9 @@ _shtab__dsv_grep_options=(
   "*::pattern to search for:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_grep_defaults_added=0
+
 _shtab__dsv_head_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-n,--lines}"[print the first NUM lines]:lines:"
@@ -350,6 +378,9 @@ _shtab__dsv_head_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_head_defaults_added=0
 
 _shtab__dsv_join_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -392,6 +423,9 @@ _shtab__dsv_join_options=(
   "*::join on these fields from stdin and FILE:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_join_defaults_added=0
+
 _shtab__dsv_page_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -418,6 +452,9 @@ _shtab__dsv_page_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_page_defaults_added=0
 
 _shtab__dsv_paste_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -446,6 +483,9 @@ _shtab__dsv_paste_options=(
   "--no-quote-output[don\'t quote output]"
   "*::other files to concatenate to stdin:_files"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_paste_defaults_added=0
 
 _shtab__dsv_pipe_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -480,6 +520,9 @@ _shtab__dsv_pipe_options=(
   "*:::command to pipe rows through:{_normal}"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_pipe_defaults_added=0
+
 _shtab__dsv_pretty_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -506,6 +549,9 @@ _shtab__dsv_pretty_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_pretty_defaults_added=0
 
 _shtab__dsv_py_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -542,6 +588,9 @@ _shtab__dsv_py_options=(
   "*:python statements to run:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_py_defaults_added=0
+
 _shtab__dsv_py_filter_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-q,--quiet}"[do not print errors]"
@@ -575,6 +624,9 @@ _shtab__dsv_py_filter_options=(
   "--no-quote-output[don\'t quote output]"
   "*:python statements to run:"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_py_filter_defaults_added=0
 
 _shtab__dsv_py_groupby_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -613,6 +665,9 @@ _shtab__dsv_py_groupby_options=(
   "--no-quote-output[don\'t quote output]"
   "*:python statements to run:"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_py_groupby_defaults_added=0
 
 _shtab__dsv_replace_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -654,6 +709,9 @@ _shtab__dsv_replace_options=(
   ":replaces every match with the given text:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_replace_defaults_added=0
+
 _shtab__dsv_reshape_long_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-x,--complement}"[exclude, rather than include, field names]"
@@ -685,6 +743,9 @@ _shtab__dsv_reshape_long_options=(
   ":value field (timevar\/wide variable):"
   "*::reshape only these fields:"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_reshape_long_defaults_added=0
 
 _shtab__dsv_reshape_wide_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -719,6 +780,9 @@ _shtab__dsv_reshape_wide_options=(
   "*:fields to group by (idvar\/long variable):"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_reshape_wide_defaults_added=0
+
 _shtab__dsv_set_header_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   "--only[drop all other header names]"
@@ -749,6 +813,9 @@ _shtab__dsv_set_header_options=(
   "--no-quote-output[don\'t quote output]"
   "*::new header names:"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_set_header_defaults_added=0
 
 _shtab__dsv_sort_options=(
   {-k,--fields}"[search only these fields]:old_style_fields:"
@@ -792,6 +859,9 @@ _shtab__dsv_sort_options=(
   "*::sort based only on these fields:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_sort_defaults_added=0
+
 _shtab__dsv_sqlite_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-t,--table}"[name of sql table (default\: input)]:table:"
@@ -820,6 +890,9 @@ _shtab__dsv_sqlite_options=(
   "--no-quote-output[don\'t quote output]"
   "*:sql statements to run:"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_sqlite_defaults_added=0
 
 _shtab__dsv_summary_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -853,6 +926,9 @@ _shtab__dsv_summary_options=(
   "*::select only these fields:"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_summary_defaults_added=0
+
 _shtab__dsv_tac_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -879,6 +955,9 @@ _shtab__dsv_tac_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_tac_defaults_added=0
 
 _shtab__dsv_tail_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -908,6 +987,9 @@ _shtab__dsv_tail_options=(
   "--no-quote-output[don\'t quote output]"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_tail_defaults_added=0
+
 _shtab__dsv_tocsv_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -934,6 +1016,9 @@ _shtab__dsv_tocsv_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_tocsv_defaults_added=0
 
 _shtab__dsv_tojson_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -962,6 +1047,9 @@ _shtab__dsv_tojson_options=(
   "--no-quote-output[don\'t quote output]"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_tojson_defaults_added=0
+
 _shtab__dsv_tomarkdown_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -989,6 +1077,9 @@ _shtab__dsv_tomarkdown_options=(
   "--no-quote-output[don\'t quote output]"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_tomarkdown_defaults_added=0
+
 _shtab__dsv_totsv_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
   {-H,--header}"[treat first row as a header]"
@@ -1015,6 +1106,9 @@ _shtab__dsv_totsv_options=(
   {-Q,--no-quoting}"[do not handle quotes from input]"
   "--no-quote-output[don\'t quote output]"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_totsv_defaults_added=0
 
 _shtab__dsv_uniq_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -1050,6 +1144,9 @@ _shtab__dsv_uniq_options=(
   "--no-quote-output[don\'t quote output]"
   "*::check these only fields for uniqueness:"
 )
+
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_uniq_defaults_added=0
 
 _shtab__dsv_xargs_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
@@ -1090,12 +1187,19 @@ _shtab__dsv_xargs_options=(
   "*::command and arguments to run:{_normal}"
 )
 
+# guard to ensure default positional specs are added only once per session
+_shtab__dsv_xargs_defaults_added=0
+
 
 _shtab__dsv() {
-  local context state line curcontext="$curcontext" one_or_more='(-)*' remainder='*'
+  local context state line curcontext="$curcontext" one_or_more='*' remainder='(-)*' default='*::: :->dsv'
 
-  if ((${_shtab__dsv_options[(I)${(q)one_or_more}*]} + ${_shtab__dsv_options[(I)${(q)remainder}*]} == 0)); then  # noqa: E501
-    _shtab__dsv_options+=(': :_shtab__dsv_commands' '*::: :->dsv')
+  # Add default positional/remainder specs only if none exist, and only once per session
+  if (( ! _shtab__dsv_defaults_added )); then
+    if (( ${_shtab__dsv_options[(I)${(q)one_or_more}*]} +          ${_shtab__dsv_options[(I)${(q)remainder}*]} +          ${_shtab__dsv_options[(I)${(q)default}]} == 0 )); then
+      _shtab__dsv_options+=(': :_shtab__dsv_commands' '*::: :->dsv')
+    fi
+    _shtab__dsv_defaults_added=1
   fi
   _arguments -C -s $_shtab__dsv_options
 

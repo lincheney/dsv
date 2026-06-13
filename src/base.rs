@@ -751,7 +751,7 @@ impl<W: Writer> Output<W> {
 
     fn on_eof(&mut self, state: &mut WriterState) -> Result<()> {
         let mut header_padding = None;
-        let trailer = if let Some(header) = &self.gathered_header && self.opts.inner.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count >= size.rows as usize)) {
+        let trailer = if let Some(header) = &self.gathered_header && self.opts.inner.trailer.is_on_if(|| termsize::get().is_some_and(|size| self.row_count > size.rows as usize)) {
             Some(header.clone())
         } else {
             None

@@ -37,6 +37,7 @@ class Parser(HTMLParser):
                 self.current_row[-1] += f'''<{tag} {' '.join(f'{k}="{html.escape(v)}"' for k, v in attrs)}>'''
             return
 
+        was_empty = not self.state
         self.state.append(tag)
         match self.state[-2:]:
             case \
@@ -45,6 +46,9 @@ class Parser(HTMLParser):
                 | ['thead' | 'tbody', 'tr'] \
                 | ['tr', 'th' | 'td']:
                 # good
+
+                if was_empty:
+                    self.callback(None)
 
                 if tag == 'tr':
                     # new row
@@ -106,6 +110,13 @@ class fromhtml(_Base):
     parser = argparse.ArgumentParser()
     parser.add_argument('--strict', action='store_true', help='only allow valid table')
     parser.add_argument('--inner-html', action='store_true', help='output the innerHTML of table cells, not the innerText')
+    parser.add_argument('-s', '--slurp', action='store_true', help='determine header after reading all input')
+
+    def __init__(self, opts):
+        super().__init__(opts)
+        self.current_header = None
+        self.combined_header = {}
+        self.rows = []
 
     def process_file(self, file, do_callbacks=True, do_yield=False):
         self.determine_delimiters(b'')
@@ -124,12 +135,16 @@ class fromhtml(_Base):
 
             got_row = True
             item = fut.result()
-            row, is_header = item
-            row = [x.encode('utf8').strip() for x in row]
-            if do_callbacks and (self.on_header(row) if is_header else self.on_row(row)):
-                break
-            if do_yield:
-                yield item
+            if item is None:
+                # new table
+                self.current_header = None
+            else:
+                row, is_header = item
+                row = [x.encode('utf8').strip() for x in row]
+                if do_callbacks and (self.on_header(row) if is_header else self.on_row(row)):
+                    break
+                if do_yield:
+                    yield item
 
         thread.join()
         return got_row
@@ -173,3 +188,30 @@ class fromhtml(_Base):
 
         parser.close()
         queue.put_nowait(None)
+
+    def on_header(self, header):
+        if self.opts.slurp:
+            self.current_header = header
+            for h in header:
+                self.combined_header.setdefault(h, len(self.combined_header))
+            return
+        return super().on_header(header)
+
+    def on_row(self, row):
+        if self.opts.slurp:
+            self.rows.append((self.current_header, row))
+            return
+        return super().on_row(row)
+
+    def on_eof(self):
+        if self.opts.slurp and not super().on_header(self.combined_header):
+            for header, row in self.rows:
+                newrow = [b''] * len(self.combined_header)
+                for i, r in enumerate(row):
+                    if header and i < len(header):
+                        newrow[self.combined_header[header[i]]] = r
+                    else:
+                        newrow.append(r)
+                if super().on_row(newrow):
+                    break
+        super().on_eof()

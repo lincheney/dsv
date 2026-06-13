@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use anyhow::Result;
 use crate::base;
 use std::io::BufRead;
@@ -14,6 +15,8 @@ pub struct Opts {
     strict: bool,
     #[arg(long, help = "output the innerHTML of table cells, not the innerText")]
     inner_html: bool,
+    #[arg(short, long, help = "determine header after reading all input")]
+    slurp: bool,
 }
 
 pub struct Handler {
@@ -64,6 +67,11 @@ impl base::Processor for Handler {
         let mut buffer = vec![];
         let mut rowspans = Rowspans::new();
 
+        let mut current_header = None;
+        let mut combined_header = vec![];
+        let mut combined_header_mapping = HashMap::new();
+        let mut rows = vec![];
+
         let mut reader = Reader::from_reader(file);
         let config = reader.config_mut();
         config.allow_dangling_amp = true;
@@ -92,6 +100,11 @@ impl base::Processor for Handler {
                         | (Some(b"thead" | b"tbody"), b"tr")
                         | (Some(b"tr"), b"th" | b"td")
                         => {
+                            if state.is_empty() {
+                                // new table
+                                current_header = None;
+                            }
+
                             state.push(name.into());
                             match name {
                                 // good
@@ -155,9 +168,26 @@ impl base::Processor for Handler {
                         if had_thead && got_header {
                             base.log("got duplicate html table header\n")?;
                         } else if had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {
-                            self.on_header(base, current_row.clone())?;
+                            if self.opts.slurp {
+                                for h in &current_row {
+                                    let len = combined_header_mapping.len();
+                                    combined_header_mapping
+                                        .entry(h.clone())
+                                        .or_insert_with(|| {
+                                            combined_header.push(h.clone());
+                                            len
+                                        });
+                                }
+                                current_header = Some(Rc::new(current_row.clone()));
+                            } else {
+                                self.on_header(base, current_row.clone())?;
+                            }
                         } else if !had_thead && do_callbacks.contains(base::Callbacks::ON_HEADER) {
+                        if self.opts.slurp {
+                            rows.push((current_header.clone(), current_row.clone()));
+                        } else {
                             self.on_row(base, current_row.clone())?;
+                        }
                         }
                         got_header = had_thead;
                     }
@@ -180,6 +210,26 @@ impl base::Processor for Handler {
                 Err(e) => Err(e)?,
             }
         }
+
+        if self.opts.slurp {
+            if do_callbacks.contains(base::Callbacks::ON_HEADER) {
+                self.on_header(base, combined_header)?;
+            }
+            if do_callbacks.contains(base::Callbacks::ON_ROW) {
+                for (header, row) in rows {
+                    let mut newrow = vec![BString::new(vec![]); combined_header_mapping.len()];
+                    for (i, r) in row.into_iter().enumerate() {
+                        if let Some(i) = header.as_ref().and_then(|h| h.get(i)).and_then(|i| combined_header_mapping.get(i)) {
+                            newrow[*i] = r;
+                        } else {
+                            newrow.push(r);
+                        }
+                    }
+                    self.on_row(base, newrow)?;
+                }
+            }
+        }
+
         if do_callbacks.contains(base::Callbacks::ON_EOF) {
             return self.on_eof_detailed(base)
         }
