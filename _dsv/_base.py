@@ -500,6 +500,7 @@ class _Base:
             self.opts.quote_output = False
             self.opts.numbered_columns = False
 
+            self.row_count = 0
             # adjust width of each column and print
             for i, (p, row) in enumerate(zip(padding, self.__gathered_rows)):
                 if i == 0 and self.out_header:
