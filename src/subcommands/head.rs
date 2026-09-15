@@ -34,11 +34,10 @@ impl base::Processor for Handler {
         if let Some(ring) = self.ring.as_mut() {
             // print except for last n lines
             if ring.len() >= self.lines && let Some(row) = ring.pop_front() {
-                base.on_row(row)
-            } else {
-                ring.push_back(row);
-                Ok(())
+                base.on_row(row)?;
             }
+            ring.push_back(row);
+            Ok(())
 
         } else {
             self.count += 1;
