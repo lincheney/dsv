@@ -63,6 +63,7 @@ def parse_datetime(
         '%Y-%m-%d %H:%M:%S',
         '%Y/%m/%d %H:%M:%S',
         '%d/%m/%y %H:%M:%S',
+        '%Y-%m-%d',
     ),
     date_yardstick=datetime.datetime(2000, 1, 1),
 ):
@@ -77,6 +78,8 @@ def parse_datetime(
         if isinstance(val, bytes):
             val = val.decode('utf8')
         val = re.sub('(\\.[0-9]{6})[0-9]*', '\\1', val)
+        if isinstance(formats, str):
+            formats = (formats,)
         for fmt in formats:
             try:
                 return datetime.datetime.strptime(val, fmt)
