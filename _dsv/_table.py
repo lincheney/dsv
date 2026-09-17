@@ -68,7 +68,7 @@ def parse_datetime(
     date_yardstick=datetime.datetime(2000, 1, 1),
 ):
     if isinstance(value, (list, tuple)):
-        return [parse_datetime(x) for x in value]
+        return [parse_datetime(x, formats) for x in value]
 
     if isinstance(value, datetime.datetime):
         return value
